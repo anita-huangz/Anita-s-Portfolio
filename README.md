@@ -2,25 +2,38 @@
 Welcome to my portfolio! Below you'll find links to various data science, machine learning, and software engineering projects I've worked on. Each project showcases my ability to apply technical skills to solve real-world problems.
 
 ## Software Engineer Projects 
-
 ### 1. Course Catalog and Scheduling System 
 - Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
 - **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
 
-## 2. Single-player Card Game 
+### 2. Single-player Card Game 
 - Simulates a poker-style card game where players make strategic decisions to maximize their scores.
 - **Technical Tools Used**: Python’s OOP principles, random.shuffle for card shuffling, and a structured game loop for user interaction.
 
+### 3. Web Crawler and Search Engine 
+- Builds a custom search engine by crawling web pages, indexing their content, and allowing users to query information.
+- **Technical Tools Used**: Python’s abc.MutableMapping for trie implementation, Flask for a web-based search UI, rich for a terminal UI, and web scraping utilities.
+
+### 4. Performance Optimization and Caching 
+- Improves computational efficiency by implementing caching mechanisms and optimizing memory usage.
+- **Technical Tools Used**: Python’s functools.lru_cache, dictionary-based caching, generator functions, and pytest for validation.
 
 ## Data Science Projects
-
-### 1. [[Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)]
+### 1. [Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
-- **Technologies**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
+- **Technical Tools Used**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
 
 ### 2. [Stock-Bond Portfolio](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/Stock-Bond%20Portfolio)
 - Optimizing a stock-bond portfolio across different timeframes by maximizing returns for a given level of risk, considering various market scenarios and investor preferences.
-- **Technologies**: Python, Pandas, NumPy, Matplotlib.
+- **Technical Tools Used**: Python, Pandas, NumPy, Matplotlib.
+
+### 3. Advanced Data Structures and Mathematical Modeling 
+- Enhances data storage and computational efficiency by implementing custom interval arithmetic and geometric modeling.
+- **Technical Tools Used**: Python’s OOP framework, functools.total_ordering for interval comparisons, and Pillow for rendering geometric models.
+
+### 4. Legislative and Weather Trends 
+- Processes large datasets to uncover trends in legislative co-sponsorship and weather patterns over time.
+- **Technical Tools Used**: Python, pandas for data manipulation, matplotlib for data visualization, and requests for retrieving datasets.
 
 ## Computer Systems Projects
 ### 1. [Project 0: File Cleaner](computer-systems-notes/HuangAnitaProject0)
