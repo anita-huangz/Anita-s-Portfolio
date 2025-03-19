@@ -19,7 +19,7 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 - **Technical Tools Used**: Python’s functools.lru_cache, dictionary-based caching, generator functions, and pytest for validation.
 
 ## Data Science Projects
-### 1. [Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)
+### 1. [Customer Churn Prediction](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/customer-churn-prediction) 
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
 - **Technical Tools Used**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
 
