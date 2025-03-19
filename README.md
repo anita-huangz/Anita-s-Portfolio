@@ -9,7 +9,7 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
 - **Technologies**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
 
-### 2. [Stock Bond Portfolio](Stock-Bond Portfolio)
+### 2. [Stock Bond Portfolio]([Stock-Bond Portfolio](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/Stock-Bond%20Portfolio))
 - Optimizing a stock-bond portfolio across different timeframes by maximizing returns for a given level of risk, considering various market scenarios and investor preferences.
 - **Technologies**: Python, Pandas, NumPy, Matplotlib.
 
