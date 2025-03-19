@@ -1,0 +1,27 @@
+class RandSeed {
+    function int getSeed() {
+        var int seed;
+        var int key;
+
+        let seed = 0;
+        let key = 0;
+
+        do Output.moveCursor(10, 20);
+        do Output.printString("Welcome to Hungry Fish!");
+        do Output.moveCursor(12, 20);
+        do Output.printString("Press any key to start");
+        do Output.println();
+
+        // until any key is pressed, seed increments
+        while(~key) {
+            let seed = seed + 1;
+            if( seed = 32767 ) {
+                let seed = 0;
+            }
+            let key = Keyboard.keyPressed();
+        }
+
+        do Screen.clearScreen();
+        return seed;
+    }
+}

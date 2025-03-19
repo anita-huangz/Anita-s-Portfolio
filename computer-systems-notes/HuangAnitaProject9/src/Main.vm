@@ -1,0 +1,11 @@
+function Main.main 1
+    call RandSeed.getSeed 0
+    call Random.setSeed 1
+    pop temp 0
+    call FishGame.new 0
+    pop local 0
+    push local 0
+    call FishGame.run 1
+    pop temp 0
+    push constant 0
+    return

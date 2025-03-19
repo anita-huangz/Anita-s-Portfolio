@@ -1,0 +1,36 @@
+// Fish.jack: Defines the fish behavior
+class Fish {
+    field int x, y, size;
+    
+    constructor Fish new(int startX, int startY) {
+        // Initializes a new Fish object at specified starting position
+        let x = startX;
+        let y = startY;
+        let size = 10;
+        return this;
+    }
+    
+    method void move(int dx, int dy) {
+        // Moves the fish by given amount along the x axis and y axis
+        let x = x + dx;
+        let y = y + dy;
+        return;
+    }
+    
+    method void grow() {
+        // Grows the fish size when it eats food
+        let size = size + 2;
+        return;
+    }
+    
+    method void draw() {
+        // Draws the fish on screen using a filled rectangle
+        do Screen.setColor(true);
+        do Screen.drawRectangle(x, y, x + size, y + size);
+        return;
+    }
+    
+    method int getX() { return x; }
+    method int getY() { return y; }
+    method int getSize() { return size; }
+}

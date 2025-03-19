@@ -1,0 +1,94 @@
+// FishGame.jack: Manages game logic
+class FishGame {
+    field Fish fish;
+    field int foodX, foodY;
+    field boolean gameOver;
+    field int directionX, directionY;
+    
+    constructor FishGame new() {
+        // Initializes the game state, including the fish object, food position, movement, and game status
+        let fish = Fish.new(30, 30);
+        let foodX = 50;
+        let foodY = 50;
+        let gameOver = false;
+        let directionX = 5;  // Default movement to the right
+        let directionY = 0;
+        return this;
+    }
+    
+    method void run() {
+        // Runs the game loop, handling user input and updating the game status accordingly
+        var int key;
+        var boolean exit;
+        let exit = false;
+
+        while (~exit) {
+            let key = Keyboard.keyPressed();
+            
+            // Change movement direction based on key press
+            if (key = 130) { let directionX = -5; let directionY = 0; }  // Left arrow
+            if (key = 132) { let directionX = 5; let directionY = 0; }   // Right arrow
+            if (key = 131) { let directionX = 0; let directionY = -5; }  // Up arrow
+            if (key = 133) { let directionX = 0; let directionY = 5; }   // Down arrow
+
+            // Automatically move fish
+            do fish.move(directionX, directionY);
+
+            do Screen.clearScreen();
+            do fish.draw();
+            do drawFood();
+            do checkCollision();
+
+            if (gameOver) { let exit = true; }
+            do Sys.wait(100);
+        }
+        do endGame();
+        return;
+    }
+    
+    method void drawFood() {
+        // Draws the food on the screen at its current coordinates
+        do Screen.setColor(true);
+        do Screen.drawRectangle(foodX, foodY, foodX + 5, foodY + 5);
+        return;
+    }
+    
+    method void checkCollision() {
+        // Check collision
+        var int fishX, fishY, fishSize, newFoodX, newFoodY;
+        let fishX = fish.getX();
+        let fishY = fish.getY();
+        let fishSize = fish.getSize();
+        
+        if ((fishX < 5) | (fishX + fishSize > 800) | (fishY < 5) | (fishY + fishSize > 800)) {
+            let gameOver = true;
+        }
+        
+        if (((fishX + fishSize) > foodX) & (fishX < (foodX + 5)) &
+            ((fishY + fishSize) > foodY) & (fishY < (foodY + 5))) {
+            do fish.grow();
+            
+            // Ensure new food position is away from edges and different from prior position
+            while (true) {
+                let newFoodX = 10 + Random.randRange(120);
+                let newFoodY = 10 + Random.randRange(120);
+                
+                let foodX = newFoodX;
+                let foodY = newFoodY;
+                return;
+            }
+        }
+        return;
+    }
+    
+    method void endGame() {
+        // Displays the game over screen and waits for user input to exit. 
+        do Screen.clearScreen();
+        do Output.moveCursor(10, 20);
+        do Output.printString("Game Over!");
+        do Output.moveCursor(12, 20);
+        do Output.printString("Press any key to exit");
+        while (Keyboard.keyPressed() = 0) {}
+        return;
+    }
+}

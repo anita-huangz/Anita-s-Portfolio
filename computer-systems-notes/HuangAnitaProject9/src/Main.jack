@@ -1,0 +1,10 @@
+// Main.jack: Initializes and runs the game
+class Main {
+    function void main() {
+        var FishGame game;
+        do Random.setSeed(RandSeed.getSeed());
+        let game = FishGame.new();
+        do game.run();
+        return;
+    }
+}
