@@ -5,7 +5,7 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 
 ## Data Science Projects
 
-### 1. [Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)
+### 1. [[Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)](https://github.com/anita-huangz/Anita-s-Portfolio/tree/39c6369b6425e2354fd9485ff53516211fb2e450/customer-churn-prediction)
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
 - **Technologies**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
 
