@@ -26,22 +26,48 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 - This project involves cleaning up text files by removing unwanted elements like blank lines, whitespace, and comments.
 
 ### 2. [Project 1: Logic Gates](computer-systems-notes/HuangAnitaProject1)
-- This project contains files related to building basic logic gates and multiplexers.
+- Summary: Built a set of elementary logic gates (e.g., AND, OR, XOR, MUX) that serve as fundamental building blocks for a computer's architecture.
+- **Technical Tools Used**: Implemented using HDL (Hardware Description Language)
 
-### 3. [Project 2: Combinational Chips](computer-systems-notes/HuangAnitaProject2)
-- This project focuses on combinational chips like adders and ALU.
+### 3. [Project 2: Boolean Arithmetic](computer-systems-notes/HuangAnitaProject2)
+- Developed arithmetic logic components, including adders and an ALU, to perform arithmetic and logical operations.
+- **Technical Tools Used**: Implemented in HDL, tested using the hardware simulator, and validated using predefined test scripts​
 
-### 4. [Project 3: Sequential_Chips](computer-systems-notes/HuangAnitaProject3)
-- This project involves chips with memory, including registers and RAM. 
+### 4. [Project 3: Memory](computer-systems-notes/HuangAnitaProject3)
+- Built a RAM unit by constructing memory chips of increasing size and a program counter for controlling execution flow.
+- **Technical Tools Used**: Implemented in HDL, tested using the hardware simulator, and validated using test scripts​
 
-### 5. [Project 4: Hack Assembler](computer-systems-notes/HuangAnitaProject4)
-- This project involves building an assembler that translates Hack assembly language (.asm) into Hack machine code (.hack). The assembler reads the .asm file, processes it, and outputs a binary file containing the translated instructions.
+### 5. [Project 4: Machine Language](computer-systems-notes/HuangAnitaProject4)
+- Developed and tested programs in Hack assembly language and translated them into binary machine code.
+- **Technical Tools Used**: Used the Hack assembler to convert assembly into binary and tested execution using the CPU emulator​
 
-### 6. [Project 5: Logic Chips](computer-systems-notes/HuangAnitaProject5)
-- This project involves implementing logic gates and combinational chips using the Hardware Description Language (HDL) as part of the nand2tetris course.
+### 6. [Project 5: Computer](computer-systems-notes/HuangAnitaProject5)
+- Built a simple computer by integrating an ALU, registers, RAM, and a CPU capable of executing machine language instructions.
+- **Technical Tools Used**: Implemented using HDL (Hardware Description Language), tested using the hardware simulator, and verified by executing machine language programs
 
-### 7. [Project 6: Hack Assembler](computer-systems-notes/HuangAnitaProject6)
-- This project implements a Hack Assembler, which converts Hack assembly language commands (.asm files) into Hack machine code (.hack files). The assembler processes assembly code and generates a binary output corresponding to the Hack machine instructions.
+### 7. [Project 6: Assembler](computer-systems-notes/HuangAnitaProject6)
+- Developed an assembler to translate Hack assembly language into binary Hack machine code.
+- **Technical Tools Used**: Implemented in a programming language of choice, compared output with a supplied assembler, and validated correctness using a CPU emulator
+
+### 8. [Project 7: VM Translator I](computer-systems-notes/HuangAnitaProject7)
+- Built a basic VM translator to convert VM commands into Hack assembly language, supporting arithmetic-logical and stack operations.
+- **Technical Tools Used**: Implemented in a programming language of choice, tested using a CPU emulator, and optionally validated translations with a VM emulator​
+
+### 9. [Project 8: VM Translator II](computer-systems-notes/HuangAnitaProject8)
+- Extended the VM translator from Project 7 to handle branching and function commands, allowing for the translation of multi-file VM programs.
+- **Technical Tools Used**: Implemented in a programming language of choice, tested using a CPU emulator, and used the VM emulator to verify translations​
+
+### 10. [Project 9: Jack Programming](computer-systems-notes/HuangAnitaProject9)
+- Created an interactive program or simple game using the Jack language 
+- **Technical Tools Used**: Developed with Jack, compiled using the Jack compiler, and tested using the VM emulator​
+
+### 11. [Project 10: Syntax Analyzer for Jack Programs](computer-systems-notes/HuangAnitaProject10)
+- Developed a syntax analyzer that parses Jack programs and outputs XML reflecting the syntactic structure of the input source code.
+- **Technical Tools Used**: Implemented in a programming language of choice, used a TextComparer tool for validation, and tested with an XML viewer
+
+### 12. [Project 11: Syntax Analyzer for Jack Programs](computer-systems-notes/HuangAnitaProject11)
+- Extended the syntax analyzer from Project 10 into a full-scale Jack compiler by implementing a Symbol Table and Code Generation module to produce executable VM code.
+- **Technical Tools Used**: Implemented in a programming language of choice, tested using a VM emulator, and used the existing syntax analyzer from Project 10 as a base​
 
 ## How to Use
 1. Clone this repository:
