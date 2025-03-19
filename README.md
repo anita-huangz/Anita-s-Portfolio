@@ -3,23 +3,24 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 
 ## Software Engineer Projects 
 
+### 1. Course Catalog and Scheduling System 
+- Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
+- **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
+
+## 2. Single-player Card Game 
+- Simulates a poker-style card game where players make strategic decisions to maximize their scores.
+- **Technical Tools Used**: Python’s OOP principles, random.shuffle for card shuffling, and a structured game loop for user interaction.
+
+
 ## Data Science Projects
 
-### 1. [[Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)](https://github.com/anita-huangz/Anita-s-Portfolio/tree/39c6369b6425e2354fd9485ff53516211fb2e450/customer-churn-prediction)
+### 1. [[Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)]
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
 - **Technologies**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
 
 ### 2. [Stock-Bond Portfolio](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/Stock-Bond%20Portfolio)
 - Optimizing a stock-bond portfolio across different timeframes by maximizing returns for a given level of risk, considering various market scenarios and investor preferences.
 - **Technologies**: Python, Pandas, NumPy, Matplotlib.
-
-### 3. [Big-tech Company Case Study](https://github.com/anita-huangz/portfolio/tree/master/doordash-case-study)
-- A business case study that analyzes the big-tech's operational inefficiencies, focusing on customer order trends, delivery times, refunds, and merchant performance.
-- **Deliverable**: Data analysis and business plan recommendations.
-
-### 4. [Logistics Company Case Study](https://github.com/anita-huangz/portfolio/tree/master/caterpillar-case-study)
-- A case study focused on sales performance analysis, market segmentation, and strategic recommendations for the logistics & transportation company.
-- **Deliverable**: Analysis presentation with recommendations.
 
 ## Computer Systems Projects
 ### 1. [Project 0: File Cleaner](computer-systems-notes/HuangAnitaProject0)
@@ -68,6 +69,16 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 ### 12. [Project 11: Syntax Analyzer for Jack Programs](computer-systems-notes/HuangAnitaProject11)
 - Extended the syntax analyzer from Project 10 into a full-scale Jack compiler by implementing a Symbol Table and Code Generation module to produce executable VM code.
 - **Technical Tools Used**: Implemented in a programming language of choice, tested using a VM emulator, and used the existing syntax analyzer from Project 10 as a base​
+
+## Business Analytics Projects
+
+### 1. [Big-tech Company Case Study](https://github.com/anita-huangz/portfolio/tree/master/doordash-case-study)
+- A business case study that analyzes the big-tech's operational inefficiencies, focusing on customer order trends, delivery times, refunds, and merchant performance.
+- **Deliverable**: Data analysis and business plan recommendations.
+
+### 2. [Logistics Company Case Study](https://github.com/anita-huangz/portfolio/tree/master/caterpillar-case-study)
+- A case study focused on sales performance analysis, market segmentation, and strategic recommendations for the logistics & transportation company.
+- **Deliverable**: Analysis presentation with recommendations.
 
 ## How to Use
 1. Clone this repository:
