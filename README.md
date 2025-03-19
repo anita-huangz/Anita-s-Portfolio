@@ -20,7 +20,7 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 - **Deliverable**: Analysis presentation with recommendations.
 
 ## Computer Systems Projects
-### 
+### 1. [Introduction to Computer Systems](computer-systems-notes)
 
 ## How to Use
 1. Clone this repository:
