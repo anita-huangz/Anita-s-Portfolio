@@ -1,7 +1,7 @@
 # Anita-s-Portfolio
 Welcome to my portfolio! Below you'll find links to various data science, machine learning, and software engineering projects I've worked on. Each project showcases my ability to apply technical skills to solve real-world problems.
 
-## Projects
+## Data Science Projects
 
 ### 1. [Customer Churn Prediction](https://github.com/anita-huangz/portfolio/tree/master/customer-churn-prediction)
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
@@ -19,7 +19,8 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 - A case study focused on sales performance analysis, market segmentation, and strategic recommendations for Caterpillar.
 - **Deliverable**: Analysis presentation with recommendations.
 
-### 5. Computer Systems 
+## Computer Systems Projects
+### 
 
 ## How to Use
 1. Clone this repository:
