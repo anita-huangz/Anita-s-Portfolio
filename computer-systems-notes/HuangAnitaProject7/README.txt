@@ -1,4 +1,4 @@
-Project 8: VM Translator
+Project 7: VM to Hack Translator
 =======================
 
 Description:
@@ -6,13 +6,8 @@ This program is a VM translator that converts VM language commands into Hack ass
 
 How to Run:
 1. Open a terminal/command line.
-2. Navigate to the Files directory (folder) "HuangAnitaProject7" 
-3. Input the command as shown below: 
-	If the input is one .vm file: 
-		python3 src/project8.py <full path to the input file>.vm 
-	If the input is a directory / folder: 
-		python3 src/project8.py <full path to the input folder>
-4. Please use the .vm test files in the test folder
+2. Navigate to the Files directory (folder).
+3. Run the program with the command: python3 project7.py BasicTest.vm (for example)
 
 Output:
 The assembler will produce a .hack file with the same name as the input .asm file.
