@@ -60,17 +60,17 @@ print(catalog.courses)  # Displays all courses from the CSV file
 ```
 
 4. **Searching for Courses** 
-Find courses with a specific prefix 
+- Find courses with a specific prefix 
 ```bash  
 matching_courses = catalog.search_by_code("101")
 print(matching_courses)  # Returns courses with codes starting with "101"
 ```
-Find courses by keyword (instructor or course name) 
+- Find courses by keyword (instructor or course name) 
 ```bash  
 keyword_courses = catalog.search_by_keyword("Python")
 print(keyword_courses)  # Returns all courses with "Python" in the name or instructor field
 ```
-Find non-conflicting courses
+- Find non-conflicting courses
 ```bash  
 my_schedule = [course1]  # Assume user is already enrolled in course1
 available_courses = catalog.search_by_schedule(my_schedule)
