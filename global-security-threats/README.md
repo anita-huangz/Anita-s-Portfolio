@@ -3,10 +3,10 @@ The primary objective of this project is to use unsupervised learning techniques
 
 By applying clustering, dimensionality reduction, and anomaly detection, we aim to:
 
-✔ **Segment cyber threats** into meaningful clusters to understand attack trends.
-✔ Identify **high-risk** attacks and industries that are frequently targeted.
-✔ Detect **anomalies** (rare or extreme incidents) for further investigation.
-✔ Provide actionable insights for cybersecurity defense strategies. 
+1. **Segment cyber threats** into meaningful clusters to understand attack trends.
+2. Identify **high-risk** attacks and industries that are frequently targeted.
+3. Detect **anomalies** (rare or extreme incidents) for further investigation.
+4. Provide actionable insights for cybersecurity defense strategies. 
 
 # Dataset Description
 1. **Country**: Country where the attack occurred
