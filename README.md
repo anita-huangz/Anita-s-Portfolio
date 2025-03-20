@@ -1,12 +1,14 @@
 # Anita-s-Portfolio
-Welcome to my portfolio! Below you'll find links to various data science, machine learning, and software engineering projects I've worked on. Each project showcases my ability to apply technical skills to solve real-world problems.
+Welcome to my portfolio! 
+Below you'll find links to various data science, machine learning, and software engineering projects I've worked on. 
+Each project showcases my ability to apply technical skills to solve real-world problems.
 
 ## Software Engineer Projects 
 ### 1. [Course and Catalog Scheduling System](https://github.com/anita-huangz/Anita-s-Portfolio/tree/4c80e4de7d9151d7ddebcac4926bb1dbdb2a8141/software-engineer-projects/Course%20Catalog%20and%20Scheduling%20System)
 - Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
 - **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
 
-### 2. Single-player Card Game 
+### 2. [Single-player Card Game](https://github.com/anita-huangz/Anita-s-Portfolio/tree/8887e5d7fc0621222e80a78feef4c0a75e93b320/software-engineer-projects/card-game-system) 
 - Simulates a poker-style card game where players make strategic decisions to maximize their scores.
 - **Technical Tools Used**: Python’s OOP principles, random.shuffle for card shuffling, and a structured game loop for user interaction.
 
@@ -96,4 +98,5 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 ## How to Use
 1. Clone this repository:
    ```bash
-   git clone https://github.com/anita-huangz/portfolio.git
+   git clone https://github.com/anita-huangz/Anita-s-Portfolio.git
+   ```
