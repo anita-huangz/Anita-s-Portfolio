@@ -2,7 +2,7 @@
 Welcome to my portfolio! Below you'll find links to various data science, machine learning, and software engineering projects I've worked on. Each project showcases my ability to apply technical skills to solve real-world problems.
 
 ## Software Engineer Projects 
-### 1. Course Catalog and Scheduling System 
+### 1. [Course Catalog and Scheduling System](software-engineer-projects/Course Catalog and Scheduling System) 
 - Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
 - **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
 
