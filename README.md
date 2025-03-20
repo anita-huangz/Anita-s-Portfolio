@@ -2,7 +2,7 @@
 Welcome to my portfolio! Below you'll find links to various data science, machine learning, and software engineering projects I've worked on. Each project showcases my ability to apply technical skills to solve real-world problems.
 
 ## Software Engineer Projects 
-### 1. Course Catalog and Scheduling System 
+### 1. [Course and Catalog Scheduling System](https://github.com/anita-huangz/Anita-s-Portfolio/tree/4c80e4de7d9151d7ddebcac4926bb1dbdb2a8141/software-engineer-projects/Course%20Catalog%20and%20Scheduling%20System)
 - Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
 - **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
 
