@@ -6,7 +6,7 @@ Welcome to my portfolio! Below you'll find links to various data science, machin
 - Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
 - **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
 
-### 2. Single-player Card Game 
+### 2. [Single-player Card Game](https://github.com/anita-huangz/Anita-s-Portfolio/tree/8887e5d7fc0621222e80a78feef4c0a75e93b320/software-engineer-projects/card-game-system) 
 - Simulates a poker-style card game where players make strategic decisions to maximize their scores.
 - **Technical Tools Used**: Python’s OOP principles, random.shuffle for card shuffling, and a structured game loop for user interaction.
 
