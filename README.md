@@ -29,11 +29,15 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - Optimizing a stock-bond portfolio across different timeframes by maximizing returns for a given level of risk, considering various market scenarios and investor preferences.
 - **Technical Tools Used**: Python, Pandas, NumPy, Matplotlib.
 
-### 3. Advanced Data Structures and Mathematical Modeling 
+### 3. [Cybersecurity Threat Analysis](https://github.com/anita-huangz/Anita-s-Portfolio/tree/978498cd0767a9ec24306e8bfb547f150cd35910/global-security-threats)
+- Analyzing global cybersecurity threats from 2015-2024 using clustering, anomaly detection, and dimensionality reduction techniques to identify attack patterns, high-risk incidents, and emerging threats.
+- **Technical Tools Used**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib, t-SNE, PCA, K-Means, DBSCAN, Isolation Forest, Local Outlier Factor.
+
+### 4. Advanced Data Structures and Mathematical Modeling 
 - Enhances data storage and computational efficiency by implementing custom interval arithmetic and geometric modeling.
 - **Technical Tools Used**: Python’s OOP framework, functools.total_ordering for interval comparisons, and Pillow for rendering geometric models.
 
-### 4. Legislative and Weather Trends 
+### 5. Legislative and Weather Trends 
 - Processes large datasets to uncover trends in legislative co-sponsorship and weather patterns over time.
 - **Technical Tools Used**: Python, pandas for data manipulation, matplotlib for data visualization, and requests for retrieving datasets.
 
