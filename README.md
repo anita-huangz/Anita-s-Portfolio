@@ -12,7 +12,7 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - Simulates a poker-style card game where players make strategic decisions to maximize their scores.
 - **Technical Tools Used**: Python’s OOP principles, random.shuffle for card shuffling, and a structured game loop for user interaction.
 
-### 3. Web Crawler and Search Engine 
+### 3. [Web Crawler and Search Engine](https://github.com/anita-huangz/Anita-s-Portfolio/tree/6fa5abf9d5fdc6909b31c394229b0ec9bb392371/software-engineer-projects/web-crawler-and-search-engine) 
 - Builds a custom search engine by crawling web pages, indexing their content, and allowing users to query information.
 - **Technical Tools Used**: Python’s abc.MutableMapping for trie implementation, Flask for a web-based search UI, rich for a terminal UI, and web scraping utilities.
 
