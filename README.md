@@ -16,7 +16,7 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - Builds a custom search engine by crawling web pages, indexing their content, and allowing users to query information.
 - **Technical Tools Used**: Python’s abc.MutableMapping for trie implementation, Flask for a web-based search UI, rich for a terminal UI, and web scraping utilities.
 
-### 4. Performance Optimization and Caching 
+### 4. [Performance Optimization and Caching](https://github.com/anita-huangz/Anita-s-Portfolio/tree/8c958119b3bb3764271e5238b49f862fdc024a9d/software-engineer-projects/performance-optimization)
 - Improves computational efficiency by implementing caching mechanisms and optimizing memory usage.
 - **Technical Tools Used**: Python’s functools.lru_cache, dictionary-based caching, generator functions, and pytest for validation.
 
