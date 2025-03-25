@@ -37,8 +37,8 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - Enhances data storage and computational efficiency by implementing custom interval arithmetic and geometric modeling.
 - **Technical Tools Used**: Python’s OOP framework, functools.total_ordering for interval comparisons, and Pillow for rendering geometric models.
 
-### 5. Legislative and Weather Trends 
-- Processes large datasets to uncover trends in legislative co-sponsorship and weather patterns over time.
+### 5. [Weather Historical Trends and Forecast](https://github.com/anita-huangz/Anita-s-Portfolio/tree/300fa6455724dc7cebc348c8126d99d02e0ed320/data-science-projects/weather-trends-and-forecast)
+- Processes large datasets to uncover trends in weather patterns over time and do forecasts for future.
 - **Technical Tools Used**: Python, pandas for data manipulation, matplotlib for data visualization, and requests for retrieving datasets.
 
 ## Computer Systems Projects
