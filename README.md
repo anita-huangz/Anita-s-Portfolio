@@ -33,11 +33,7 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - Analyzing global cybersecurity threats from 2015-2024 using clustering, anomaly detection, and dimensionality reduction techniques to identify attack patterns, high-risk incidents, and emerging threats.
 - **Technical Tools Used**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib, t-SNE, PCA, K-Means, DBSCAN, Isolation Forest, Local Outlier Factor.
 
-### 4. Advanced Data Structures and Mathematical Modeling 
-- Enhances data storage and computational efficiency by implementing custom interval arithmetic and geometric modeling.
-- **Technical Tools Used**: Python’s OOP framework, functools.total_ordering for interval comparisons, and Pillow for rendering geometric models.
-
-### 5. [Weather Historical Trends and Forecast](https://github.com/anita-huangz/Anita-s-Portfolio/tree/300fa6455724dc7cebc348c8126d99d02e0ed320/data-science-projects/weather-trends-and-forecast)
+### 4. [Weather Historical Trends and Forecast](https://github.com/anita-huangz/Anita-s-Portfolio/tree/300fa6455724dc7cebc348c8126d99d02e0ed320/data-science-projects/weather-trends-and-forecast)
 - Processes large datasets to uncover trends in weather patterns over time and do forecasts for future.
 - **Technical Tools Used**: Python, pandas for data manipulation, matplotlib for data visualization, and requests for retrieving datasets.
 
@@ -88,16 +84,6 @@ Each project showcases my ability to apply technical skills to solve real-world 
 ### 12. [Project 11: Syntax Analyzer for Jack Programs](computer-systems-notes/HuangAnitaProject11)
 - Extended the syntax analyzer from Project 10 into a full-scale Jack compiler by implementing a Symbol Table and Code Generation module to produce executable VM code.
 - **Technical Tools Used**: Implemented in a programming language of choice, tested using a VM emulator, and used the existing syntax analyzer from Project 10 as a base​
-
-## Business Analytics Projects
-
-### 1. [Big-tech Company Case Study](https://github.com/anita-huangz/portfolio/tree/master/doordash-case-study)
-- A business case study that analyzes the big-tech's operational inefficiencies, focusing on customer order trends, delivery times, refunds, and merchant performance.
-- **Deliverable**: Data analysis and business plan recommendations.
-
-### 2. [Logistics Company Case Study](https://github.com/anita-huangz/portfolio/tree/master/caterpillar-case-study)
-- A case study focused on sales performance analysis, market segmentation, and strategic recommendations for the logistics & transportation company.
-- **Deliverable**: Analysis presentation with recommendations.
 
 ## How to Use
 1. Clone this repository:
