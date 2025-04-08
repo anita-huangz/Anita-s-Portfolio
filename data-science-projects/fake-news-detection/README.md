@@ -1,6 +1,8 @@
+# Fake News Detection
+
 ## 📦 Dataset Overview
 
-- **Source**: KaggleHub Dataset: `khushikyad001/fake-news-detection`
+- **Source**: KaggleHub Dataset: 
 - **Size**: 4,000 articles
 - **Features**:
   - Text: `title`, `text`
