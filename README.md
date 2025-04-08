@@ -21,7 +21,7 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - **Technical Tools Used**: Python’s functools.lru_cache, dictionary-based caching, generator functions, and pytest for validation.
 
 ## Data Science Projects
-### 1. [Bitcoin Price Prediction]
+### 1. [Bitcoin Price Prediction](https://github.com/anita-huangz/Anita-s-Portfolio/tree/e24e895c5d50569398ddfd6ed4c0e42b03d300e2/data-science-projects/bitcoin-and-asset-trading)
 - Forecasting Bitcoin prices using LSTM with 60-day lookback sequences, MinMax scaling, and dropout regularization, implemented through a full deep learning pipeline.
 - Technical Tools Used: Python, TensorFlow/Keras, NumPy, Pandas, Matplotlib, Scikit-learn.
 
