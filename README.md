@@ -21,23 +21,27 @@ Each project showcases my ability to apply technical skills to solve real-world 
 - **Technical Tools Used**: Python’s functools.lru_cache, dictionary-based caching, generator functions, and pytest for validation.
 
 ## Data Science Projects
-### 1. [Fake News Predcition](https://github.com/anita-huangz/Anita-s-Portfolio/tree/af6e5bd68562af6f32dc0e8928e66618a157128f/data-science-projects/fake-news-detection) 
+### 1. [Bitcoin Price Prediction]
+- Forecasting Bitcoin prices using LSTM with 60-day lookback sequences, MinMax scaling, and dropout regularization, implemented through a full deep learning pipeline.
+- Technical Tools Used: Python, TensorFlow/Keras, NumPy, Pandas, Matplotlib, Scikit-learn.
+
+### 2. [Fake News Prediction](https://github.com/anita-huangz/Anita-s-Portfolio/tree/af6e5bd68562af6f32dc0e8928e66618a157128f/data-science-projects/fake-news-detection) 
 - Classifying fake news articles using metadata, sentiment analysis, TF-IDF, and feature engineering through a full machine learning pipeline.
 - **Technical Tools Used:** Python, Scikit-learn, Pandas, Seaborn, XGBoost, Matplotlib, TextBlob.
 
-### 2. [Customer Churn Prediction](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/customer-churn-prediction) 
+### 3. [Customer Churn Prediction](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/customer-churn-prediction) 
 - Predicting customer churn using machine learning techniques. This project includes data exploration, model training, and evaluation.
 - **Technical Tools Used**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib.
 
-### 3. [Stock-Bond Portfolio](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/Stock-Bond%20Portfolio)
+### 4. [Stock-Bond Portfolio](https://github.com/anita-huangz/Anita-s-Portfolio/tree/c8056a6a37c216867126b8e32ac26f9a80cab6f4/Stock-Bond%20Portfolio)
 - Optimizing a stock-bond portfolio across different timeframes by maximizing returns for a given level of risk, considering various market scenarios and investor preferences.
 - **Technical Tools Used**: Python, Pandas, NumPy, Matplotlib.
 
-### 4. [Cybersecurity Threat Analysis](https://github.com/anita-huangz/Anita-s-Portfolio/tree/978498cd0767a9ec24306e8bfb547f150cd35910/global-security-threats)
+### 5. [Cybersecurity Threat Analysis](https://github.com/anita-huangz/Anita-s-Portfolio/tree/978498cd0767a9ec24306e8bfb547f150cd35910/global-security-threats)
 - Analyzing global cybersecurity threats from 2015-2024 using clustering, anomaly detection, and dimensionality reduction techniques to identify attack patterns, high-risk incidents, and emerging threats.
 - **Technical Tools Used**: Python, Scikit-learn, Pandas, Seaborn, Matplotlib, t-SNE, PCA, K-Means, DBSCAN, Isolation Forest, Local Outlier Factor.
 
-### 5. [Weather Historical Trends and Forecast](https://github.com/anita-huangz/Anita-s-Portfolio/tree/300fa6455724dc7cebc348c8126d99d02e0ed320/data-science-projects/weather-trends-and-forecast)
+### 6. [Weather Historical Trends and Forecast](https://github.com/anita-huangz/Anita-s-Portfolio/tree/300fa6455724dc7cebc348c8126d99d02e0ed320/data-science-projects/weather-trends-and-forecast)
 - Processes large datasets to uncover trends in weather patterns over time and do forecasts for future.
 - **Technical Tools Used**: Python, pandas for data manipulation, matplotlib for data visualization, and requests for retrieving datasets.
 
