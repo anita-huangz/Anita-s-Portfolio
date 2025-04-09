@@ -1,5 +1,5 @@
 from datetime import datetime
-from factor_based_portfolio import run_simulation
+from simulation import run_simulation
 
 # -----------------------------
 # main.py: Entry point
@@ -26,7 +26,7 @@ run_simulation():
 def main():
     tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META']
     start_date = '2022-01-01'
-    end_date = '2024-12-31'
+    end_date = '2025-04-08'
     initial_cash = 100000
 
     # 👇 Just change this to try new combinations!
