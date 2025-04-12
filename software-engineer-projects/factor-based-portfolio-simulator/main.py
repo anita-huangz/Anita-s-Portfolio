@@ -1,5 +1,6 @@
 from datetime import datetime
 from simulation import run_simulation
+from simulation import performance_metrics
 
 # -----------------------------
 # main.py: Entry point
@@ -38,6 +39,8 @@ def main():
     nav_df = run_simulation(tickers, start_date, end_date, initial_cash, selected_factors, use_fama_french)
     print("\nFinal NAV Results:")
     print(nav_df.tail())
+
+    print(performance_metrics(nav_df))
 
 if __name__ == '__main__':
     main()

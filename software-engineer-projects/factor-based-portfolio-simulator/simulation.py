@@ -93,3 +93,18 @@ def run_simulation(tickers, start_date, end_date, initial_cash=100000, selected_
     # print("FF Dates Range:", ff.index.min(), "to", ff.index.max())
 
     return nav_df.tail()
+
+def performance_metrics(nav_df):
+    returns = nav_df['Returns'].dropna()
+    total_return = nav_df['NAV'].iloc[-1] / nav_df['NAV'].iloc[0] - 1
+    annualized_return = (1 + total_return) ** (252 / len(nav_df)) - 1
+    volatility = returns.std() * np.sqrt(252)
+    sharpe = (returns.mean() * 252) / (returns.std() * np.sqrt(252))
+    max_drawdown = ((nav_df['NAV'].cummax() - nav_df['NAV']) / nav_df['NAV'].cummax()).max()
+
+    return {
+        "Annualized Return": annualized_return,
+        "Volatility": volatility,
+        "Sharpe Ratio": sharpe,
+        "Max Drawdown": max_drawdown
+    }
