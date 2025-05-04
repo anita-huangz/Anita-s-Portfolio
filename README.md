@@ -4,6 +4,10 @@ Below you'll find links to various data science, machine learning, and software 
 Each project showcases my ability to apply technical skills to solve real-world problems.
 
 ## Software Engineer Projects 
+### 1. [Earnings Drift Tracker](https://github.com/anita-huangz/Anita-s-Portfolio/tree/46a58ff967f52a59a9d963777ff278174898b9d7/software-engineer-projects/earnings-drift-tracker)
+- Analyzes how stock prices react to earnings announcements
+- **Technical Tools Used**: Python’s OOP features, REST API, Python Pandas 
+
 ### 1. [Course and Catalog Scheduling System](https://github.com/anita-huangz/Anita-s-Portfolio/tree/4c80e4de7d9151d7ddebcac4926bb1dbdb2a8141/software-engineer-projects/Course%20Catalog%20and%20Scheduling%20System)
 - Helps manage and schedule university courses, preventing conflicts and ensuring efficient organization.  
 - **Technical Tools Used**: Python’s OOP features, and efficient data filtering algorithms.
