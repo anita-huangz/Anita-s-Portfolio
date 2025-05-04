@@ -2,7 +2,8 @@ import requests
 import yfinance as yf
 from earnings import EarningsReport
 
-API_KEY = "2Wxxo8fva4htYsD1j3LLU9Z1hi6AyWtS"  # FMP API Key
+# Prompt the user for their API key
+API_KEY = input("Enter your FMP API key: ").strip()
 
 def load_price_data(ticker, start, end):
     # Use yfinance to download historical stock prices
