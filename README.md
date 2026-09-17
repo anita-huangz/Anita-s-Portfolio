@@ -144,20 +144,60 @@ this one stays flat at ~0.45µs.
 
 ## Data Science
 
-Exploratory notebooks. Unlike the projects above, these are analyses rather than
-engineered packages — no test suites.
+Exploratory analyses rather than engineered packages — no test suites. Ordered
+by complexity, most involved first: depth of method, how much domain reasoning
+the result rests on, and how easy it is to get quietly wrong.
 
-| Project | What it does | Stack |
-|---|---|---|
-| [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading) | LSTM over 60-day lookback sequences | TensorFlow, Keras |
-| [Fake News Detection](data-science-projects/fake-news-detection) | Metadata, sentiment, and TF-IDF features | scikit-learn, XGBoost |
-| [Customer Churn Prediction](data-science-projects/customer-churn-prediction) | Telco churn, exploration through evaluation | scikit-learn, seaborn |
-| [Cybersecurity Threat Analysis](data-science-projects/global-security-threats) | Clustering and anomaly detection, 2015–2024 | PCA, t-SNE, DBSCAN, Isolation Forest |
-| [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce) | Recommender over behaviour and catalogue data | pandas, scikit-learn |
-| [Stock-Bond Portfolio](data-science-projects/stock-bond-portfolio-analysis) | Allocation across horizons and risk levels | pandas, NumPy |
-| [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast) | Long-run trends and forward forecasts | pandas, matplotlib |
+### 1. [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis)
+Allocates across five ETFs by solving a constrained optimisation whose objective
+trades factor-risk exposure against Sharpe, with weights informed by a
+regression and conditioned on the volatility regime. Not textbook
+mean-variance — the Sharpe preference is swept across twelve values so you can
+watch the allocation move from risk-matching to return-seeking.
+**463 lines, SPY/IWM/TLT/LQD/SHV, 2012–2024** · SciPy, statsmodels, yfinance
 
----
+### 2. [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading)
+A stacked LSTM with dropout, trained on rolling 60-day windows cut from 127 MB
+of minute-resolution trades resampled to daily bars. The hard part of a
+sequence pipeline isn't the architecture — scale before the split and the test
+set leaks into training.
+**TensorFlow, Keras, scikit-learn**
+
+### 3. [Fake News Detection](data-science-projects/fake-news-detection)
+TF-IDF over article text, sentiment polarity, and structural metadata, compared
+across several classifiers under cross-validation. **The reportable result is
+negative:** metadata alone scores an ROC AUC of 0.46 — at or below a coin
+flip — so none of those structural signals separate a fake article here.
+**4,000 articles, 50.6% fake** · scikit-learn, XGBoost, TextBlob
+
+### 4. [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce)
+Joins customer behaviour against a product catalogue across boosting,
+ensembles, text features and seasonality. The data undercuts the premise: the
+three customer segments barely differ in average order value, so the segment
+label carries little signal.
+**10,000 customers × 10,000 products** · scikit-learn, XGBoost
+
+### 5. [Cybersecurity Threat Analysis](data-science-projects/global-security-threats)
+Six unsupervised methods over a decade of incidents — PCA and t-SNE, K-Means
+and DBSCAN, Isolation Forest and Local Outlier Factor. Unsupervised work is
+harder to judge than it looks: with no ground truth, a clean separation can be
+an artifact of handing the clusterer the same columns the projection used.
+**3,000 incidents, 2015–2024, 150 flagged anomalous** · scikit-learn
+
+### 6. [Customer Churn Prediction](data-science-projects/customer-churn-prediction)
+A supervised pipeline reaching AUC 0.83 — and a demonstration of why accuracy
+is the wrong headline. Recall is 49.7%, so it catches half the customers who
+actually left, and 78.9% accuracy is near what you'd score predicting nobody
+churns. The strongest pattern needs no model: **month-to-month churns at 42.7%
+against 2.9% on a two-year contract.**
+**7,032 customers, 26.6% churned** · scikit-learn, seaborn
+
+### 7. [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast)
+Pulls hourly ERA5 reanalysis from the Open-Meteo API, extracts long-run
+temperature trends, and projects them forward. One caveat stated plainly: the
+legislation-influence feature is synthetic, so it demonstrates the mechanism
+rather than measuring a real effect.
+**3 scripts, ~200 lines** · pandas, scikit-learn, requests
 
 ## Repository layout
 

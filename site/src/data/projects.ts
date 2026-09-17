@@ -238,40 +238,54 @@ export const PROJECTS: Project[] = [
     "slug": "bitcoin-and-asset-trading",
     "title": "Bitcoin Price Forecasting",
     "category": "data-science",
-    "summary": "An LSTM forecasting Bitcoin prices from 60-day lookback sequences.",
-    "detail": "A full deep-learning pipeline: MinMax scaling, sequence windowing, dropout regularisation, and evaluation against a held-out period.",
+    "summary": "Forecasts Bitcoin prices with a stacked LSTM trained on rolling 60-day windows, built from minute-resolution trade data resampled to daily bars.",
+    "detail": "Takes a 127 MB file of minute-by-minute BTC/USD trades, resamples it to daily OHLCV, scales it, and cuts it into overlapping fixed-length sequences so a recurrent network can learn from the ordering rather than treating each day independently. The model is an LSTM stack with dropout between layers and dense layers on top. The hard part of a pipeline like this is not the architecture \u2014 it is the sequence construction: scale before the split and the test set leaks into training, window carelessly and the model reads its own answer.",
     "tech": [
       "Python",
       "TensorFlow",
       "Keras",
+      "LSTM",
       "NumPy",
       "pandas",
       "scikit-learn"
     ],
-    "path": "data-science-projects/bitcoin-and-asset-trading"
+    "path": "data-science-projects/bitcoin-and-asset-trading",
+    "rank": 2,
+    "io": {
+      "input": "Minute-resolution BTC/USD trade history, a lookback window, and a forecast horizon.",
+      "output": "A trained model plus predicted-versus-actual price paths on a held-out period.",
+      "scale": "127 MB of raw trades resampled to daily bars; 60-day lookback sequences."
+    }
   },
   {
     "slug": "fake-news-detection",
     "title": "Fake News Detection",
     "category": "data-science",
-    "summary": "Classifies news articles using metadata, sentiment, and TF-IDF features.",
-    "detail": "Feature engineering across article metadata and text, compared across several classifiers with an emphasis on which features actually carry signal.",
+    "summary": "Classifies news articles as fake or real, comparing several models across text features and article metadata \u2014 and finding that the metadata alone carries no usable signal.",
+    "detail": "Builds features three ways: TF-IDF over the article text, sentiment polarity, and structural metadata such as word count, readability and whether the piece carries images or video. Several classifiers are compared under cross-validation. The result worth reporting is negative: a model trained on metadata alone scores an ROC AUC of 0.46, at or below a coin flip, so none of those structural signals distinguish a fake article in this dataset. Its accuracy of 46.5% looks respectable until you notice the classes are split almost evenly.",
     "tech": [
       "Python",
       "scikit-learn",
       "XGBoost",
-      "pandas",
+      "TF-IDF",
       "TextBlob",
+      "pandas",
       "seaborn"
     ],
-    "path": "data-science-projects/fake-news-detection"
+    "path": "data-science-projects/fake-news-detection",
+    "rank": 3,
+    "io": {
+      "input": "4,000 labelled articles with title, body, author, source and structural metadata.",
+      "output": "Per-model accuracy, ROC AUC and confusion matrices, plus feature importances.",
+      "scale": "4,000 articles, 50.6% labelled fake. 39 code cells."
+    }
   },
   {
     "slug": "customer-churn-prediction",
     "title": "Customer Churn Prediction",
     "category": "data-science",
-    "summary": "Predicts telecom customer churn, with exploration, training, and evaluation.",
-    "detail": "An end-to-end supervised pipeline on the Telco churn dataset, from exploratory analysis through model comparison and threshold selection.",
+    "summary": "Predicts which telecom customers will leave, and shows why accuracy is the wrong headline number when only a quarter of them do.",
+    "detail": "A supervised pipeline over 7,032 Telco customers: encode the contract, service and billing fields, train and compare classifiers under cross-validation, and inspect what drives the prediction. It reaches an ROC AUC of 0.83, but recall at the default threshold is 49.7% \u2014 it catches about half the customers who actually left. The 78.9% accuracy is close to what you would score by predicting nobody churns. The strongest pattern in the data needs no model at all: month-to-month customers churn at 42.7% against 2.9% on a two-year contract.",
     "tech": [
       "Python",
       "scikit-learn",
@@ -279,14 +293,20 @@ export const PROJECTS: Project[] = [
       "seaborn",
       "matplotlib"
     ],
-    "path": "data-science-projects/customer-churn-prediction"
+    "path": "data-science-projects/customer-churn-prediction",
+    "rank": 6,
+    "io": {
+      "input": "7,032 customers with contract type, tenure, services, and billing fields.",
+      "output": "Churn probability per customer, plus ROC, confusion matrix and feature importances.",
+      "scale": "7,032 customers, 26.6% churned. AUC 0.83, recall 49.7%."
+    }
   },
   {
     "slug": "global-security-threats",
     "title": "Cybersecurity Threat Analysis",
     "category": "data-science",
-    "summary": "Clustering and anomaly detection over global cyber incidents, 2015-2024.",
-    "detail": "Unsupervised analysis to surface attack patterns and outliers: dimensionality reduction with PCA and t-SNE, clustering with K-Means and DBSCAN, and anomaly detection with Isolation Forest and Local Outlier Factor.",
+    "summary": "Finds structure in a decade of global cyber incidents using six unsupervised methods \u2014 clustering, dimensionality reduction and anomaly detection \u2014 with no labels to check against.",
+    "detail": "Three thousand incidents from 2015 to 2024, each with financial loss, users affected, resolution time, attack type, target industry and defence mechanism. The numeric fields are standardised and projected with PCA and t-SNE, grouped with K-Means and DBSCAN, and screened for outliers with Isolation Forest and Local Outlier Factor. Unsupervised work is harder to judge than it looks: there is no ground truth, so a clean-looking separation can be an artifact of feeding the clusterer the same columns the projection used. The demo says where that applies.",
     "tech": [
       "Python",
       "scikit-learn",
@@ -294,52 +314,81 @@ export const PROJECTS: Project[] = [
       "t-SNE",
       "K-Means",
       "DBSCAN",
-      "Isolation Forest"
+      "Isolation Forest",
+      "seaborn"
     ],
-    "path": "data-science-projects/global-security-threats"
+    "path": "data-science-projects/global-security-threats",
+    "rank": 5,
+    "io": {
+      "input": "3,000 incident records with loss, users affected, resolution time and categorical attributes.",
+      "output": "Cluster assignments, a 2-D projection, and a flagged set of anomalous incidents.",
+      "scale": "3,000 incidents, 2015\u20132024, 6 attack types, 150 flagged anomalous."
+    }
   },
   {
     "slug": "personalized-recommendations-for-e-commerce",
     "title": "E-commerce Recommendations",
     "category": "data-science",
-    "summary": "A recommender over customer behaviour and product catalogue data.",
-    "detail": "Builds personalised product recommendations by joining customer interaction history against the product catalogue.",
+    "summary": "Recommends products by joining customer behaviour against a product catalogue, spanning boosting, ensembles, text features and seasonality in one pipeline.",
+    "detail": "Two 10,000-row tables \u2014 customers with browsing history, purchase history, segment and average order value, and products with category, brand, price, rating and review sentiment. The pipeline encodes both sides, derives features from the text and seasonal fields, and compares gradient-boosted and ensemble models under cross-validation. The first thing the data shows is awkward for the premise: the three customer segments are near-evenly sized and barely differ in average order value, so the segment label carries little signal and the recommender has to lean on behaviour instead.",
     "tech": [
       "Python",
-      "pandas",
       "scikit-learn",
+      "XGBoost",
+      "pandas",
       "recommender systems"
     ],
-    "path": "data-science-projects/personalized-recommendations-for-e-commerce"
+    "path": "data-science-projects/personalized-recommendations-for-e-commerce",
+    "rank": 4,
+    "io": {
+      "input": "A customer's browsing and purchase history, segment, season, and the product catalogue.",
+      "output": "Ranked product recommendations, with model comparison across the candidate approaches.",
+      "scale": "10,000 customers \u00d7 10,000 products, 3 segments."
+    }
   },
   {
     "slug": "stock-bond-portfolio-analysis",
     "title": "Stock-Bond Portfolio Optimisation",
     "category": "data-science",
-    "summary": "Optimises a stock-bond allocation across timeframes and risk levels.",
-    "detail": "Mean-variance style analysis of stock and bond mixes, examining how the efficient allocation shifts with horizon and investor risk tolerance.",
+    "summary": "Allocates across five ETFs by solving a constrained optimisation whose objective trades factor-risk exposure against Sharpe, with the weights informed by a regression and conditioned on the volatility regime.",
+    "detail": "Pulls twelve years of daily prices for SPY, IWM, TLT, LQD and SHV, decomposes each asset's returns against a set of risk factors, and runs a SciPy constrained optimisation over portfolio weights. The objective is not textbook mean-variance: it blends factor-risk alignment with a Sharpe term whose weight is swept across twelve values, so you can see how the allocation shifts as the investor's priority moves from risk-matching to return-seeking. Factor weights are adjusted from the regression output, and VIX is carried alongside as a volatility-regime signal.",
     "tech": [
       "Python",
       "pandas",
       "NumPy",
-      "matplotlib",
+      "SciPy",
+      "statsmodels",
+      "yfinance",
       "portfolio theory"
     ],
-    "path": "data-science-projects/stock-bond-portfolio-analysis"
+    "path": "data-science-projects/stock-bond-portfolio-analysis",
+    "rank": 1,
+    "io": {
+      "input": "Five ETF tickers, a date range, and a client risk profile expressed as target factor weights.",
+      "output": "Optimal portfolio weights per Sharpe preference, the factor exposures they imply, and realised performance over the period.",
+      "scale": "463 lines, the largest analysis here. 5 assets, 2012\u20132024 daily."
+    }
   },
   {
     "slug": "weather-trends-and-forecast",
     "title": "Weather Trends & Forecast",
     "category": "data-science",
-    "summary": "Processes historical weather data to find long-run trends and forecast forward.",
-    "detail": "Ingests and cleans a large historical weather dataset, then surfaces multi-decade trends and produces forward forecasts.",
+    "summary": "Pulls decades of hourly reanalysis weather data from the Open-Meteo ERA5 API, extracts long-run temperature trends, and projects them forward.",
+    "detail": "Scripts rather than a notebook: one downloads and caches from the ERA5 archive for a given latitude and longitude, one computes descriptive statistics and resamples to the period of interest, and one fits a linear trend and extrapolates. Note one honest caveat \u2014 a legislation-influence feature in the forecast is synthetic, generated rather than sourced, so it demonstrates the mechanism rather than measuring a real effect.",
     "tech": [
       "Python",
       "pandas",
-      "matplotlib",
+      "scikit-learn",
       "requests",
+      "matplotlib",
       "time series"
     ],
-    "path": "data-science-projects/weather-trends-and-forecast"
+    "path": "data-science-projects/weather-trends-and-forecast",
+    "rank": 7,
+    "io": {
+      "input": "A latitude and longitude, plus a date range.",
+      "output": "Cleaned historical series, descriptive statistics, a fitted trend, and a forward projection.",
+      "scale": "Hourly ERA5 reanalysis. 3 scripts, ~200 lines."
+    }
   }
 ];
