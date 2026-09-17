@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factor-sim"
+version = "0.2.0"
+description = "Point-in-time backtest of cross-sectional equity factor strategies."
+requires-python = ">=3.11"
+dependencies = ["pandas>=2.0", "numpy>=1.24"]
+
+[project.optional-dependencies]
+data = ["yfinance>=0.2", "yahooquery>=2.3", "pandas-datareader>=0.10"]
+attribution = ["statsmodels>=0.14", "pandas-datareader>=0.10"]
+plot = ["matplotlib>=3.7"]
+dev = ["pytest>=8", "ruff>=0.7", "statsmodels>=0.14", "matplotlib>=3.7"]
+
+[project.scripts]
+factor-sim = "factor_sim.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
