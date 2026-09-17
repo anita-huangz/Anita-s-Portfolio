@@ -297,3 +297,85 @@ export function ScatterChart({
     </div>
   );
 }
+
+export interface Bar {
+  label: string;
+  value: number;
+  /** Optional per-bar colour; defaults to the accent. */
+  color?: string;
+  note?: string;
+}
+
+interface BarChartProps {
+  bars: Bar[];
+  formatValue?: (v: number) => string;
+  /** Horizontal bars: category labels are words, and words read across. */
+  maxBars?: number;
+}
+
+export function BarChart({ bars, formatValue = (v) => v.toFixed(2), maxBars = 12 }: BarChartProps) {
+  const shown = bars.slice(0, maxBars);
+  const max = Math.max(...shown.map((b) => Math.abs(b.value)), 0) || 1;
+
+  return (
+    <div className="barchart">
+      {shown.map((b) => (
+        <div className="bar-row" key={b.label} title={b.note ?? b.label}>
+          <span className="bar-label">{b.label}</span>
+          <span className="bar-track">
+            <span
+              className="bar-fill"
+              style={{
+                width: `${(Math.abs(b.value) / max) * 100}%`,
+                background: b.color ?? "var(--ai)",
+              }}
+            />
+          </span>
+          <span className="bar-value">{formatValue(b.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface MatrixProps {
+  tn: number;
+  fp: number;
+  fn: number;
+  tp: number;
+  positiveLabel: string;
+  negativeLabel: string;
+}
+
+/** A 2x2 confusion matrix. The off-diagonal is the interesting part. */
+export function ConfusionMatrix({ tn, fp, fn, tp, positiveLabel, negativeLabel }: MatrixProps) {
+  const total = tn + fp + fn + tp;
+  const cell = (n: number, correct: boolean, label: string) => (
+    <div className={`cm-cell${correct ? " right" : " wrong"}`}>
+      <span className="cm-n">{n.toLocaleString()}</span>
+      <span className="cm-l">{label}</span>
+      <span className="cm-p">{((n / total) * 100).toFixed(1)}%</span>
+    </div>
+  );
+
+  return (
+    <div className="confusion">
+      <span className="cm-axis-y">actual</span>
+      <div className="cm-grid">
+        {/* Explicit spacer: without it the first header slides into the
+            corner cell and every label lands one column left. */}
+        <span aria-hidden="true" />
+        <span className="cm-head">predicted {negativeLabel}</span>
+        <span className="cm-head">predicted {positiveLabel}</span>
+
+        <span className="cm-side">{negativeLabel}</span>
+        {cell(tn, true, "correct")}
+        {cell(fp, false, "false alarm")}
+
+        <span className="cm-side">{positiveLabel}</span>
+        {cell(fn, false, "missed")}
+        {cell(tp, true, "caught")}
+      </div>
+    </div>
+  );
+}
