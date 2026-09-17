@@ -11,9 +11,9 @@ the bugs that were fixed, and real captured output.
 
 ```bash
 npm install
-npm run dev            # http://localhost:5173
-npm run build          # production bundle for GitHub Pages
-npm run build -- --mode local && npm run preview   # preview with root-relative paths
+npm run dev       # http://localhost:5173
+npm run build     # production bundle for GitHub Pages
+npm run preview   # serve the built bundle locally
 ```
 
 ## Notes
@@ -26,9 +26,9 @@ npm run build -- --mode local && npm run preview   # preview with root-relative 
 - **Category colour is always paired with a text label**, so identity never
   rests on hue alone. Light and dark are both selected from a validated palette
   against their own surface rather than being an automatic inversion.
-- **`base` differs by build.** GitHub project pages serve from
-  `/Anita-s-Portfolio/`, so that's the default; `--mode local` emits
-  root-relative paths for `vite preview`.
+- **`base` differs between dev and build.** GitHub project pages serve from
+  `/Anita-s-Portfolio/`, so a production build gets that prefix; the dev server
+  and `vite preview` serve from the root.
 
 Deployed by [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) on
 every push to `main` that touches `site/`.
