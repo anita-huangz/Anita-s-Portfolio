@@ -1,10 +1,18 @@
 """Weather: real ERA5 reanalysis, annual trend, and a forward projection."""
 from __future__ import annotations
-import json, pathlib, time
+import argparse, json, pathlib, time
+from datetime import date, timedelta
 import numpy as np, pandas as pd, requests
 
 OUT = pathlib.Path("site/src/data/demos")
-START, END = "1950-01-01", "2024-12-31"
+# ERA5 reanalysis lags real time by roughly five days, so asking for today
+# returns a truncated final year. Backing off a week keeps the last year whole.
+ERA5_LAG_DAYS = 7
+DEFAULT_START = "1950-01-01"
+
+
+def default_end() -> str:
+    return str(date.today() - timedelta(days=ERA5_LAG_DAYS))
 
 CITIES = {
     "Chicago":  (41.88, -87.63),
@@ -36,7 +44,7 @@ def _fetch_once(lat: float, lon: float) -> pd.DataFrame:
         "https://archive-api.open-meteo.com/v1/era5",
         params={
             "latitude": lat, "longitude": lon,
-            "start_date": START, "end_date": END,
+            "start_date": args.start, "end_date": args.end,
             "daily": "temperature_2m_mean",
             "timezone": "UTC",
         },
@@ -48,8 +56,21 @@ def _fetch_once(lat: float, lon: float) -> pd.DataFrame:
         {"date": pd.to_datetime(d["time"]), "temp": d["temperature_2m_mean"]}
     ).dropna()
 
+parser = argparse.ArgumentParser(description="Fetch ERA5 and fit temperature trends.")
+parser.add_argument("--start", default=DEFAULT_START, help="YYYY-MM-DD")
+parser.add_argument("--end", default=default_end(), help="YYYY-MM-DD (default: a week ago)")
+parser.add_argument(
+    "--cities",
+    default=",".join(CITIES),
+    help="Comma-separated subset of: " + ", ".join(CITIES),
+)
+parser.add_argument("--projection-years", type=int, default=25)
+args = parser.parse_args()
+
+wanted = [c.strip() for c in args.cities.split(",") if c.strip() in CITIES]
 series = {}
-for name, (lat, lon) in CITIES.items():
+for name in wanted:
+    lat, lon = CITIES[name]
     df = fetch(lat, lon)
     df["year"] = df["date"].dt.year
     annual = df.groupby("year")["temp"].mean()
@@ -67,7 +88,7 @@ for name, (lat, lon) in CITIES.items():
     resid = temps - (slope * years + intercept)
     sigma = float(resid.std(ddof=2))
 
-    future = np.arange(years[-1] + 1, years[-1] + 26)
+    future = np.arange(years[-1] + 1, years[-1] + 1 + args.projection_years)
     monthly = df.groupby(df["date"].dt.month)["temp"].mean()
 
     series[name] = {
@@ -96,6 +117,9 @@ for name, (lat, lon) in CITIES.items():
     time.sleep(8)  # be a polite client rather than a burst
 
 payload = {
+    "generated": str(date.today()),
+    "start": args.start,
+    "end": args.end,
     "source": "Open-Meteo ERA5 reanalysis archive",
     "source_url": "https://open-meteo.com/en/docs/historical-weather-api",
     "cities": series,
