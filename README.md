@@ -1,8 +1,8 @@
 # Anita Huang — Projects
 
-**[View the project site →](https://anita-huangz.github.io/Anita-s-Portfolio/)**
+**[View the project site →](https://anita-huangz.github.io/)**
 
-[![The portfolio site](site/docs/screenshot.png)](https://anita-huangz.github.io/Anita-s-Portfolio/)
+[![The portfolio site](site/docs/screenshot.png)](https://anita-huangz.github.io/)
 
 AI platform engineering, backend systems, and quantitative work. Everything
 here lives in one repository, and every project marked ✅ runs its full test

@@ -4,7 +4,7 @@ import type { Project } from "../data/types";
 import { CategoryTag } from "./ProjectCard";
 import { Terminal } from "./Terminal";
 
-const REPO = "https://github.com/anita-huangz/Anita-s-Portfolio";
+const REPO = "https://github.com/anita-huangz/anita-huangz.github.io";
 
 interface Props {
   project: Project;

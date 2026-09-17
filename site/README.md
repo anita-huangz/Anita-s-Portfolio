@@ -1,7 +1,7 @@
 # Portfolio site
 
 The project showcase at
-**[anita-huangz.github.io/Anita-s-Portfolio](https://anita-huangz.github.io/Anita-s-Portfolio/)**.
+**[anita-huangz.github.io](https://anita-huangz.github.io/)**.
 
 ![The portfolio site](docs/screenshot.png)
 
@@ -26,9 +26,9 @@ npm run preview   # serve the built bundle locally
 - **Category colour is always paired with a text label**, so identity never
   rests on hue alone. Light and dark are both selected from a validated palette
   against their own surface rather than being an automatic inversion.
-- **`base` differs between dev and build.** GitHub project pages serve from
-  `/Anita-s-Portfolio/`, so a production build gets that prefix; the dev server
-  and `vite preview` serve from the root.
+- **No base path.** This is a GitHub *user* site (the repository is named
+  `anita-huangz.github.io`), so it publishes at the domain root. A project
+  page would need `base: "/<repo>/"` instead.
 
 Deployed by [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) on
 every push to `main` that touches `site/`.
