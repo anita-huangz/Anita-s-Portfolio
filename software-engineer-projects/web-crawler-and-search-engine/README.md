@@ -24,7 +24,7 @@ Without `--query` it drops into an interactive prompt.
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 trie-search https://example.com --depth 1
-pytest -q       # 58 tests, no network
+pytest -q       # 77 tests, no network
 ruff check .
 ```
 
