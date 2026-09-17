@@ -3,11 +3,25 @@
 from __future__ import annotations
 
 import io
+from itertools import combinations
 
 import pytest
 
-from course_catalog import Catalog, Course, Day, Meeting, build_schedule, parse_time
+from course_catalog import (
+    Catalog,
+    Course,
+    Day,
+    Meeting,
+    Preferences,
+    build_schedule,
+    parse_time,
+    score,
+    search,
+    sections_by_course,
+    solve,
+)
 from course_catalog.meeting import format_time
+from course_catalog.solver import _gap_minutes
 
 CSV = """code,name,instructor,location,"meeting times"
 "MPCS 51040-1","Unix Systems","Alice Adams","Ryerson 251","Monday 5:30pm - 8:30pm"
@@ -293,3 +307,304 @@ def test_bundled_csv_is_a_real_file_not_an_lfs_pointer():
         "courses.csv is an LFS pointer; it must be stored as a regular file"
     )
     assert first_line.startswith("code,name,instructor")
+
+
+# --------------------------------------------------------------------------- #
+# Sections are alternatives, not additions
+# --------------------------------------------------------------------------- #
+
+
+def test_base_code_strips_the_section():
+    course = Course("MPCS 55001-2", "Algorithms", "A", "B")
+    assert course.base_code == "MPCS 55001"
+    assert course.section == "2"
+
+
+def test_a_code_without_a_section_has_an_empty_section():
+    assert Course("MPCS 55001", "Algorithms", "A", "B").section == ""
+
+
+def test_two_sections_of_one_course_cannot_both_be_scheduled(catalog):
+    """They rarely clash on time -- that is the point of offering two."""
+    a, b = catalog.by_code("MPCS 51100-1")[0], catalog.by_code("MPCS 51100-2")[0]
+    assert not a.conflicts_with(b)          # 6:00-7:30 then 7:30-9:00
+    with pytest.raises(ValueError, match="another section"):
+        build_schedule(catalog, ["MPCS 51100-1", "MPCS 51100-2"])
+
+
+def test_sections_group_under_their_base_code(catalog):
+    groups = sections_by_course(catalog)
+    assert [c.code for c in groups["MPCS 51100"]] == [
+        "MPCS 51100-1",
+        "MPCS 51100-2",
+    ]
+    assert len(groups["MPCS 51040"]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# The solver
+# --------------------------------------------------------------------------- #
+
+
+def test_the_solver_returns_only_conflict_free_schedules(catalog):
+    for option in solve(catalog, 3, limit=50):
+        courses = option.courses
+        assert len(courses) == 3
+        for i, a in enumerate(courses):
+            for b in courses[i + 1 :]:
+                assert not a.conflicts_with(b)
+                assert a.base_code != b.base_code
+
+
+def test_the_solver_finds_nothing_when_nothing_fits(catalog):
+    # Only five base courses exist, so six is impossible.
+    assert solve(catalog, 6) == []
+
+
+def test_a_required_course_appears_in_every_option(catalog):
+    options = solve(catalog, 2, required=["MPCS 55001"], limit=50)
+    assert options
+    assert all(
+        any(c.base_code == "MPCS 55001" for c in o.courses) for o in options
+    )
+
+
+def test_a_required_base_code_lets_the_solver_choose_the_section():
+    """The whole reason enumeration beats filtering.
+
+    Advanced Programming is offered at 6:00 and at 7:30. A seminar at 6:30
+    rules out the first section and not the second, so the only way to schedule
+    both courses is for the solver to switch sections -- which no filter over
+    the catalog can do.
+    """
+    csv = (
+        'code,name,instructor,location,"meeting times"\n'
+        '"MPCS 51100-1","Advanced Programming","Bob","C1","Monday 6:00pm - 7:30pm"\n'
+        '"MPCS 51100-2","Advanced Programming","Dan","C1","Monday 7:30pm - 9:00pm"\n'
+        '"MPCS 50000-1","Seminar","Eve","C2","Monday 6:30pm - 7:00pm"\n'
+    )
+    small = Catalog(Catalog._read(io.StringIO(csv)))
+    options = solve(small, 2, required=["MPCS 51100"], limit=50)
+    assert [
+        tuple(sorted(c.code for c in o.courses)) for o in options
+    ] == [("MPCS 50000-1", "MPCS 51100-2")]
+
+
+def test_every_section_of_a_required_course_being_blocked_yields_nothing(catalog):
+    # Unix runs 5:30-8:30 Monday, which swallows both Advanced Programming
+    # sections. There is no schedule containing them both.
+    assert solve(catalog, 2, required=["MPCS 51100"], among=["MPCS 51040"]) == []
+
+
+def test_a_required_exact_section_is_honoured(catalog):
+    options = solve(catalog, 1, required=["MPCS 51100-2"], limit=50)
+    assert [o.courses[0].code for o in options] == ["MPCS 51100-2"]
+
+
+def test_requiring_more_courses_than_the_schedule_holds_is_an_error(catalog):
+    with pytest.raises(ValueError, match="do not fit"):
+        solve(catalog, 1, required=["MPCS 51040", "MPCS 55001"])
+
+
+def test_requiring_the_same_course_twice_is_an_error(catalog):
+    with pytest.raises(ValueError, match="required twice"):
+        solve(catalog, 2, required=["MPCS 51100-1", "MPCS 51100-2"])
+
+
+def test_an_unknown_required_course_raises(catalog):
+    with pytest.raises(KeyError):
+        solve(catalog, 2, required=["MPCS 99999"])
+
+
+def test_size_must_be_positive(catalog):
+    with pytest.raises(ValueError, match="at least 1"):
+        solve(catalog, 0)
+
+
+# --------------------------------------------------------------------------- #
+# Preferences
+# --------------------------------------------------------------------------- #
+
+
+def test_options_come_back_cheapest_first(catalog):
+    options = solve(catalog, 2, limit=50)
+    assert [o.cost for o in options] == sorted(o.cost for o in options)
+
+
+def test_a_morning_preference_penalises_early_classes():
+    early = Course("A 1-1", "Early", "x", "y", (Meeting.parse("Monday 8:00am - 9:00am"),))
+    late = Course("B 1-1", "Late", "x", "y", (Meeting.parse("Monday 2:00pm - 3:00pm"),))
+    prefs = Preferences(no_earlier_than=parse_time("10:00am"), minimize_days=False,
+                        minimize_gaps=False)
+    assert score([early], prefs)[1]["too_early"] == 120   # two hours too early
+    assert score([late], prefs)[1]["too_early"] == 0
+
+
+def test_an_evening_limit_penalises_the_overrun_only():
+    course = Course("A 1-1", "Night", "x", "y",
+                    (Meeting.parse("Monday 7:00pm - 9:30pm"),))
+    prefs = Preferences(no_later_than=parse_time("9:00pm"))
+    # 30 minutes past the limit, not the whole class.
+    assert score([course], prefs)[1]["too_late"] == 30
+
+
+def test_a_soft_day_off_is_a_penalty_not_an_exclusion(catalog):
+    options = solve(
+        catalog, 1, among=["MPCS 51040"],
+        preferences=Preferences(days_off=frozenset({Day.MONDAY})),
+    )
+    # Still offered -- with the cost shown -- rather than silently dropped.
+    assert options and options[0].breakdown["day_off"] > 0
+
+
+def test_a_strict_day_off_excludes_the_course(catalog):
+    options = solve(
+        catalog, 1, among=["MPCS 51040"],
+        preferences=Preferences(
+            days_off=frozenset({Day.MONDAY}), require_days_off=True
+        ),
+    )
+    assert options == []
+
+
+def test_fewer_days_on_campus_costs_less(catalog):
+    prefs = Preferences(minimize_gaps=False)
+    one_day = catalog.by_code("MPCS 51040")      # Monday only
+    two_days = catalog.by_code("MPCS 55001")     # Tue and Thu
+    assert score(one_day, prefs)[0] < score(two_days, prefs)[0]
+
+
+def test_gaps_count_only_the_time_between_classes():
+    first = Course("A 1-1", "First", "x", "y",
+                   (Meeting.parse("Monday 9:00am - 10:00am"),))
+    second = Course("B 1-1", "Second", "x", "y",
+                    (Meeting.parse("Monday 11:30am - 12:30pm"),))
+    assert _gap_minutes([first, second]) == 90
+    # Nothing before the first class or after the last is a gap.
+    assert _gap_minutes([first]) == 0
+    # Neither is time on a different day.
+    other_day = Course("C 1-1", "Other", "x", "y",
+                       (Meeting.parse("Tuesday 5:00pm - 6:00pm"),))
+    assert _gap_minutes([first, other_day]) == 0
+
+
+def test_back_to_back_classes_have_no_gap():
+    a = Course("A 1-1", "A", "x", "y", (Meeting.parse("Monday 6:00pm - 7:30pm"),))
+    b = Course("B 1-1", "B", "x", "y", (Meeting.parse("Monday 7:30pm - 9:00pm"),))
+    assert _gap_minutes([a, b]) == 0
+
+
+def test_a_preferred_instructor_lowers_the_cost(catalog):
+    alice = catalog.by_code("MPCS 51040")        # Alice Adams
+    prefs = Preferences(preferred_instructors=frozenset({"Alice"}))
+    assert score(alice, prefs)[1]["instructor"] == 0
+    bob = catalog.by_code("MPCS 51100-1")        # Bob Brown
+    assert score(bob, prefs)[1]["instructor"] > 0
+
+
+def test_the_breakdown_sums_to_the_cost(catalog):
+    prefs = Preferences(no_earlier_than=parse_time("10:00am"),
+                        days_off=frozenset({Day.MONDAY}))
+    for option in solve(catalog, 2, preferences=prefs, limit=50):
+        assert option.cost == pytest.approx(sum(option.breakdown.values()))
+
+
+def test_an_option_reports_its_own_shape(catalog):
+    option = solve(catalog, 1, required=["MPCS 55001"])[0]
+    assert option.days_used == (Day.TUESDAY, Day.THURSDAY)
+    assert option.earliest_start == parse_time("5:30pm")
+    assert option.latest_end == parse_time("8:30pm")
+    assert "Tue" in option.render()
+
+
+def test_the_node_budget_stops_the_search(catalog):
+    # A budget of zero still lets the first branch complete, but the result
+    # set must be a subset of the unbounded one rather than wrong.
+    bounded = solve(catalog, 2, limit=50, node_budget=0)
+    unbounded = solve(catalog, 2, limit=50)
+    assert len(bounded) <= len(unbounded)
+    codes = {tuple(sorted(c.code for c in o.courses)) for o in unbounded}
+    assert all(tuple(sorted(c.code for c in o.courses)) in codes for o in bounded)
+
+
+# --------------------------------------------------------------------------- #
+# The search is an anytime algorithm and says so
+# --------------------------------------------------------------------------- #
+
+
+def test_a_small_catalog_search_is_proven_optimal(catalog):
+    result = search(catalog, 2, limit=5)
+    assert result.proven_optimal
+    assert result.nodes > 0
+
+
+def test_exhausting_the_budget_is_reported_not_hidden(catalog):
+    result = search(catalog, 2, limit=5, node_budget=1)
+    assert not result.proven_optimal
+    # Still returns what it found rather than nothing: the budget does not
+    # fire until at least one complete schedule exists.
+    assert result.options
+
+
+def test_an_impossible_search_terminates_instead_of_hunting_forever(catalog):
+    # Nothing to find, so the "keep going until you have one" rule cannot be
+    # satisfied -- the hard ceiling has to stop it.
+    result = search(catalog, 6, limit=5, node_budget=1)
+    assert result.options == []
+
+
+def test_the_bound_never_prunes_the_optimum():
+    """Branch-and-bound must not change the answer, only the work done.
+
+    Checked against brute force: every conflict-free combination, scored.
+    """
+    csv_rows = ['code,name,instructor,location,"meeting times"']
+    slots = [
+        "9:00am - 10:30am",
+        "11:00am - 12:30pm",
+        "2:00pm - 3:30pm",
+        "5:30pm - 7:00pm",
+    ]
+    days = ["Monday", "Tuesday", "Wednesday"]
+    for i in range(12):
+        csv_rows.append(
+            f'"X {100 + i}-1","C{i}","P{i}","R","{days[i % 3]} {slots[i % 4]}"'
+        )
+    small = Catalog(Catalog._read(io.StringIO("\n".join(csv_rows))))
+
+    prefs = Preferences(no_earlier_than=parse_time("10:00am"))
+    brute = []
+    for combo in combinations(list(small), 3):
+        if any(
+            a.conflicts_with(b)
+            for i, a in enumerate(combo)
+            for b in combo[i + 1 :]
+        ):
+            continue
+        brute.append(score(combo, prefs)[0])
+    brute.sort()
+
+    found = search(small, 3, preferences=prefs, limit=5, node_budget=10**9)
+    assert found.proven_optimal
+    assert [o.cost for o in found.options] == pytest.approx(brute[:5])
+
+
+def test_the_gap_bound_stays_admissible():
+    """Gaps shrink when a course lands in one, so the bound must allow for it.
+
+    A bound that assumed gaps only grow would prune the schedule that fills
+    the gap -- which is usually the best one.
+    """
+    csv = (
+        'code,name,instructor,location,"meeting times"\n'
+        '"X 1-1","Morning","P","R","Monday 9:00am - 10:00am"\n'
+        '"X 2-1","Evening","P","R","Monday 5:00pm - 6:00pm"\n'
+        '"X 3-1","Filler","P","R","Monday 10:30am - 4:30pm"\n'
+        '"X 4-1","Elsewhere","P","R","Tuesday 9:00am - 10:00am"\n'
+    )
+    small = Catalog(Catalog._read(io.StringIO(csv)))
+    result = search(small, 3, limit=10, node_budget=10**9)
+    assert result.proven_optimal
+    best = result.options[0]
+    # Filling the 7-hour gap beats adding a second day.
+    assert {c.code for c in best.courses} == {"X 1-1", "X 2-1", "X 3-1"}
