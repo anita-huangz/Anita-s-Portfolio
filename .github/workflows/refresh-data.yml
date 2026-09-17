@@ -1,0 +1,60 @@
+name: Refresh demo data
+
+# Weekly rather than daily: the price file is ~600 KB, and committing it every
+# day would add a few hundred megabytes of git history a year for data that is
+# only ever read as "roughly current".
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays, 06:17 UTC — after the Friday US close settles
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install yfinance pandas numpy
+
+      - name: Regenerate
+        # The generator imports the projects themselves and refuses to write a
+        # dataset thinner than its floors, so a rate-limited fetch fails the
+        # job instead of replacing good data with partial data.
+        run: python site/scripts/generate_demo_data.py
+
+      - name: Check the ports still agree with the Python
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+        working-directory: site
+
+      - run: npm test
+        working-directory: site
+
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet -- site/src/data/demos; then
+            echo "data unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/src/data/demos
+          git commit -m "Refresh demo data through $(date -u +%Y-%m-%d)"
+          git push

@@ -44,6 +44,16 @@ class Settings(BaseSettings):
 
     agent_max_tool_calls: int = Field(default=8, ge=1, le=40)
 
+    #: Requests per client per minute on the research routes. A public
+    #: instance is reachable by anyone, and each research call fans out into
+    #: several EDGAR requests.
+    rate_limit_per_minute: int = Field(default=6, ge=1, le=600)
+
+    #: Refuse to start with a live model provider while exposed publicly.
+    #: An unauthenticated endpoint backed by a real API key is someone else's
+    #: budget to spend.
+    public_demo: bool = False
+
     #: Origins allowed to call the API from a browser. The Vite dev server
     #: runs on 5173; a deployment serving the built UI from the same origin
     #: needs none of these.

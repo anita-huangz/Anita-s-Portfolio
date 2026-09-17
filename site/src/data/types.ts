@@ -8,6 +8,11 @@ export interface Project {
   summary: string;
   /** A few sentences. Shown in the detail panel. */
   detail: string;
+  /**
+   * What goes in and what comes out, concretely. Abstract descriptions of a
+   * project tell a reader its category, not what it actually does.
+   */
+  io?: { input: string; output: string; scale?: string };
   tech: string[];
   /** Repository-relative path to the project. */
   path: string;
