@@ -275,3 +275,21 @@ def test_every_bundled_course_has_parseable_meetings():
     for course in Catalog.bundled():
         for meeting in course.meetings:
             assert meeting.end > meeting.start
+
+
+def test_bundled_csv_is_a_real_file_not_an_lfs_pointer():
+    """Guards a CI-only failure.
+
+    The repository routes *.csv through Git LFS for its large datasets, and
+    actions/checkout does not fetch LFS content by default. Under LFS this
+    file arrives as a three-line pointer, the header parse fails, and the
+    suite breaks in CI while passing on any machine that has the real file.
+    """
+    from importlib import resources
+
+    source = resources.files("course_catalog").joinpath("data/courses.csv")
+    first_line = source.read_text(encoding="utf-8").splitlines()[0]
+    assert not first_line.startswith("version https://git-lfs"), (
+        "courses.csv is an LFS pointer; it must be stored as a regular file"
+    )
+    assert first_line.startswith("code,name,instructor")
