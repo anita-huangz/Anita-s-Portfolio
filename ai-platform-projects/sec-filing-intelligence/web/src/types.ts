@@ -36,6 +36,14 @@ export interface ResearchResult {
   verifier_note?: string | null;
 }
 
+export interface Health {
+  status: string;
+  provider: string;
+  model: string;
+  cache: string;
+  tools: string[];
+}
+
 export interface ToolCallEvent {
   tool: string;
   ok: boolean;

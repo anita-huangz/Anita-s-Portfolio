@@ -1,4 +1,14 @@
-import type { Finding, ResearchResult, TimelineStep, ToolCallEvent } from "./types";
+import type { Finding, Health, ResearchResult, TimelineStep, ToolCallEvent } from "./types";
+
+/** Which provider is live. Drives the demo-mode notice. */
+export async function fetchHealth(): Promise<Health | null> {
+  try {
+    const response = await fetch("/healthz");
+    return response.ok ? ((await response.json()) as Health) : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface StreamHandlers {
   onStep: (step: TimelineStep) => void;

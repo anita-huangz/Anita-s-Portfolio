@@ -303,6 +303,18 @@ body {
 }
 .citations a:hover { color: var(--series-1); border-color: var(--series-1); }
 
+.notice {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--status-warning);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+.notice strong { color: var(--text-primary); }
+
 .empty { color: var(--text-muted); font-size: 14px; }
 .error-box {
   border: 1px solid var(--status-critical);

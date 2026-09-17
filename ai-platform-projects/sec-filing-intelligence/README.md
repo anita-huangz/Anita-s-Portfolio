@@ -19,10 +19,13 @@ needed to run the data layer, and the whole test suite runs offline.
 make install && make demo      # http://localhost:8000
 ```
 
-`make demo` builds the UI and runs the stack with a deterministic stub model
-against **real SEC EDGAR data**. You get the whole pipeline — tool routing,
-capability checks, caching, telemetry, the verifier gate — with no credentials.
-Set `ANTHROPIC_API_KEY` and `FILING_INTEL_PROVIDER=anthropic` for real answers.
+`make demo` builds the UI and runs the stack against **real SEC EDGAR data**
+with no credentials. Filings, figures, and quoted passages are genuine; the
+answers are **extractive, not generative** — passages are selected by keyword
+overlap against the filing the agent actually fetched, so it can quote but
+cannot summarise, compare across filings, or decline an unanswerable question.
+The UI says so in a banner. Set `ANTHROPIC_API_KEY` and
+`FILING_INTEL_PROVIDER=anthropic` for real reasoning.
 
 ---
 
@@ -298,7 +301,7 @@ deploy.
 ## Testing
 
 ```bash
-make test     # 162 tests, no network, no API key
+make test     # 167 tests, no network, no API key
 ```
 
 The suite covers cost arithmetic, cache and TTL semantics, telemetry
@@ -350,7 +353,7 @@ src/filing_intel/
   providers/demo.py deterministic stub model, for running without a key
 evals/              dataset, grading, harness
 web/                React + Vite UI (components, SSE client, styles)
-tests/              162 tests
+tests/              167 tests
 ```
 
 ---
@@ -367,3 +370,6 @@ tests/              162 tests
   fresh; session accounting is wired, multi-turn context reuse is not.
 - The UI shows one run at a time and does not persist history across reloads.
 - Price data comes from a public unauthenticated endpoint with no SLA.
+- XBRL returns overlapping contexts for one end date (a quarter and the
+  year-to-date containing it). Facts carry their period span so the two are
+  distinguishable rather than looking like contradictory values.

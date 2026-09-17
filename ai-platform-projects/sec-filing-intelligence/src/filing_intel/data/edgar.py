@@ -284,6 +284,7 @@ class EdgarClient:
                 unit=unit_name,
                 value=float(e["val"]),
                 period_end=_parse_date(e["end"]),
+                period_start=_parse_optional_date(e.get("start")),
                 fiscal_year=e.get("fy"),
                 fiscal_period=e.get("fp"),
                 form_type=e.get("form"),
@@ -291,8 +292,21 @@ class EdgarClient:
             for e in entries
             if e.get("val") is not None and e.get("end")
         ]
-        facts.sort(key=lambda f: f.period_end, reverse=True)
-        return facts[:periods]
+
+        # EDGAR restates the same period across later filings, so an identical
+        # (span, value) shows up several times. Deduplicate on the span, keeping
+        # the first occurrence, before truncating -- otherwise `periods=4` can
+        # return one period four times.
+        seen: set[tuple[date, date | None]] = set()
+        unique: list[FinancialFact] = []
+        for fact in sorted(facts, key=lambda f: (f.period_end, f.duration_days or 0),
+                           reverse=True):
+            key = (fact.period_end, fact.period_start)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(fact)
+        return unique[:periods]
 
 
 def _parse_date(value: str) -> date:
