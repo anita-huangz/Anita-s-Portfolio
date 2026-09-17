@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 
 import { type FactorName, type PriceData, performanceMetrics, runBacktest } from "../lib/factor";
+import { alignToDates, type LiveSeries } from "../livePrices";
 import { useDemoData } from "../useDemoData";
+import { LiveTickerInput } from "./LiveTickerInput";
 import { LineChart, type Series } from "./Chart";
 import { Loading } from "./Loading";
 import { TickerPicker } from "./TickerPicker";
@@ -41,6 +43,34 @@ function Configured({ data }: { data: PriceFile }) {
   const [cadence, setCadence] = useState(21);
   const [showBug, setShowBug] = useState(true);
   const [range, setRange] = useState<[number, number]>(() => [0, data.dates.length - 1]);
+  // Tickers fetched live sit alongside the bundled ones for this session.
+  const [extra, setExtra] = useState<Record<string, number[]>>({});
+  const [liveError, setLiveError] = useState<string | null>(null);
+
+  const allTickers = useMemo(
+    () => [...data.tickers, ...Object.keys(extra)],
+    [data.tickers, extra],
+  );
+  const allCloses = useMemo(
+    () => ({ ...data.closes, ...extra }),
+    [data.closes, extra],
+  );
+
+  const addLive = (series: LiveSeries) => {
+    // The bundled dates are the axis. A live series that does not cover them
+    // is rejected rather than padded -- an invented price would flow straight
+    // into the factor scores.
+    const aligned = alignToDates(series, data.dates);
+    if (!aligned) {
+      setLiveError(
+        `${series.ticker} does not have a close for every session in the bundled window, so it cannot be scored against the others.`,
+      );
+      return;
+    }
+    setLiveError(null);
+    setExtra((cur) => ({ ...cur, [series.ticker]: aligned }));
+    setUniverse((cur) => [...new Set([...cur, series.ticker])]);
+  };
 
   // A backtest needs at least a momentum lookback of history before it can
   // rank anything, so a very short window produces a flat line.
@@ -52,10 +82,10 @@ function Configured({ data }: { data: PriceFile }) {
       dates: data.dates.slice(from, to + 1),
       tickers: universe,
       closes: Object.fromEntries(
-        universe.map((t) => [t, data.closes[t].slice(from, to + 1)]),
+        universe.map((t) => [t, allCloses[t].slice(from, to + 1)]),
       ),
     }),
-    [data, universe, from, to],
+    [data.dates, allCloses, universe, from, to],
   );
 
   const { honest, cheating } = useMemo(() => {
@@ -94,12 +124,18 @@ function Configured({ data }: { data: PriceFile }) {
   return (
     <div className="demo">
       <TickerPicker
-        all={data.tickers}
+        all={allTickers}
         sectors={data.sectors}
         selected={universe}
         onChange={setUniverse}
         min={2}
       />
+
+      <LiveTickerInput
+        onLoaded={addLive}
+        hint="Universe limited to the 62 companies bundled with the site. Deploy the proxy in `proxy/` to add any ticker — a static page cannot call a market-data API directly, because the browser blocks the cross-origin request."
+      />
+      {liveError && <p className="live-error">{liveError}</p>}
 
       <div className="demo-controls">
         <div className="control">
