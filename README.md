@@ -150,17 +150,21 @@ the result rests on, and how easy it is to get quietly wrong.
 
 ### 1. [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis)
 Allocates across five ETFs by solving a constrained optimisation whose objective
-trades factor-risk exposure against Sharpe, with weights informed by a
-regression and conditioned on the volatility regime. Not textbook
-mean-variance — the Sharpe preference is swept across twelve values so you can
-watch the allocation move from risk-matching to return-seeking.
+trades variance against Sharpe, swept across twelve risk preferences. At a
+Sharpe weight of zero it is pure minimum-variance and holds **100% short
+Treasuries**; at the top it takes 21% equities for 4.1% expected return. The
+live demo lets you drag that preference and watch the weights, the frontier
+position, and the realised NAV all move.
 **463 lines, SPY/IWM/TLT/LQD/SHV, 2012–2024** · SciPy, statsmodels, yfinance
 
 ### 2. [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading)
-A stacked LSTM with dropout, trained on rolling 60-day windows cut from 127 MB
-of minute-resolution trades resampled to daily bars. The hard part of a
-sequence pipeline isn't the architecture — scale before the split and the test
-set leaks into training.
+A stacked LSTM with dropout, trained on rolling 90-day windows cut from 127 MB
+of minute-resolution trades resampled to daily bars. **Running the saved model
+against a one-line baseline is the finding:** predicting "tomorrow equals
+today" scores an RMSE of $1,401; the LSTM scores $22,283 — 16× worse — with
+49% directional accuracy, a coin flip. The chart still looks convincing, which
+is the trap. A line that tracks a price *level* can carry no information about
+its *changes*, and only the change is tradeable.
 **TensorFlow, Keras, scikit-learn**
 
 ### 3. [Fake News Detection](data-science-projects/fake-news-detection)
@@ -198,9 +202,11 @@ against 2.9% on a two-year contract.**
 
 ### 7. [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast)
 Pulls hourly ERA5 reanalysis from the Open-Meteo API, extracts long-run
-temperature trends, and projects them forward. One caveat stated plainly: the
-legislation-influence feature is synthetic, so it demonstrates the mechanism
-rather than measuring a real effect.
+temperature trends, and projects them forward. Six cities over 75 years:
+London warms fastest at **+0.241 °C/decade**, Sydney slowest at +0.100. The
+demo notes what the projection is — a straight line extended, not a climate
+model — and that year-to-year variation exceeds a decade of trend. One caveat
+stated plainly: the project's legislation-influence feature is synthetic.
 **3 scripts, ~200 lines** · pandas, scikit-learn, requests
 
 ## Data sources

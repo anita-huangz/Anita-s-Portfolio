@@ -7,6 +7,11 @@ import { FactorDemo } from "./components/FactorDemo";
 import { ScheduleDemo } from "./components/ScheduleDemo";
 import { TrieDemo } from "./components/TrieDemo";
 import {
+  BitcoinDemo,
+  StockBondDemo,
+  WeatherDemo,
+} from "./components/QuantDemos";
+import {
   ChurnDemo,
   FakeNewsDemo,
   RecommendDemo,
@@ -57,6 +62,18 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
   "personalized-recommendations-for-e-commerce": {
     title: "Explore the catalogue",
     component: RecommendDemo,
+  },
+  "stock-bond-portfolio-analysis": {
+    title: "Solve the allocation",
+    component: StockBondDemo,
+  },
+  "bitcoin-and-asset-trading": {
+    title: "See the model against a one-line baseline",
+    component: BitcoinDemo,
+  },
+  "weather-trends-and-forecast": {
+    title: "Chart the trend",
+    component: WeatherDemo,
   },
 };
 
