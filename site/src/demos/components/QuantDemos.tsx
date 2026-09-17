@@ -1,5 +1,12 @@
 import { useState } from "react";
 
+import {
+  type CitySeries,
+  type Place,
+  WeatherLookupError,
+  fetchCitySeries,
+  searchPlaces,
+} from "../liveWeather";
 import { useDemoData } from "../useDemoData";
 import { BarChart, LineChart, ScatterChart, type ScatterGroup, type Series } from "./Chart";
 import { Loading } from "./Loading";
@@ -50,12 +57,52 @@ export function WeatherDemo() {
   const [city, setCity] = useState("Chicago");
   const [showProjection, setShowProjection] = useState(true);
   const [showTrend, setShowTrend] = useState(true);
+  const [startYear, setStartYear] = useState(1950);
+
+  // Places looked up live sit alongside the bundled ones for this session.
+  const [extra, setExtra] = useState<Record<string, City>>({});
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<Place[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   if (!data) return <Loading label="Loading 75 years of reanalysis…" />;
 
-  const names = Object.keys(data.cities);
-  const active = data.cities[city] ?? data.cities[names[0]];
+  const cities: Record<string, City> = { ...data.cities, ...extra };
+  const names = Object.keys(cities);
+  const active = cities[city] ?? cities[names[0]];
   const { slope_per_decade, intercept, first_year, last_year } = active.trend;
   const slope = slope_per_decade / 10;
+
+  const search = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null); setMatches(null);
+    try {
+      const found = await searchPlaces(query);
+      if (found.length === 0) setError(`No place matched "${query}".`);
+      else setMatches(found);
+    } catch (exc) {
+      setError(exc instanceof WeatherLookupError ? exc.message : "Search failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const load = async (place: Place) => {
+    setBusy(true); setError(null);
+    const label = [place.name, place.admin, place.country].filter(Boolean).join(", ");
+    try {
+      const series: CitySeries = await fetchCitySeries(place, startYear);
+      setExtra((cur) => ({ ...cur, [label]: series as City }));
+      setCity(label);
+      setMatches(null);
+      setQuery("");
+    } catch (exc) {
+      setError(exc instanceof WeatherLookupError ? exc.message : "Lookup failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const series: Series[] = [
     {
@@ -81,20 +128,62 @@ export function WeatherDemo() {
   }
 
   const ranked = names
-    .map((n) => ({ name: n, rate: data.cities[n].trend.slope_per_decade }))
+    .map((n) => ({ name: n, rate: cities[n].trend.slope_per_decade }))
     .sort((a, b) => b.rate - a.rate);
 
   return (
     <div className="demo">
       <div className="demo-controls">
         <div className="control">
-          <span className="control-label">City</span>
+          <span className="control-label">Place</span>
           {names.map((n) => (
             <button key={n} className="chip" aria-pressed={city === n} onClick={() => setCity(n)}>
               {n}
             </button>
           ))}
         </div>
+      </div>
+
+      <form className="demo-controls" onSubmit={search}>
+        <label className="control" style={{ flex: 1, minWidth: 220 }}>
+          <span className="control-label">Any city on earth</span>
+          <input
+            className="demo-input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Reykjavík, Nairobi, Ulaanbaatar…"
+            spellCheck={false}
+          />
+        </label>
+        <button className="chip" type="submit" disabled={busy || !query.trim()}>
+          {busy ? "Working…" : "Search"}
+        </button>
+        <div className="control">
+          <span className="control-label">From year</span>
+          {[1950, 1970, 1990].map((y) => (
+            <button key={y} type="button" className="chip" aria-pressed={startYear === y}
+                    onClick={() => setStartYear(y)}>
+              {y}
+            </button>
+          ))}
+        </div>
+      </form>
+
+      {error && <p className="live-error">{error}</p>}
+      {matches && (
+        <div className="demo-controls">
+          <div className="control">
+            <span className="control-label">Did you mean</span>
+            {matches.map((m) => (
+              <button key={`${m.lat},${m.lon}`} className="chip" onClick={() => void load(m)}>
+                {[m.name, m.admin, m.country].filter(Boolean).join(", ")}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="demo-controls">
         <div className="control">
           <button className="chip" aria-pressed={showTrend} onClick={() => setShowTrend((v) => !v)}>
             Trend line
@@ -108,9 +197,11 @@ export function WeatherDemo() {
 
       <div className="metric-row">
         <Stat label="Years" value={`${first_year}–${last_year}`} />
-        <Stat label="Warming rate" value={`${slope_per_decade >= 0 ? "+" : ""}${slope_per_decade.toFixed(3)} °C/decade`}
+        <Stat label="Warming rate"
+              value={`${slope_per_decade >= 0 ? "+" : ""}${slope_per_decade.toFixed(3)} °C/decade`}
               tone="var(--ds)" />
-        <Stat label="Total change over record" value={`${active.warming >= 0 ? "+" : ""}${active.warming.toFixed(2)} °C`} />
+        <Stat label="Total change over record"
+              value={`${active.warming >= 0 ? "+" : ""}${active.warming.toFixed(2)} °C`} />
         <Stat label="Year-to-year spread" value={`±${active.trend.sigma.toFixed(2)} °C`} />
       </div>
 
@@ -124,22 +215,25 @@ export function WeatherDemo() {
 
       <p className="demo-note" style={{ marginTop: 0 }}>
         ERA5 reanalysis, {first_year} to {last_year}, fetched by latitude and longitude
-        and averaged to annual means. The trend is ordinary least squares — the same
-        fit the project's forecast script uses. Note what the projection is and is not:
-        extending a straight line, not a climate model. Year-to-year variation is
-        ±{active.trend.sigma.toFixed(2)} °C, which is larger than a decade of the trend,
-        so any single future year could easily land either side of the dashed line.
+        and averaged to annual means. Search any city and it is fetched live from the
+        archive — Open-Meteo allows browser requests, so this needs no server of mine.
+        The trend is ordinary least squares, the same fit the project's forecast script
+        uses. Note what the projection is and is not: a straight line extended, not a
+        climate model. Year-to-year variation is ±{active.trend.sigma.toFixed(2)} °C,
+        larger than a decade of the trend, so any single future year could land either
+        side of the dashed line.
       </p>
 
       <div className="demo-split" style={{ marginTop: 16 }}>
         <div>
-          <h5 className="demo-h">Warming rate by city (°C per decade)</h5>
+          <h5 className="demo-h">Warming rate by place (°C per decade)</h5>
           <BarChart
             bars={ranked.map((r) => ({
               label: r.name,
               value: r.rate,
               color: r.name === city ? "var(--ds)" : "var(--edge)",
             }))}
+            maxBars={14}
             formatValue={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(3)}`}
           />
         </div>
@@ -157,9 +251,9 @@ export function WeatherDemo() {
         </div>
       </div>
       <p className="demo-note">
-        The mid-latitude cities warm fastest here; Sydney and Nairobi show roughly half
-        the rate. Switching cities changes the whole picture, which is the argument for
-        making the location a parameter rather than hardcoding one.
+        Add a few places and the pattern shows itself: mid- and high-latitude cities
+        warm fastest, tropical ones slowest. That comparison only exists because the
+        location is a parameter rather than a constant.
       </p>
     </div>
   );
@@ -370,8 +464,24 @@ interface Bitcoin {
 
 export function BitcoinDemo() {
   const data = useDemoData<Bitcoin>(() => import("../../data/demos/nb-bitcoin.json"));
-  const [shown, setShown] = useState<string[]>(["actual", "predicted"]);
+  const [shown, setShown] = useState<string[]>(["actual", "predicted", "naive"]);
+  const [window, setWindow] = useState<[number, number] | null>(null);
   if (!data) return <Loading label="Loading model predictions…" />;
+
+  const [from, to] = window ?? [0, data.series.length - 1];
+  const slice = data.series.slice(from, to + 1);
+
+  // Recomputed over the visible window, so the error you read matches the
+  // stretch of chart you are looking at rather than the whole test period.
+  const errOf = (key: "predicted" | "leaky" | "naive") =>
+    Math.sqrt(
+      slice.reduce((sum, r) => sum + (r[key] - r.actual) ** 2, 0) / Math.max(1, slice.length),
+    );
+  const windowed = {
+    lstm: errOf("predicted"),
+    naive: errOf("naive"),
+    leaky: errOf("leaky"),
+  };
 
   const m = data.metrics;
   const options: { id: keyof Bitcoin["series"][number]; label: string; color: string; dashed?: boolean }[] = [
@@ -387,19 +497,55 @@ export function BitcoinDemo() {
       label: o.label,
       color: o.color,
       dashed: o.dashed,
-      points: data.series.map((s, i) => ({ x: i, y: s[o.id] as number })),
+      points: slice.map((s, i) => ({ x: from + i, y: s[o.id] as number })),
     }));
 
-  const ratio = m.rmse / m.naive_rmse;
+  const ratio = windowed.naive > 0 ? windowed.lstm / windowed.naive : 0;
 
   return (
     <div className="demo">
       <div className="metric-row">
-        <Stat label="Test days" value={data.test_days.toLocaleString()} />
-        <Stat label="LSTM RMSE" value={money(m.rmse)} tone="var(--ds)" />
-        <Stat label="Naive RMSE" value={money(m.naive_rmse)} tone="var(--se)" />
+        <Stat label="Days shown" value={slice.length.toLocaleString()} />
+        <Stat label="LSTM RMSE" value={money(windowed.lstm)} tone="var(--ds)" />
+        <Stat label="Naive RMSE" value={money(windowed.naive)} tone="var(--se)" />
         <Stat label="Directional accuracy" value={`${m.directional_accuracy.toFixed(1)}%`}
               tone="var(--ds)" />
+      </div>
+
+      <div className="range">
+        <span className="control-label">
+          Window <strong>{slice[0]?.date}</strong> to{" "}
+          <strong>{slice[slice.length - 1]?.date}</strong>
+        </span>
+        <div className="range-sliders">
+          <input
+            type="range" min={0} max={data.series.length - 2} value={from}
+            aria-label="Window start"
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setWindow((cur) => {
+                const [, end] = cur ?? [0, data.series.length - 1];
+                return [Math.min(v, end - 20), end];
+              });
+            }}
+          />
+          <input
+            type="range" min={1} max={data.series.length - 1} value={to}
+            aria-label="Window end"
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setWindow((cur) => {
+                const [start] = cur ?? [0, data.series.length - 1];
+                return [start, Math.max(v, start + 20)];
+              });
+            }}
+          />
+        </div>
+        {window && (
+          <button className="chip" style={{ marginTop: 6 }} onClick={() => setWindow(null)}>
+            Reset to full test period
+          </button>
+        )}
       </div>
 
       <p className="demo-warn">
@@ -407,7 +553,8 @@ export function BitcoinDemo() {
           A one-line baseline beats this model by {ratio.toFixed(0)}×.
         </strong>{" "}
         Predicting "tomorrow's price equals today's" gives an RMSE of{" "}
-        {money(m.naive_rmse)}; the trained LSTM gives {money(m.rmse)}. And its
+        {money(windowed.naive)} over the window shown; the trained LSTM gives{" "}
+        {money(windowed.lstm)}. And its
         directional accuracy is {m.directional_accuracy.toFixed(1)}% — a coin flip.
         The chart still looks convincing, which is exactly the trap: a line that
         tracks the level of a price series can carry no information about its
@@ -446,9 +593,9 @@ export function BitcoinDemo() {
       <h5 className="demo-h" style={{ marginTop: 18 }}>Why the scaling matters</h5>
       <BarChart
         bars={[
-          { label: "Naive baseline", value: m.naive_rmse, color: "var(--se)" },
-          { label: "LSTM, leaky scaling", value: data.leaky_metrics.rmse, color: "var(--dv4)" },
-          { label: "LSTM, honest scaling", value: m.rmse, color: "var(--ds)" },
+          { label: "Naive baseline", value: windowed.naive, color: "var(--se)" },
+          { label: "LSTM, leaky scaling", value: windowed.leaky, color: "var(--dv4)" },
+          { label: "LSTM, honest scaling", value: windowed.lstm, color: "var(--ds)" },
         ]}
         formatValue={money}
       />
@@ -456,8 +603,8 @@ export function BitcoinDemo() {
         The project saved the model but not its scaler, so the transform has to be
         rebuilt — and how you rebuild it changes the answer. Fitting MinMax on the
         whole series before splitting lets the transform see the test range's maximum,
-        which flatters the model ({money(data.leaky_metrics.rmse)} against{" "}
-        {money(m.rmse)}). Fitting on the training portion only is correct, and it is
+        which flatters the model ({money(windowed.leaky)} against{" "}
+        {money(windowed.lstm)}). Fitting on the training portion only is correct, and it is
         also harsher here: training tops out near {money(data.train_max)} while the
         test period reaches {money(data.test_max)}, so the model is asked to
         extrapolate well beyond anything it ever saw. Neither version beats the

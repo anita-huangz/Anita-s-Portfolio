@@ -1,6 +1,7 @@
 """Bitcoin: run the saved LSTM on held-out days and compare to what happened."""
 from __future__ import annotations
-import json, os, pathlib, warnings
+import argparse, json, os, pathlib, warnings
+from datetime import date
 warnings.filterwarnings("ignore"); os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import numpy as np, pandas as pd, tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
@@ -8,7 +9,15 @@ from sklearn.preprocessing import MinMaxScaler
 ROOT = pathlib.Path("data-science-projects/bitcoin-and-asset-trading")
 OUT = pathlib.Path("site/src/data/demos")
 LOOKBACK = 90          # taken from the saved model's input shape, not the README
-TEST_FRACTION = 0.2
+
+parser = argparse.ArgumentParser(description="Run the saved LSTM against a baseline.")
+parser.add_argument("--test-fraction", type=float, default=0.2)
+parser.add_argument(
+    "--no-extend", action="store_true",
+    help="Skip topping the archive up with recent prices from Yahoo.",
+)
+args = parser.parse_args()
+TEST_FRACTION = args.test_fraction
 
 print("  reading 127 MB of minute trades…")
 raw = pd.read_csv(ROOT / "data/btcusd_1-min_data.csv.zstd", compression="zstd")
@@ -19,6 +28,28 @@ raw = raw.dropna(subset=[ts]).set_index(ts)
 daily = raw["Close"].resample("D").last().dropna()
 print(f"  {len(raw):,} minutes -> {len(daily):,} daily closes "
       f"({daily.index[0].date()} to {daily.index[-1].date()})")
+
+if not args.no_extend:
+    # The archived file stops whenever it was last exported. Topping it up from
+    # Yahoo keeps the evaluation window current instead of frozen months back.
+    import yfinance as yf
+
+    resume = daily.index[-1] + pd.Timedelta(days=1)
+    if resume.date() < date.today():
+        recent = yf.download(
+            "BTC-USD", start=str(resume.date()), end=str(date.today()),
+            progress=False, auto_adjust=True,
+        )
+        if recent is not None and not recent.empty:
+            close = recent["Close"]
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            close.index = pd.to_datetime(close.index).tz_localize(None)
+            before = len(daily)
+            daily = pd.concat([daily, close.astype("float64")])
+            daily = daily[~daily.index.duplicated(keep="first")].sort_index()
+            print(f"  extended with Yahoo: +{len(daily) - before} days "
+                  f"-> {daily.index[-1].date()}")
 
 values = daily.to_numpy(dtype="float32").reshape(-1, 1)
 split = int(len(values) * (1 - TEST_FRACTION))
@@ -84,7 +115,11 @@ print(f"  leaky scaling: RMSE ${leak_rmse:,.0f}  MAPE {leak_mape:.2f}%  "
 
 step = max(1, len(actual) // 400)
 payload = {
-    "source": "Kaggle: mczielinski/bitcoin-historical-data (minute trades, resampled daily)",
+    "generated": str(date.today()),
+    "source": (
+        "Kaggle: mczielinski/bitcoin-historical-data (minute trades, resampled "
+        "daily), topped up with Yahoo Finance BTC-USD daily closes"
+    ),
     "lookback": LOOKBACK,
     "model": "2-layer LSTM (100, 50) with dropout, dense 25 -> 1; 72,301 parameters",
     "train_days": int(split), "test_days": int(test_mask.sum()),

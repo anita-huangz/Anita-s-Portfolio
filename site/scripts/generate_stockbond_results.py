@@ -1,6 +1,7 @@
 """Stock-bond: the constrained optimisation, solved across risk preferences."""
 from __future__ import annotations
-import json, pathlib, warnings
+import argparse, json, pathlib, warnings
+from datetime import date
 import numpy as np, pandas as pd, yfinance as yf
 from scipy.optimize import minimize
 warnings.filterwarnings("ignore")
@@ -14,15 +15,26 @@ NAMES = {
 }
 TRADING_DAYS = 252
 
-raw = yf.download(TICKERS, start="2012-01-01", end="2025-01-01",
+parser = argparse.ArgumentParser(description="Solve the allocation across risk preferences.")
+parser.add_argument("--start", default="2012-01-01", help="YYYY-MM-DD")
+parser.add_argument("--end", default=str(date.today()), help="YYYY-MM-DD (default: today)")
+parser.add_argument(
+    "--tickers", default=",".join(TICKERS),
+    help="Comma-separated. The last one is treated as the cash-like leg.",
+)
+args = parser.parse_args()
+TICKERS = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+CASH = TICKERS[-1]
+
+raw = yf.download(TICKERS, start=args.start, end=args.end,
                   progress=False, auto_adjust=True)
 closes = raw["Close"][TICKERS].dropna()
 returns = closes.pct_change().dropna()
 
 mu = returns.mean() * TRADING_DAYS
 cov = returns.cov() * TRADING_DAYS
-# SHV is the cash-like leg, so it stands in for the risk-free rate.
-rf = float(mu["SHV"])
+# The last ticker is the cash-like leg, so it stands in for the risk-free rate.
+rf = float(mu[CASH])
 
 def stats(w: np.ndarray) -> tuple[float, float, float]:
     r = float(w @ mu)
@@ -85,6 +97,9 @@ equal = {t: 1 / len(TICKERS) for t in TICKERS}
 
 step = max(1, len(returns) // 400)
 payload = {
+    "generated": str(date.today()),
+    "cash_leg": CASH,
+    "growth_leg": TICKERS[0],
     "tickers": TICKERS,
     "names": NAMES,
     "start": str(closes.index[0].date()),
@@ -110,7 +125,9 @@ payload = {
         "Max Sharpe": nav(max_sharpe["weights"])[::step],
         "Min volatility": nav(min_vol["weights"])[::step],
         "Equal weight": nav(equal)[::step],
-        "100% SPY": nav({t: 1.0 if t == "SPY" else 0.0 for t in TICKERS})[::step],
+        f"100% {TICKERS[0]}": nav(
+        {t: 1.0 if t == TICKERS[0] else 0.0 for t in TICKERS}
+    )[::step],
     },
     "notable": {"max_sharpe": max_sharpe, "min_vol": min_vol},
 }

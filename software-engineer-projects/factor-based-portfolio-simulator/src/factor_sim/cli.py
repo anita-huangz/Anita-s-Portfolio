@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import date, timedelta
 
 from .factors import FACTOR_REGISTRY, get_factors
 from .metrics import format_metrics, performance_metrics
 from .simulation import run_backtest
 
 SNAPSHOT_FACTORS = {"value", "size"}
+
+#: Momentum needs 252 trading days before it can rank anything, so the
+#: default window has to be comfortably longer than one year.
+YEARS_OF_HISTORY = 4
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,8 +24,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tickers", default="AAPL,MSFT,GOOGL,AMZN,META,NVDA,AVGO,ORCL"
     )
-    parser.add_argument("--start", default="2021-01-01")
-    parser.add_argument("--end", default="2024-12-31")
+    # Relative to today rather than pinned, so the default window keeps
+    # moving instead of silently ageing into a historical backtest.
+    today = date.today()
+    parser.add_argument(
+        "--start",
+        default=str(today - timedelta(days=YEARS_OF_HISTORY * 365)),
+        help="YYYY-MM-DD (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--end", default=str(today), help="YYYY-MM-DD (default: today)"
+    )
     parser.add_argument("--cash", type=float, default=100_000.0)
     parser.add_argument(
         "--factors",

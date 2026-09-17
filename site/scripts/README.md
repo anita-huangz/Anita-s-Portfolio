@@ -23,9 +23,26 @@ python site/scripts/generate_bitcoin_results.py
 npm test          # the ports are checked against the regenerated fixtures
 ```
 
+Every script that has a date range now defaults its end to **today**, and
+takes `--start` / `--end` to override. Nothing is pinned to a hardcoded end
+date, so a generator re-run months from now widens the window rather than
+reproducing an old one.
+
+```bash
+python site/scripts/generate_stockbond_results.py --start 2015-01-01 --tickers SPY,QQQ,TLT,GLD,SHV
+python site/scripts/generate_weather_results.py --cities London,Tokyo --projection-years 50
+python site/scripts/generate_bitcoin_results.py --test-fraction 0.3
+```
+
 Only `generate_demo_data.py` runs on a schedule (weekly, see
-`.github/workflows/refresh-data.yml`). The rest are run by hand, because their
-inputs are static datasets rather than a moving price window.
+`.github/workflows/refresh-data.yml`). The rest are run by hand because their
+inputs are static datasets — though `generate_bitcoin_results.py` tops its
+archive up from Yahoo, so re-running it does move the window forward.
+
+One exception, deliberately: the golden fixtures in `generate_demo_data.py`
+pin a fixed ticker set and date window. They are the reference the TypeScript
+ports are tested against, and a floating reference would mean the tests could
+never fail.
 
 ## Two things worth knowing
 

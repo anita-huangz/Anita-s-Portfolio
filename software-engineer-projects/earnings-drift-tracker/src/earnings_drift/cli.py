@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import date, timedelta
 
 from .drift import analyze_drift
 from .models import Stock
@@ -17,8 +18,17 @@ def main(argv: list[str] | None = None) -> int:
         description="Measure post-earnings-announcement drift against analyst surprise."
     )
     parser.add_argument("ticker", nargs="?", default="AAPL")
-    parser.add_argument("--start", default="2021-01-01")
-    parser.add_argument("--end", default="2023-12-31")
+    # Relative to today. A pinned end date quietly turns a live tool into a
+    # historical one as the months pass.
+    today = date.today()
+    parser.add_argument(
+        "--start",
+        default=str(today - timedelta(days=4 * 365)),
+        help="YYYY-MM-DD (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--end", default=str(today), help="YYYY-MM-DD (default: today)"
+    )
     parser.add_argument("--limit", type=int, default=12, help="Earnings reports to fetch.")
     parser.add_argument("--horizons", default="1,5,10")
     parser.add_argument("--plot", action="store_true")
