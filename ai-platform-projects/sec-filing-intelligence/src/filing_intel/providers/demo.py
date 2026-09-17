@@ -1,10 +1,13 @@
-"""A deterministic stand-in for the model, for running the harness without a key.
+"""A deterministic stand-in for the model, for running the stack without a key.
 
-What this is honest about: it measures the *orchestration* -- tool routing,
-capability enforcement, caching, telemetry, cost accounting, the verifier gate --
-against real SEC EDGAR data. It does not measure model quality, because there is
-no model in the loop. Accuracy reported in offline mode is the harness grading
-the platform's plumbing, not Claude's answers.
+Set FILING_INTEL_PROVIDER=demo and the API, the MCP server, and the eval
+harness all run end to end against **real SEC EDGAR data** with no credentials.
+
+What this is honest about: it exercises the *orchestration* -- tool routing,
+capability enforcement, caching, telemetry, cost accounting, the verifier gate.
+It does not represent model quality, because there is no model in the loop.
+Token counts are plausible fixed values so the cost arithmetic has something to
+work on; they are not measurements of anything.
 
 To measure real accuracy, record fixtures against the live API:
 
@@ -21,16 +24,16 @@ import json
 import re
 from typing import Any
 
-from filing_intel.contracts import ModelResponse, TokenUsage, ToolCall
-from filing_intel.providers.base import ModelRequest
+from ..contracts import ModelResponse, TokenUsage, ToolCall
+from .base import ModelRequest
 
 _ACCESSION_RE = re.compile(r"\d{10}-\d{2}-\d{6}")
 
 
-class OfflineProvider:
+class DemoProvider:
     """Routes on the system prompt to decide which node is asking."""
 
-    name = "offline-stub"
+    name = "demo"
 
     def __init__(self) -> None:
         self.calls = 0
@@ -54,7 +57,7 @@ class OfflineProvider:
         return ModelResponse(
             text=text,
             model="claude-opus-5",
-            provider="offline-stub",
+            provider="demo",
             usage=TokenUsage(input_tokens=in_tok, output_tokens=out_tok),
             stop_reason=kw.pop("stop_reason", "end_turn"),
             **kw,
@@ -119,7 +122,7 @@ class OfflineProvider:
             tool_calls=[ToolCall(id=call_id, name=name, arguments=arguments)],
             stop_reason="tool_use",
             model="claude-opus-5",
-            provider="offline-stub",
+            provider="demo",
             usage=TokenUsage(input_tokens=600, output_tokens=45),
             raw_content=[
                 {"type": "tool_use", "id": call_id, "name": name, "input": arguments}

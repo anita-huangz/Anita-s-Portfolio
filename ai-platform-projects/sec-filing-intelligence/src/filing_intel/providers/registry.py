@@ -23,6 +23,11 @@ def build_provider(settings: Settings) -> ModelProvider:
         return AnthropicProvider()
     if settings.provider == "bedrock":
         return BedrockProvider(aws_region=_require_region(settings))
+    if settings.provider == "demo":
+        # Real EDGAR data, stub model. Lets the whole stack run with no key.
+        from .demo import DemoProvider
+
+        return DemoProvider()
     if settings.provider == "replay":
         recorder = AnthropicProvider() if settings.replay_record else None
         return ReplayProvider(settings.replay_dir, record_with=recorder)

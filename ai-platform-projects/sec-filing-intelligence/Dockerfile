@@ -1,4 +1,14 @@
-# Multi-stage: build wheels once, ship a slim runtime without build tooling.
+# ---------------------------------------------------------------- web build
+FROM node:22-slim AS web
+
+WORKDIR /web
+COPY web/package.json web/package-lock.json* ./
+RUN npm ci 2>/dev/null || npm install
+COPY web/ ./
+RUN npm run build
+
+
+# --------------------------------------------------------------- wheel build
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
@@ -9,6 +19,7 @@ COPY src ./src
 RUN pip install --upgrade pip build && python -m build --wheel --outdir /dist
 
 
+# ------------------------------------------------------------------- runtime
 FROM python:3.12-slim AS runtime
 
 # Run as a non-root user; nothing here needs privileges.
@@ -22,6 +33,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 COPY --from=builder /dist/*.whl /tmp/
 RUN pip install /tmp/*.whl && rm /tmp/*.whl
+
+# The API serves the built UI from this path when it is present, so the image
+# is the whole app rather than an API that needs a separate static host.
+COPY --from=web /web/dist /app/web/dist
 
 USER app
 EXPOSE 8000

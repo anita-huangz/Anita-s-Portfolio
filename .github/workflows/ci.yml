@@ -48,6 +48,30 @@ jobs:
         # projects run on synthetic price paths.
         run: pytest -q
 
+  web:
+    name: web UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-platform-projects/sec-filing-intelligence/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ai-platform-projects/sec-filing-intelligence/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc -b --noEmit
+
+      - name: Build
+        run: npm run build
+
   docker:
     name: docker build
     runs-on: ubuntu-latest

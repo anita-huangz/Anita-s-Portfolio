@@ -7,11 +7,18 @@ without duplicating any of it.
 
 from __future__ import annotations
 
+import json
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from ..config import Settings, get_settings
 from ..contracts import ResearchRequest, ResearchResponse, Strict
@@ -66,6 +73,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings or get_settings()
 
+    # The browser UI is served from a different origin in development.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=app.state.settings.cors_origins,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["*"],
+    )
+
     @app.exception_handler(FilingIntelError)
     async def _domain_error(_: Request, exc: FilingIntelError) -> JSONResponse:
         # Upstream data problems are the caller's problem (bad ticker, no such
@@ -93,6 +108,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body: ResearchRequest, runtime: Runtime
     ) -> ResearchResponse:
         return await runtime.research(body)
+
+    @app.get("/v1/research/stream")
+    async def research_stream(runtime: Runtime, ticker: str, question: str,
+                              session_id: str | None = None) -> StreamingResponse:
+        """Server-sent events, one per completed graph node.
+
+        Query parameters rather than a body because EventSource only issues
+        GET requests. Validation still goes through ResearchRequest, so a bad
+        ticker fails here exactly as it does on the POST route.
+        """
+        try:
+            body = ResearchRequest(
+                ticker=ticker, question=question, session_id=session_id
+            )
+        except ValidationError as exc:
+            # Hand-built from query params, so Pydantic's error does not reach
+            # FastAPI's own handler. Convert it to the same 422 the POST gives.
+            raise RequestValidationError(exc.errors()) from exc
+
+        async def emit():
+            try:
+                async for event in runtime.research_stream(body):
+                    payload = json.dumps(event["data"], default=str)
+                    yield f"event: {event['event']}\ndata: {payload}\n\n"
+            except Exception as exc:
+                detail = json.dumps({"message": f"{type(exc).__name__}: {exc}"})
+                yield f"event: error\ndata: {detail}\n\n"
+            finally:
+                yield "event: close\ndata: {}\n\n"
+
+        return StreamingResponse(
+            emit(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                # Proxies that buffer will defeat the point of streaming.
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.get("/v1/sessions/{session_id}", response_model=SessionResponse)
     async def get_session(
@@ -140,7 +195,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ]
         }
 
+    _mount_ui(app)
     return app
+
+
+def _ui_dist() -> Path | None:
+    """Locate the built UI: an explicit override, the image path, or the repo.
+
+    Three candidates because the package runs from a source checkout in
+    development and from site-packages inside the container, where a path
+    relative to __file__ would point into site-packages instead of the app.
+    """
+    override = os.environ.get("FILING_INTEL_UI_DIST")
+    candidates = [
+        Path(override) if override else None,
+        Path("/app/web/dist"),
+        Path(__file__).resolve().parents[3] / "web" / "dist",
+    ]
+    for candidate in candidates:
+        if candidate is not None and (candidate / "index.html").exists():
+            return candidate
+    return None
+
+
+def _mount_ui(app: FastAPI) -> None:
+    """Serve the built React app at / when a build is present.
+
+    Optional by design: the API is useful headless, and the tests and the MCP
+    server never need the UI. Mounted last so it cannot shadow an API route.
+    """
+    dist = _ui_dist()
+    if dist is None:
+        return
+
+    app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(dist / "index.html")
 
 
 app = create_app()
