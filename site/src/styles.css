@@ -554,3 +554,36 @@ footer {
 .cm-n { font-size: 19px; font-weight: 650; letter-spacing: -0.02em; }
 .cm-l { font-size: 10.5px; color: var(--muted); }
 .cm-p { font-size: 11px; color: var(--text-2); font-family: var(--mono); }
+
+/* ---------------------------------------------------------- article card */
+
+.article-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 16px 18px; margin-top: 4px;
+}
+.article-card h4 { margin: 0 0 6px; font-size: 16px; letter-spacing: -0.01em; }
+.article-meta {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  font-size: 11.5px; color: var(--muted); font-family: var(--mono);
+}
+.article-body {
+  margin: 12px 0; font-size: 13.5px; color: var(--text-2);
+  border-left: 2px solid var(--line); padding-left: 12px;
+}
+.article-verdicts {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 12.5px;
+}
+.verdict {
+  border-radius: 999px; padding: 3px 11px; border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.verdict.fake { border-color: var(--ds); color: var(--ds); }
+.verdict.real { border-color: var(--se); color: var(--se); }
+
+/* ------------------------------------------------------------- sources */
+
+.sources { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sources li { display: grid; gap: 1px; font-size: 13px; }
+.sources a { color: var(--ai); text-decoration: none; font-weight: 550; }
+.sources a:hover { text-decoration: underline; }
+.source-note { color: var(--muted); font-size: 12px; }

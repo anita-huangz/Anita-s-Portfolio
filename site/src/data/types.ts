@@ -16,6 +16,11 @@ export interface Project {
   tech: string[];
   /** Repository-relative path to the project. */
   path: string;
+  /**
+   * Where the data comes from. A result is only as trustworthy as its input,
+   * so the reader should be able to go look at it.
+   */
+  sources?: { label: string; url: string; note?: string }[];
   /** Tests in the project's suite, when it has one. */
   tests?: number;
   /** Bullet points worth calling out. */

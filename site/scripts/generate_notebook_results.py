@@ -97,6 +97,12 @@ def churn() -> None:
             "recall": round(float(tp / (tp + fn)), 4),
             "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
             "roc": roc_points(y_test, proba),
+            # Per-row scores, so the threshold can be moved in the browser
+            # rather than being frozen at whatever 0.5 happened to give.
+            "scores": [
+                {"p": round(float(pr), 4), "y": int(t)}
+                for pr, t in zip(proba, y_test, strict=True)
+            ],
             "importances": [
                 {"feature": f, "weight": round(float(w), 5)}
                 for f, w in importances.items()
@@ -163,15 +169,69 @@ def fake_news() -> None:
         .head(12)
     )
 
+    # Real articles from the test split, with the model's score next to the
+    # truth. An aggregate metric answers "how good"; only an example answers
+    # "what am I actually looking at".
+    test_rows = df.loc[X_test.index]
+    sample = []
+    rng = np.random.default_rng(SEED)
+    order = rng.permutation(len(test_rows))
+    for i in order[:60]:
+        row = test_rows.iloc[int(i)]
+        score = float(proba[int(i)])
+        sample.append(
+            {
+                "title": str(row.get("title", ""))[:180],
+                "author": str(row.get("author", "")),
+                "source": str(row.get("source", "")),
+                "category": str(row.get("category", "")),
+                "date": str(row.get("date_published", ""))[:10],
+                "excerpt": " ".join(str(row.get("text", "")).split())[:320],
+                "words": int(row.get("word_count", 0) or 0),
+                "readability": round(float(row.get("readability_score", 0) or 0), 1),
+                "sentiment": round(float(row.get("sentiment_score", 0) or 0), 3),
+                "actual": "fake" if int(y_test.iloc[int(i)]) == 1 else "real",
+                "predicted": "fake" if score >= 0.5 else "real",
+                "score": round(score, 4),
+            }
+        )
+
+    # Diagnosis. An AUC at chance has two possible causes: the features are
+    # uninformative, or the labels are. Distinguishing them matters, and the
+    # evidence below points squarely at the second.
+    feature_corr = [
+        {"feature": c, "corr": round(float(df[c].corr(y)), 4)}
+        for c in numeric + flags
+        if c in df.columns
+    ]
+    rate_by = {}
+    for col in ["source", "category", "author"]:
+        if col in df.columns:
+            rate_by[col] = [
+                {"label": str(k), "rate": round(float(v), 4), "n": int((df[col] == k).sum())}
+                for k, v in y.groupby(df[col]).mean().sort_values(ascending=False).items()
+            ]
+
     write(
         "nb-fakenews.json",
         {
             "rows": int(len(df)),
+            "sample": sample,
+            "feature_corr": feature_corr,
+            "rate_by": rate_by,
+            "distinct_titles": int(df["title"].nunique()) if "title" in df else None,
+            "distinct_texts": int(df["text"].nunique()) if "text" in df else None,
             "fake_rate": round(float(y.mean()), 4),
             "auc": round(float(roc_auc_score(y_test, proba)), 4),
             "accuracy": round(float((predicted == y_test).mean()), 4),
             "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
             "roc": roc_points(y_test, proba),
+            # Per-row scores, so the threshold can be moved in the browser
+            # rather than being frozen at whatever 0.5 happened to give.
+            "scores": [
+                {"p": round(float(pr), 4), "y": int(t)}
+                for pr, t in zip(proba, y_test, strict=True)
+            ],
             "importances": [
                 {"feature": f, "weight": round(float(w), 5)}
                 for f, w in importances.items()
@@ -226,6 +286,9 @@ def threats() -> None:
                     "c": int(clusters[i]),
                     "o": bool(outlier[i]),
                     "t": df["Attack Type"].iloc[i],
+                    "i": df["Target Industry"].iloc[i],
+                    "yr": int(df["Year"].iloc[i]),
+                    "loss": round(float(df["Financial Loss (in Million $)"].iloc[i]), 2),
                 }
                 for i in range(len(df))
             ],
@@ -235,6 +298,8 @@ def threats() -> None:
                 for k, v in loss_by_industry.items()
             ],
             "by_year": [{"year": int(k), "count": int(v)} for k, v in by_year.items()],
+            "industries": sorted(df["Target Industry"].dropna().unique().tolist()),
+            "attack_types": sorted(df["Attack Type"].dropna().unique().tolist()),
             "outlier_count": int(outlier.sum()),
         },
     )
@@ -262,6 +327,23 @@ def recommendations() -> None:
     )
     spend_by_segment = customers.groupby("Customer_Segment")["Avg_Order_Value"].mean()
 
+    # Per-segment category interest, so the demo can ask whether the segments
+    # actually behave differently -- the premise a recommender rests on.
+    interest = {}
+    if "Browsing_History" in customers.columns:
+        for segment_name, group in customers.groupby("Customer_Segment"):
+            counts: dict[str, int] = {}
+            for entry in group["Browsing_History"].dropna().astype(str):
+                for item in entry.strip("[]").replace("'", "").split(","):
+                    key = item.strip()
+                    if key:
+                        counts[key] = counts.get(key, 0) + 1
+            total = sum(counts.values()) or 1
+            interest[str(segment_name)] = [
+                {"label": k, "share": round(v / total, 4)}
+                for k, v in sorted(counts.items(), key=lambda kv: -kv[1])[:8]
+            ]
+
     write(
         "nb-recommend.json",
         {
@@ -281,6 +363,7 @@ def recommendations() -> None:
                 {"label": k, "value": round(float(v), 2)}
                 for k, v in spend_by_segment.items()
             ],
+            "interest_by_segment": interest,
         },
     )
 
