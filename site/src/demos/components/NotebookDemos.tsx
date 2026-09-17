@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useDemoData } from "../useDemoData";
 import { BarChart, ConfusionMatrix, LineChart, ScatterChart, type ScatterGroup } from "./Chart";
 import { Loading } from "./Loading";
+import { Term } from "./Term";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -36,10 +37,23 @@ function RocChart({ roc, label }: { roc: { x: number; y: number }[]; label: stri
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Stat({
+  label,
+  value,
+  tone,
+  term,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  /** Glossary id, when the label is jargon. */
+  term?: string;
+}) {
   return (
     <div className="metric">
-      <div className="metric-label">{label}</div>
+      <div className="metric-label">
+        {term ? <Term id={term}>{label}</Term> : label}
+      </div>
       <div className="metric-value" style={tone ? { color: tone } : undefined}>{value}</div>
     </div>
   );
@@ -79,12 +93,13 @@ export function ChurnDemo() {
       <div className="metric-row">
         <Stat label="Customers" value={data.rows.toLocaleString()} />
         <Stat label="Actually churned" value={pct(data.churn_rate)} />
-        <Stat label="ROC AUC" value={data.auc.toFixed(3)} tone="var(--se)" />
+        <Stat label="ROC AUC" term="auc" value={data.auc.toFixed(3)} tone="var(--se)" />
       </div>
 
       <div className="range" style={{ marginTop: 14 }}>
         <span className="control-label">
-          Flag a customer as at-risk above <strong>{threshold.toFixed(2)}</strong>
+          Flag a customer as at-risk above <strong>{threshold.toFixed(2)}</strong>{" "}
+          <Term id="threshold">decision threshold</Term>
         </span>
         <input
           type="range" min={0.05} max={0.95} step={0.01} value={threshold}
@@ -112,10 +127,10 @@ export function ChurnDemo() {
       </div>
 
       <div className="metric-row">
-        <Stat label="Recall — churners caught" value={pct(recall)} tone="var(--se)" />
-        <Stat label="Precision — flags that were right" value={pct(precision)} tone="var(--ai)" />
-        <Stat label="F1" value={f1.toFixed(3)} />
-        <Stat label="Accuracy" value={pct(accuracy)} />
+        <Stat label="Recall — churners caught" term="recall" value={pct(recall)} tone="var(--se)" />
+        <Stat label="Precision — flags that were right" term="precision" value={pct(precision)} tone="var(--ai)" />
+        <Stat label="F1" term="f1" value={f1.toFixed(3)} />
+        <Stat label="Accuracy" term="accuracy" value={pct(accuracy)} />
         <Stat label="Customers flagged" value={(tp + fp).toLocaleString()} />
       </div>
 
@@ -136,7 +151,9 @@ export function ChurnDemo() {
           <RocChart roc={data.roc} label="Random forest" />
         </div>
         <div>
-          <h5 className="demo-h">At this threshold</h5>
+          <h5 className="demo-h">
+            At this threshold — <Term id="confusion-matrix" />
+          </h5>
           <ConfusionMatrix tn={tn} fp={fp} fn={fn} tp={tp}
                            positiveLabel="churn" negativeLabel="stay" />
         </div>
@@ -218,8 +235,8 @@ export function FakeNewsDemo() {
       <div className="metric-row">
         <Stat label="Articles" value={data.rows.toLocaleString()} />
         <Stat label="Labelled fake" value={pct(data.fake_rate)} />
-        <Stat label="ROC AUC" value={data.auc.toFixed(3)} tone="var(--ds)" />
-        <Stat label="Accuracy" value={pct(data.accuracy)} />
+        <Stat label="ROC AUC" term="auc" value={data.auc.toFixed(3)} tone="var(--ds)" />
+        <Stat label="Accuracy" term="accuracy" value={pct(data.accuracy)} />
       </div>
 
       <p className="demo-warn">
@@ -424,6 +441,12 @@ export function ThreatsDemo() {
 
   return (
     <div className="demo">
+      <p className="demo-hint" style={{ margin: "0 0 10px" }}>
+        Two unsupervised methods over the same incidents:{" "}
+        <Term id="clustering">clustering</Term> groups them by similarity, and{" "}
+        <Term id="anomaly" /> flags the ones that look unlike the rest. Both axes
+        are <Term id="pca">principal components</Term>.
+      </p>
       <div className="demo-controls">
         <div className="control">
           <span className="control-label">Colour by</span>
@@ -486,6 +509,7 @@ export function ThreatsDemo() {
         <Stat label="of total" value={data.rows.toLocaleString()} />
         <Stat label="Average loss" value={`$${avgLoss.toFixed(1)}M`} />
         <Stat
+          term="anomaly"
           label="Flagged anomalous"
           value={String(visible.filter((p) => p.o).length)}
           tone="var(--ds)"

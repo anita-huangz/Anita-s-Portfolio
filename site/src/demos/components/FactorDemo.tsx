@@ -7,6 +7,7 @@ import { LiveTickerInput } from "./LiveTickerInput";
 import { LineChart, type Series } from "./Chart";
 import { Loading } from "./Loading";
 import { TickerPicker } from "./TickerPicker";
+import { Term } from "./Term";
 
 interface PriceFile extends PriceData {
   sectors: Record<string, string[]>;
@@ -139,7 +140,7 @@ function Configured({ data }: { data: PriceFile }) {
 
       <div className="demo-controls">
         <div className="control">
-          <span className="control-label">Factors</span>
+          <span className="control-label"><Term id="factor">Factors</Term></span>
           {FACTORS.map((f) => (
             <button
               key={f.id}
@@ -153,7 +154,7 @@ function Configured({ data }: { data: PriceFile }) {
         </div>
 
         <div className="control">
-          <span className="control-label">Hold top</span>
+          <span className="control-label"><Term id="hold-top">Hold top</Term></span>
           {[1, 2, 3, 5, 8].map((n) => (
             <button
               key={n}
@@ -168,7 +169,7 @@ function Configured({ data }: { data: PriceFile }) {
         </div>
 
         <div className="control">
-          <span className="control-label">Rebalance</span>
+          <span className="control-label"><Term id="rebalance">Rebalance</Term></span>
           {CADENCES.map((c) => (
             <button
               key={c.days}
@@ -186,10 +187,18 @@ function Configured({ data }: { data: PriceFile }) {
         </button>
       </div>
 
+      <p className="demo-hint" style={{ margin: "-6px 0 12px" }}>
+        <Term id="momentum" /> buys what has been rising;{" "}
+        <Term id="low-volatility" /> buys what moves least. The toggle above
+        reproduces a <Term id="look-ahead" /> over the same prices.
+      </p>
+
       <div className="range">
         <span className="control-label">
           Window <strong>{data.dates[from]}</strong> to <strong>{data.dates[to]}</strong>{" "}
-          <span className="muted">({windowLength} trading days)</span>
+          <span className="muted">
+            ({windowLength} <Term id="trading-day">trading days</Term>)
+          </span>
         </span>
         <div className="range-sliders">
           <input
@@ -219,16 +228,21 @@ function Configured({ data }: { data: PriceFile }) {
         height={280}
       />
 
+      <p className="demo-hint">
+        The line is the portfolio's <Term id="nav" /> over time — what a{" "}
+        <Term id="backtest" /> of these rules would have been worth.
+      </p>
+
       <div className="metric-row">
-        <Metric label="Total return" a={pct(honestMetrics.totalReturn)}
+        <Metric label="Total return" term="total-return" a={pct(honestMetrics.totalReturn)}
                 b={showBug ? pct(cheatingMetrics.totalReturn) : undefined} />
-        <Metric label="Annualized" a={pct(honestMetrics.annualizedReturn)}
+        <Metric label="Annualized" term="annualised" a={pct(honestMetrics.annualizedReturn)}
                 b={showBug ? pct(cheatingMetrics.annualizedReturn) : undefined} />
-        <Metric label="Sharpe" a={honestMetrics.sharpeRatio.toFixed(2)}
+        <Metric label="Sharpe" term="sharpe" a={honestMetrics.sharpeRatio.toFixed(2)}
                 b={showBug ? cheatingMetrics.sharpeRatio.toFixed(2) : undefined} />
-        <Metric label="Max drawdown" a={pct(honestMetrics.maxDrawdown)}
+        <Metric label="Max drawdown" term="drawdown" a={pct(honestMetrics.maxDrawdown)}
                 b={showBug ? pct(cheatingMetrics.maxDrawdown) : undefined} />
-        <Metric label="Rebalances" a={String(honest.rebalanceCount)} />
+        <Metric label="Rebalances" term="rebalance" a={String(honest.rebalanceCount)} />
       </div>
 
       {windowLength < 300 && (
@@ -251,10 +265,23 @@ function Configured({ data }: { data: PriceFile }) {
   );
 }
 
-function Metric({ label, a, b }: { label: string; a: string; b?: string }) {
+function Metric({
+  label,
+  term,
+  a,
+  b,
+}: {
+  label: string;
+  /** Glossary id, when the label is jargon. */
+  term?: string;
+  a: string;
+  b?: string;
+}) {
   return (
     <div className="metric">
-      <div className="metric-label">{label}</div>
+      <div className="metric-label">
+        {term ? <Term id={term}>{label}</Term> : label}
+      </div>
       <div className="metric-value" style={{ color: "var(--se)" }}>{a}</div>
       {b !== undefined && (
         <div className="metric-value secondary" style={{ color: "var(--ds)" }}>{b}</div>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Term } from "./Term";
 
 interface Props {
   all: string[];
@@ -34,7 +35,7 @@ export function TickerPicker({ all, sectors, selected, onChange, min = 2 }: Prop
   return (
     <div className="picker">
       <div className="picker-presets">
-        <span className="control-label">Universe</span>
+        <span className="control-label"><Term id="universe">Universe</Term></span>
         {Object.entries(sectors).map(([name, members]) => {
           const full = members.every((t) => chosen.has(t));
           return (

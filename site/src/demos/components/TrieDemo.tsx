@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import indexData from "../../data/demos/search-index.json";
 import golden from "../../data/demos/trie-golden.json";
 import { Trie, buildIndex, characterToKey, searchIndex } from "../lib/trie";
+import { Term } from "./Term";
 
 const WORDS = golden.words;
 
@@ -74,8 +75,12 @@ export function TrieDemo() {
 
       <div className="rank-panel">
         <h5 className="demo-h">
-          Ranked search over a {PAGE_COUNT}-page crawl
+          Ranked search over a {PAGE_COUNT}-page <Term id="crawler">crawl</Term>
         </h5>
+        <p className="demo-hint" style={{ margin: "0 0 10px" }}>
+          Ranked by <Term id="bm25" />. <Term id="and">AND</Term> requires every
+          word you type; a <Term id="wildcard" /> searches a pattern.
+        </p>
         <div className="demo-controls">
           <label className="control" style={{ flex: 1 }}>
             <input
@@ -178,7 +183,9 @@ export function TrieDemo() {
         </div>
 
         <div>
-          <h5 className="demo-h">Walk</h5>
+          <h5 className="demo-h">
+            Walk down the <Term id="trie" />
+          </h5>
           <ol className="walk">
             <li className="walk-step done">
               root <span className="walk-note">{WORDS.length} keys below</span>

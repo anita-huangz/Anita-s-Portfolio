@@ -18,6 +18,7 @@ import {
   shuffle,
   suitColor,
 } from "../lib/cards";
+import { Term } from "./Term";
 
 interface State {
   deck: Card[];
@@ -119,7 +120,8 @@ export function CardsDemo() {
         <div className="advice-panel">
           <div className="advice-head">
             <h5 className="demo-h" style={{ margin: 0 }}>
-              What should you throw?
+              What should you throw?{" "}
+              <Term id="exact-vs-sampled">exact vs sampled</Term>
             </h5>
             <button
               className="chip"
@@ -157,7 +159,8 @@ export function CardsDemo() {
                             .join(" ")}
                     </button>
                     <span className="advice-points">
-                      {option.expectedPoints.toFixed(1)} pts
+                      {option.expectedPoints.toFixed(1)}{" "}
+                      <Term id="expected-points">pts</Term>
                     </span>
                     <span className="advice-kind">
                       {option.exact
@@ -180,6 +183,7 @@ export function CardsDemo() {
                 ) : (
                   <>A clear winner: the gap is larger than the sampling error.</>
                 )}{" "}
+                It is a <Term id="monte-carlo" /> estimate where it has to be.
                 One and two-card discards are <strong>enumerated</strong> — 45
                 and 990 possible draws, so those are not estimates. Five
                 discards is 1,221,759, so that one is sampled and says so.

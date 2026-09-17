@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { type CacheEvent, LruCache } from "../lib/lru";
+import { Term } from "./Term";
 
 const KEYS = ["a", "b", "c", "d", "e", "f"];
 const CAPACITY = 4;
@@ -47,6 +48,10 @@ export function CacheDemo() {
         <button className="chip" onClick={reset}>
           Reset
         </button>
+        <span className="demo-hint">
+          <Term id="lru" /> decides what gets <Term id="eviction">evicted</Term>{" "}
+          when the <Term id="cache" /> is full.
+        </span>
       </div>
 
       <div className="lru-track">
@@ -68,19 +73,19 @@ export function CacheDemo() {
 
       <div className="metric-row">
         <div className="metric">
-          <div className="metric-label">Hits</div>
+          <div className="metric-label"><Term id="hit-rate">Hits</Term></div>
           <div className="metric-value" style={{ color: "var(--se)" }}>{stats.hits}</div>
         </div>
         <div className="metric">
-          <div className="metric-label">Misses</div>
+          <div className="metric-label"><Term id="hit-rate">Misses</Term></div>
           <div className="metric-value" style={{ color: "var(--ds)" }}>{stats.misses}</div>
         </div>
         <div className="metric">
-          <div className="metric-label">Hit rate</div>
+          <div className="metric-label"><Term id="hit-rate">Hit rate</Term></div>
           <div className="metric-value">{(stats.rate * 100).toFixed(0)}%</div>
         </div>
         <div className="metric">
-          <div className="metric-label">Capacity</div>
+          <div className="metric-label"><Term id="capacity">Capacity</Term></div>
           <div className="metric-value">{CAPACITY}</div>
         </div>
       </div>
@@ -102,6 +107,11 @@ export function CacheDemo() {
         </ol>
       )}
 
+      <p className="demo-note">
+        This demo runs <Term id="lru" />. The project also implements{" "}
+        <Term id="lfu" /> and <Term id="ttl" /> expiry, and benchmarks the two
+        policies against each other — neither wins on every workload.
+      </p>
       <p className="demo-note">
         Press the same key twice for a hit — notice it jumps to the most-recent end, which
         is what protects it from the next eviction. Fill past {CAPACITY} entries and the
