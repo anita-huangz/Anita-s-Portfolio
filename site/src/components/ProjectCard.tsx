@@ -1,3 +1,4 @@
+import { hasDemo } from "../demos/registry";
 import { CATEGORY_LABELS } from "../data/types";
 import type { Category, Project } from "../data/types";
 
@@ -38,6 +39,7 @@ export function ProjectCard({ project, onOpen, baseUrl }: Props) {
           {project.tests !== undefined && (
             <span className="tests">✓ {project.tests} tests</span>
           )}
+          {hasDemo(project.slug) && <span className="live">▶ Live demo</span>}
         </div>
         <h3>{project.title}</h3>
         <p>{project.summary}</p>
