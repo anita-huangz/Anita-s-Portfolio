@@ -39,7 +39,8 @@ it against brute force.
 
 from __future__ import annotations
 
-import heapq
+import math
+from bisect import insort
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
@@ -328,9 +329,13 @@ def search(
     groups = fixed_groups + optional
     required_depth = len(fixed_groups)
 
-    # A max-heap of the `limit` cheapest schedules, keyed by negated cost so
-    # heap[0] is the worst one kept -- which is the bound to prune against.
-    heap: list[tuple[float, tuple[str, ...], ScheduleOption]] = []
+    # The `limit` cheapest schedules, kept sorted. A heap would be the
+    # textbook choice, but its tie-breaking runs backwards -- among equal
+    # costs it discards the alphabetically first option and keeps the last,
+    # which is arbitrary and awkward to reproduce. `limit` is single digits,
+    # so an insort into a short list is both cheaper and deterministic in the
+    # same order the results are finally reported in.
+    kept: list[tuple[float, tuple[str, ...], ScheduleOption]] = []
     chosen: list[Course] = []
     day_counts: dict[Day, int] = {}
     nodes = 0
@@ -352,12 +357,15 @@ def search(
         nonlocal exhausted
         exhausted = True
 
+    def worst_kept() -> float:
+        """Cost to prune against: the most expensive schedule still held."""
+        return math.inf if len(kept) < limit else kept[-1][0]
+
     def keep(option: ScheduleOption) -> None:
-        entry = (-option.cost, tuple(c.code for c in option.courses), option)
-        if len(heap) < limit:
-            heapq.heappush(heap, entry)
-        else:
-            heapq.heappushpop(heap, entry)
+        entry = (option.cost, tuple(c.code for c in option.courses), option)
+        insort(kept, entry, key=lambda e: e[:2])
+        if len(kept) > limit:
+            kept.pop()
 
     def bound() -> float:
         """Lowest cost any schedule below this node could reach.
@@ -390,12 +398,12 @@ def search(
         # anytime algorithm that answers "nothing" is worse than a slow one.
         # Past a hard ceiling it gives up anyway, because the constraints may
         # simply be unsatisfiable and proving that can cost the whole tree.
-        if nodes > node_budget and (heap or nodes > node_budget * HARD_CEILING):
+        if nodes > node_budget and (kept or nodes > node_budget * HARD_CEILING):
             nonlocal_exhausted()
             return
         # Every remaining penalty except gaps only grows, so a bound already
         # at or above the worst kept schedule cannot be beaten below here.
-        if len(heap) == limit and bound() >= -heap[0][0]:
+        if len(kept) == limit and bound() >= worst_kept():
             return
 
         for section in groups[index]:
@@ -420,8 +428,8 @@ def search(
             recurse(index + 1)
 
     recurse(0)
-    best = [entry[2] for entry in heap]
-    best.sort(key=lambda o: (o.cost, tuple(c.code for c in o.courses)))
+    # Already in (cost, codes) order by construction.
+    best = [entry[2] for entry in kept]
     return SearchResult(options=best, nodes=nodes, proven_optimal=not exhausted)
 
 

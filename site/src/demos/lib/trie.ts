@@ -143,3 +143,214 @@ export class Trie {
     return path;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Relevance ranking — port of `trie_search.ranking`
+// ---------------------------------------------------------------------------
+//
+// The trie answers "which words look like this". It cannot answer "how
+// important is this word on this page", so searching it returned an
+// alphabetical set: a page mentioning "park" once and a park directory
+// mentioning it forty times were indistinguishable. BM25 needs three things
+// the set could not provide — term frequency, page length, and how many pages
+// contain the term at all.
+
+/** Term-frequency saturation. 1.2–2.0 is the usual range. */
+export const K1 = 1.5;
+/** Length normalisation, 0 (off) to 1 (full). */
+export const B = 0.75;
+
+/** Where a term occurs, and how often. URL → occurrences. */
+export type Posting = Record<string, number>;
+
+export interface Corpus {
+  /** URL → total words on that page. */
+  lengths: Record<string, number>;
+}
+
+export function corpusSize(corpus: Corpus): number {
+  return Object.keys(corpus.lengths).length;
+}
+
+export function averageLength(corpus: Corpus): number {
+  const urls = Object.keys(corpus.lengths);
+  if (urls.length === 0) return 0;
+  return urls.reduce((sum, u) => sum + corpus.lengths[u], 0) / urls.length;
+}
+
+/**
+ * How much a term's presence should count.
+ *
+ * A word on every page carries no signal. The `Math.max(…, 0)` floor is not
+ * cosmetic: a term appearing on more than half the pages otherwise scores
+ * negative, and a page could improve its rank by *not* matching the query.
+ */
+export function inverseDocumentFrequency(
+  size: number,
+  documentFrequency: number,
+): number {
+  if (size === 0 || documentFrequency === 0) return 0;
+  const raw = Math.log(
+    1 + (size - documentFrequency + 0.5) / (documentFrequency + 0.5),
+  );
+  return Math.max(raw, 0);
+}
+
+/** BM25 contribution of one term to one document. */
+export function bm25Score(
+  termFrequency: number,
+  documentLength: number,
+  average: number,
+  idf: number,
+): number {
+  if (termFrequency <= 0 || idf <= 0) return 0;
+  if (average <= 0) return idf;
+  const normalised = K1 * (1 - B + B * (documentLength / average));
+  return (idf * (termFrequency * (K1 + 1))) / (termFrequency + normalised);
+}
+
+export interface Hit {
+  url: string;
+  score: number;
+  /** Matched term → occurrences, so a result can explain itself. */
+  matched: Record<string, number>;
+}
+
+/**
+ * Score every page matching at least one term.
+ *
+ * `requireAll` turns the query from OR into AND, which is what someone typing
+ * two words usually means.
+ */
+export function rank(
+  postings: Record<string, Posting>,
+  corpus: Corpus,
+  requireAll = false,
+): Hit[] {
+  const terms = Object.keys(postings);
+  const size = corpusSize(corpus);
+  if (terms.length === 0 || size === 0) return [];
+
+  const average = averageLength(corpus);
+  const idfs: Record<string, number> = {};
+  for (const term of terms) {
+    idfs[term] = inverseDocumentFrequency(
+      size,
+      Object.keys(postings[term]).length,
+    );
+  }
+
+  const scores: Record<string, number> = {};
+  const matched: Record<string, Record<string, number>> = {};
+  for (const term of terms) {
+    for (const [url, count] of Object.entries(postings[term])) {
+      const length = corpus.lengths[url] ?? 0;
+      scores[url] =
+        (scores[url] ?? 0) + bm25Score(count, length, average, idfs[term]);
+      matched[url] = { ...(matched[url] ?? {}), [term]: count };
+    }
+  }
+
+  let urls = Object.keys(scores);
+  if (requireAll) {
+    urls = urls.filter((u) => Object.keys(matched[u]).length === terms.length);
+  }
+
+  // Score descending, then URL, so equal scores order deterministically —
+  // matching the Python's `(-score, url)` sort key exactly.
+  return urls
+    .map((url) => ({
+      url,
+      score: Math.round(scores[url] * 1e6) / 1e6,
+      matched: matched[url],
+    }))
+    .sort((a, b) => b.score - a.score || (a.url < b.url ? -1 : a.url > b.url ? 1 : 0));
+}
+
+// ---------------------------------------------------------------------------
+// The ranked index — port of `trie_search.crawler.SearchIndex`
+// ---------------------------------------------------------------------------
+
+export interface SearchIndex {
+  /** Term → (URL → occurrences). */
+  postings: Record<string, Posting>;
+  corpus: Corpus;
+  /** Trie over the vocabulary, for prefix and wildcard expansion. */
+  trie: Trie;
+}
+
+export function buildIndex(
+  postings: Record<string, Posting>,
+  lengths: Record<string, number>,
+): SearchIndex {
+  return {
+    postings,
+    corpus: { lengths },
+    trie: new Trie(Object.fromEntries(Object.keys(postings).map((t) => [t, t]))),
+  };
+}
+
+/**
+ * Resolve one query token into the concrete terms it matches.
+ *
+ * A bare word is exact, `?` is a single-character wildcard, and a trailing
+ * `*` is a prefix. Expansion happens here so the scorer only ever sees real
+ * terms.
+ */
+export function expandToken(
+  index: SearchIndex,
+  token: string,
+): Record<string, Posting> {
+  const t = token.trim().toLowerCase();
+  if (!t) return {};
+
+  const found: Record<string, Posting> = {};
+  if (t.includes("?")) {
+    for (const [term] of index.trie.wildcardSearch(t)) {
+      if (term in index.postings) found[term] = index.postings[term];
+    }
+    return found;
+  }
+  if (t.endsWith("*")) {
+    for (const term of index.trie.keysWithPrefix(t.slice(0, -1))) {
+      if (term in index.postings) found[term] = index.postings[term];
+    }
+    return found;
+  }
+  return t in index.postings ? { [t]: index.postings[t] } : {};
+}
+
+/**
+ * Rank pages for a whitespace-separated query.
+ *
+ * `requireAll` defaults to true: someone typing two words almost always means
+ * both, and an OR search buries the good hits under pages that only matched
+ * the commoner word.
+ */
+export function searchIndex(
+  index: SearchIndex,
+  query: string,
+  requireAll = true,
+  limit = 20,
+): Hit[] {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const postings: Record<string, Posting> = {};
+  let matchedTokens = 0;
+  for (const token of tokens) {
+    const expanded = expandToken(index, token);
+    if (Object.keys(expanded).length > 0) matchedTokens += 1;
+    Object.assign(postings, expanded);
+  }
+
+  // A token nothing matches means the AND can never be satisfied.
+  if (requireAll && matchedTokens < tokens.length) return [];
+
+  // A wildcard token expands to many terms, so requiring every *term* to be
+  // present would be wrong; the intent is every *token*. The two coincide
+  // only when each token resolved to exactly one term.
+  const strict =
+    requireAll && tokens.length === Object.keys(postings).length;
+  return rank(postings, index.corpus, strict).slice(0, limit);
+}
