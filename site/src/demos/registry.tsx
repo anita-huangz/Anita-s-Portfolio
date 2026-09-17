@@ -6,6 +6,12 @@ import { EarningsDemo } from "./components/EarningsDemo";
 import { FactorDemo } from "./components/FactorDemo";
 import { ScheduleDemo } from "./components/ScheduleDemo";
 import { TrieDemo } from "./components/TrieDemo";
+import {
+  ChurnDemo,
+  FakeNewsDemo,
+  RecommendDemo,
+  ThreatsDemo,
+} from "./components/NotebookDemos";
 
 /**
  * Project slug -> live demo. A project without an entry simply renders its
@@ -35,6 +41,22 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
   "performance-optimization": {
     title: "Watch the cache evict",
     component: CacheDemo,
+  },
+  "customer-churn-prediction": {
+    title: "See what the model caught and missed",
+    component: ChurnDemo,
+  },
+  "fake-news-detection": {
+    title: "See why this one does not work",
+    component: FakeNewsDemo,
+  },
+  "global-security-threats": {
+    title: "Explore the clusters",
+    component: ThreatsDemo,
+  },
+  "personalized-recommendations-for-e-commerce": {
+    title: "Explore the catalogue",
+    component: RecommendDemo,
   },
 };
 

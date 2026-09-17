@@ -514,3 +514,43 @@ footer {
 .live-input { width: 120px; }
 .live-error { font-size: 12px; color: var(--ds); }
 .live-off { margin-top: 10px; font-size: 12.5px; }
+
+/* ----------------------------------------------- bars and confusion matrix */
+
+.barchart { display: grid; gap: 6px; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr 66px; gap: 10px; align-items: center; }
+.bar-label {
+  font-size: 12px; color: var(--text-2); text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bar-track { background: var(--line); border-radius: 4px; height: 15px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 4px; }
+.bar-value { font-size: 12px; font-family: var(--mono); color: var(--text-2); }
+@media (max-width: 640px) {
+  .bar-row { grid-template-columns: 96px 1fr 58px; }
+}
+
+.confusion { display: flex; gap: 8px; align-items: center; padding-top: 6px; }
+.cm-grid {
+  display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px;
+  align-items: center; flex: 1;
+}
+.cm-axis-y {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 10.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.07em; align-self: center;
+}
+.cm-head, .cm-side {
+  font-size: 10.5px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.06em; text-align: center;
+}
+.cm-side { text-align: right; padding-right: 4px; }
+.cm-cell {
+  border-radius: 8px; padding: 12px 10px; display: grid; gap: 1px; text-align: center;
+  border: 1px solid var(--border);
+}
+.cm-cell.right { background: color-mix(in srgb, var(--se) 12%, var(--surface)); }
+.cm-cell.wrong { background: color-mix(in srgb, var(--ds) 12%, var(--surface)); }
+.cm-n { font-size: 19px; font-weight: 650; letter-spacing: -0.02em; }
+.cm-l { font-size: 10.5px; color: var(--muted); }
+.cm-p { font-size: 11px; color: var(--text-2); font-family: var(--mono); }
