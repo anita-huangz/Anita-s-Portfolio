@@ -58,6 +58,19 @@ export function ProjectDetail({ project, onClose, baseUrl }: Props) {
         {demo && (
           <>
             <h4>{demo.title} — live, in your browser</h4>
+            {/*
+              The demos are configurable, which only helps if you know what you
+              are configuring. Dotted terms carry a definition, and saying so
+              once here is cheaper than hoping the underline is noticed.
+            */}
+            <p className="demo-legend">
+              Everything below is interactive. Terms marked{" "}
+              <span className="term-sample">
+                like this<span className="term-mark" aria-hidden="true">?</span>
+              </span>{" "}
+              explain themselves — hover or click for a plain-English
+              definition. No finance or statistics background needed.
+            </p>
             <demo.component />
           </>
         )}

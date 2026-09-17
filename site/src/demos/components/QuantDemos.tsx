@@ -10,14 +10,28 @@ import {
 import { useDemoData } from "../useDemoData";
 import { BarChart, LineChart, ScatterChart, type ScatterGroup, type Series } from "./Chart";
 import { Loading } from "./Loading";
+import { Term } from "./Term";
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
 const money = (v: number) => `$${Math.round(v).toLocaleString()}`;
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Stat({
+  label,
+  value,
+  tone,
+  term,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  /** Glossary id, when the label is jargon. */
+  term?: string;
+}) {
   return (
     <div className="metric">
-      <div className="metric-label">{label}</div>
+      <div className="metric-label">
+        {term ? <Term id={term}>{label}</Term> : label}
+      </div>
       <div className="metric-value" style={tone ? { color: tone } : undefined}>{value}</div>
     </div>
   );
@@ -197,7 +211,7 @@ export function WeatherDemo() {
 
       <div className="metric-row">
         <Stat label="Years" value={`${first_year}–${last_year}`} />
-        <Stat label="Warming rate"
+        <Stat label="Warming rate" term="warming-rate"
               value={`${slope_per_decade >= 0 ? "+" : ""}${slope_per_decade.toFixed(3)} °C/decade`}
               tone="var(--ds)" />
         <Stat label="Total change over record"
@@ -214,7 +228,8 @@ export function WeatherDemo() {
       />
 
       <p className="demo-note" style={{ marginTop: 0 }}>
-        ERA5 reanalysis, {first_year} to {last_year}, fetched by latitude and longitude
+        ERA5 <Term id="reanalysis" />, {first_year} to {last_year}, fetched by
+        latitude and longitude
         and averaged to annual means. Search any city and it is fetched live from the
         archive — Open-Meteo allows browser requests, so this needs no server of mine.
         The trend is ordinary least squares, the same fit the project's forecast script
@@ -354,7 +369,8 @@ export function StockBondDemo() {
     <div className="demo">
       <div className="range">
         <span className="control-label">
-          Risk preference — weight on the Sharpe term:{" "}
+          <Term id="risk-preference">Risk preference</Term> — weight on the{" "}
+          <Term id="sharpe">Sharpe</Term> term:{" "}
           <strong>{chosen.sharpe_weight}</strong>
           {chosen.sharpe_weight === 0 && " (pure minimum variance)"}
         </span>
@@ -365,10 +381,17 @@ export function StockBondDemo() {
         />
       </div>
 
+      <p className="demo-hint">
+        Five <Term id="etf">ETFs</Term> — US large caps, small caps, long and
+        short <Term id="treasuries" />, and corporate bonds. The curve is the{" "}
+        <Term id="frontier" />: the best return available at each level of
+        bumpiness.
+      </p>
+
       <div className="metric-row">
-        <Stat label="Expected return" value={pct(chosen.return)} tone="var(--se)" />
-        <Stat label="Volatility" value={pct(chosen.volatility)} tone="var(--ds)" />
-        <Stat label="Sharpe" value={chosen.sharpe.toFixed(2)} />
+        <Stat label="Expected return" term="expected-return" value={pct(chosen.return)} tone="var(--se)" />
+        <Stat label="Volatility" term="volatility" value={pct(chosen.volatility)} tone="var(--ds)" />
+        <Stat label="Sharpe" term="sharpe" value={chosen.sharpe.toFixed(2)} />
         <Stat label="Holdings" value={String(held.length)} />
       </div>
 
@@ -504,11 +527,16 @@ export function BitcoinDemo() {
 
   return (
     <div className="demo">
+      <p className="demo-hint">
+        An <Term id="lstm" /> against the dumbest possible{" "}
+        <Term id="baseline">naive baseline</Term>. Watch which one wins.
+      </p>
+
       <div className="metric-row">
         <Stat label="Days shown" value={slice.length.toLocaleString()} />
-        <Stat label="LSTM RMSE" value={money(windowed.lstm)} tone="var(--ds)" />
-        <Stat label="Naive RMSE" value={money(windowed.naive)} tone="var(--se)" />
-        <Stat label="Directional accuracy" value={`${m.directional_accuracy.toFixed(1)}%`}
+        <Stat label="LSTM RMSE" term="rmse" value={money(windowed.lstm)} tone="var(--ds)" />
+        <Stat label="Naive RMSE" term="baseline" value={money(windowed.naive)} tone="var(--se)" />
+        <Stat label="Directional accuracy" term="directional-accuracy" value={`${m.directional_accuracy.toFixed(1)}%`}
               tone="var(--ds)" />
       </div>
 
@@ -612,9 +640,9 @@ export function BitcoinDemo() {
       </p>
 
       <div className="metric-row">
-        <Stat label="Lookback window" value={`${data.lookback} days`} />
-        <Stat label="Train / test days" value={`${data.train_days.toLocaleString()} / ${data.test_days.toLocaleString()}`} />
-        <Stat label="MAPE" value={`${m.mape.toFixed(1)}%`} />
+        <Stat label="Lookback window" term="lookback" value={`${data.lookback} days`} />
+        <Stat label="Train / test days" term="train-test" value={`${data.train_days.toLocaleString()} / ${data.test_days.toLocaleString()}`} />
+        <Stat label="MAPE" term="mape" value={`${m.mape.toFixed(1)}%`} />
       </div>
       <p className="demo-note">
         {data.model}. The lookback is {data.lookback} days, read from the saved model's

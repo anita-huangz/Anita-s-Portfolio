@@ -14,6 +14,7 @@ import {
   searchSchedules,
   sectionsByCourse,
 } from "../lib/schedule";
+import { Term } from "./Term";
 
 const COURSES = data.courses as Course[];
 const DAYS = [0, 1, 2, 3, 4];
@@ -262,6 +263,11 @@ export function ScheduleDemo() {
           </p>
         ) : (
           <>
+            <p className="demo-hint" style={{ margin: "12px 0 0" }}>
+              Each option is one <Term id="conflict">conflict</Term>-free week.
+              Lower <Term id="cost" /> is better, and a <Term id="section" /> is
+              picked for you.
+            </p>
             <div className="option-row">
               {solved.options.map((option, i) => (
                 <button
@@ -290,7 +296,9 @@ export function ScheduleDemo() {
                 Scored in <strong>minutes of annoyance</strong>, so the total is
                 interpretable rather than an arbitrary weighted sum:{" "}
                 {drivers(chosen)}. Searched{" "}
-                {solved.nodes.toLocaleString()} nodes
+                <Term id="proven-optimal">
+                  {solved.nodes.toLocaleString()} nodes
+                </Term>
                 {solved.provenOptimal
                   ? " and proved this is the best there is."
                   : ", then ran out of budget — so this is the best found, not provably the best."}

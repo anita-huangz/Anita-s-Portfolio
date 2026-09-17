@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useDemoData } from "../useDemoData";
 import { ScatterChart, type ScatterGroup } from "./Chart";
 import { Loading } from "./Loading";
+import { Term } from "./Term";
 
 interface Event {
   date: string;
@@ -142,7 +143,7 @@ function Configured({ data }: { data: DriftFile }) {
 
       <div className="demo-controls">
         <div className="control">
-          <span className="control-label">Drift over</span>
+          <span className="control-label"><Term id="drift">Drift over</Term></span>
           {HORIZONS.map((h) => (
             <button
               key={h.id}
@@ -166,19 +167,21 @@ function Configured({ data }: { data: DriftFile }) {
 
       <div className="metric-row">
         <div className="metric">
-          <div className="metric-label">Announcements</div>
+          <div className="metric-label"><Term id="earnings">Announcements</Term></div>
           <div className="metric-value">{events.length}</div>
         </div>
         <div className="metric">
           <div className="metric-label">
-            Surprise vs {HORIZONS.find((h) => h.id === horizon)!.label} drift
+            <Term id="surprise">Surprise</Term> vs{" "}
+            {HORIZONS.find((h) => h.id === horizon)!.label}{" "}
+            <Term id="drift">drift</Term>
           </div>
           <div className="metric-value">
             {correlation === null ? "—" : correlation.toFixed(2)}
           </div>
         </div>
         <div className="metric">
-          <div className="metric-label">Median surprise</div>
+          <div className="metric-label"><Term id="surprise">Median surprise</Term></div>
           <div className="metric-value">
             {events.length
               ? `${[...events.map((e) => e.surprise)].sort((a, b) => a - b)[
@@ -188,7 +191,7 @@ function Configured({ data }: { data: DriftFile }) {
           </div>
         </div>
         <div className="metric">
-          <div className="metric-label">Beat rate</div>
+          <div className="metric-label"><Term id="beat-rate">Beat rate</Term></div>
           <div className="metric-value">
             {events.length
               ? `${Math.round(
@@ -203,10 +206,19 @@ function Configured({ data }: { data: DriftFile }) {
         Real reported-versus-estimated EPS and real daily closes across{" "}
         {data.series.length} companies. Each point is one announcement: how far the
         estimate was beaten on the x-axis, how far the stock moved afterwards on the
-        y-axis. If post-earnings drift were a dependable effect the cloud would slope
+        y-axis. If <Term id="drift">post-earnings drift</Term> were a dependable
+        effect the cloud would slope
         upward. Mostly it doesn't — pooling every company collapses the correlation
         toward zero, and the handful of names with a real slope are the interesting
-        part. Announcements on non-trading days use the prior session's close.
+        part. Announcements on non-<Term id="trading-day">trading days</Term> use
+        the prior session's close.
+      </p>
+      <p className="demo-note">
+        These are <em>raw</em> moves. The project also measures{" "}
+        <Term id="abnormal" /> against a <Term id="benchmark" />, and splits
+        announcements into surprise <Term id="quintile">quintiles</Term> with a{" "}
+        <Term id="t-stat" /> on the spread between the top and bottom fifth —
+        which is where the effect mostly stops being convincing.
       </p>
     </div>
   );
