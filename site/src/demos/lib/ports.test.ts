@@ -16,7 +16,13 @@ import prices from "../../data/demos/factor-prices.json";
 import trieGolden from "../../data/demos/trie-golden.json";
 
 import { type Card, type Rank, type Suit, HAND_SCORES, scoreCards } from "./cards";
-import { type FactorName, performanceMetrics, runBacktest, zscore } from "./factor";
+import {
+  type FactorName,
+  type PriceData,
+  performanceMetrics,
+  runBacktest,
+  zscore,
+} from "./factor";
 import { LruCache } from "./lru";
 import { type Course, coursesConflict, meetingsOverlap, searchByCode } from "./schedule";
 import { Trie, characterToKey } from "./trie";
@@ -168,9 +174,31 @@ describe("schedule", () => {
 // --------------------------------------------------------------------------- //
 
 describe("factor backtest", () => {
+  /**
+   * The shipped price file spans a wide universe and a long window; the
+   * fixtures pin a fixed slice of it, so widening the data does not silently
+   * invalidate them.
+   */
+  const goldenSlice = (): PriceData => {
+    const from = prices.dates.findIndex((d) => d >= factorGolden.start);
+    const to = prices.dates.findIndex((d) => d >= factorGolden.end);
+    const end = to === -1 ? prices.dates.length : to;
+    return {
+      dates: prices.dates.slice(from, end),
+      tickers: factorGolden.tickers,
+      closes: Object.fromEntries(
+        factorGolden.tickers.map((t) => [
+          t,
+          (prices.closes as Record<string, number[]>)[t].slice(from, end),
+        ]),
+      ),
+    };
+  };
+
   it("reproduces every golden case from the Python", () => {
+    const slice = goldenSlice();
     for (const expected of factorGolden.cases) {
-      const result = runBacktest(prices, {
+      const result = runBacktest(slice, {
         factors: expected.factors as FactorName[],
         topN: expected.top_n,
         rebalanceEvery: expected.rebalance_every,
@@ -188,7 +216,7 @@ describe("factor backtest", () => {
 
   it("tracks the Python's NAV path, not just its endpoints", () => {
     const expected = factorGolden.cases[0];
-    const result = runBacktest(prices, {
+    const result = runBacktest(goldenSlice(), {
       factors: expected.factors as FactorName[],
       topN: expected.top_n,
       rebalanceEvery: expected.rebalance_every,
@@ -202,7 +230,7 @@ describe("factor backtest", () => {
   });
 
   it("starts at the initial cash", () => {
-    const result = runBacktest(prices, {
+    const result = runBacktest(goldenSlice(), {
       factors: ["momentum"], topN: 3, rebalanceEvery: 21, initialCash: 100000,
     });
     expect(result.nav[0]).toBeCloseTo(100000, 6);
@@ -213,12 +241,23 @@ describe("factor backtest", () => {
       factors: ["momentum"] as FactorName[],
       topN: 2, rebalanceEvery: 21, initialCash: 100000,
     };
-    const honest = performanceMetrics(runBacktest(prices, options).nav);
+    const slice = goldenSlice();
+    const honest = performanceMetrics(runBacktest(slice, options).nav);
     const cheating = performanceMetrics(
-      runBacktest(prices, { ...options, lookAhead: true }).nav,
+      runBacktest(slice, { ...options, lookAhead: true }).nav,
     );
     // The whole point of the demo: seeing the future pays.
     expect(cheating.totalReturn).toBeGreaterThan(honest.totalReturn);
+  });
+
+  it("ships a universe wide enough for factor rotation to matter", () => {
+    expect(prices.tickers.length).toBeGreaterThanOrEqual(40);
+    expect(prices.dates.length).toBeGreaterThan(1000);
+    for (const t of prices.tickers) {
+      expect((prices.closes as Record<string, number[]>)[t]).toHaveLength(
+        prices.dates.length,
+      );
+    }
   });
 
   it("z-scores a flat cross-section to zero rather than NaN", () => {

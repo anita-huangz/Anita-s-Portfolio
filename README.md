@@ -55,6 +55,10 @@ Docker · React · TypeScript**
 
 ## Software Engineering
 
+Ordered by engineering complexity — interacting subsystems, algorithmic depth,
+and how much the correctness depends on domain reasoning. Not line count: the
+last entry is the smallest project here and also the subtlest.
+
 ### ✅ [Factor Portfolio Simulator](software-engineer-projects/factor-based-portfolio-simulator) · 52 tests
 
 Point-in-time backtest of cross-sectional equity factor strategies, with
@@ -107,17 +111,6 @@ nothing, and two triples scored as three-of-a-kind rather than a full house.
 
 **Python · rich · OOP**
 
-### ✅ [fastcache — an O(1) LRU cache](software-engineer-projects/performance-optimization) · 24 tests
-
-An LRU cache decorator benchmarked against `functools` and against the
-list-based approach it replaced. The original called `list.remove` on every
-cache hit — a linear scan on the one path a cache exists to make fast.
-
-Across cache sizes 128 → 32,768 the list-based hit path slows **8.5×** while
-this one stays flat at ~0.45µs.
-
-**Python · threading · benchmarking**
-
 ### ✅ [Earnings Drift Tracker](software-engineer-projects/earnings-drift-tracker) · 29 tests
 
 Measures post-earnings-announcement drift against the size of the analyst
@@ -128,6 +121,17 @@ non-random slice of events.
 **Python · pandas · NumPy · REST APIs**
 
 ---
+
+### ✅ [fastcache — an O(1) LRU cache](software-engineer-projects/performance-optimization) · 24 tests
+
+An LRU cache decorator benchmarked against `functools` and against the
+list-based approach it replaced. The original called `list.remove` on every
+cache hit — a linear scan on the one path a cache exists to make fast.
+
+Across cache sizes 128 → 32,768 the list-based hit path slows **8.5×** while
+this one stays flat at ~0.45µs.
+
+**Python · threading · benchmarking**
 
 ## Data Science
 

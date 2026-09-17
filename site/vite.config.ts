@@ -6,5 +6,11 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "/",
-  build: { outDir: "dist" },
+  build: {
+    outDir: "dist",
+    // The large chunks are lazily-imported demo *data*, not code: the price
+    // file is fetched only when someone opens the backtest. Warning at 500 kB
+    // would flag that by design on every build.
+    chunkSizeWarningLimit: 800,
+  },
 });

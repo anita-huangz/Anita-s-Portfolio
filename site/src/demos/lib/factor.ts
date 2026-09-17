@@ -13,6 +13,8 @@ export type FactorName = "momentum" | "low_volatility";
 
 export interface PriceData {
   dates: string[];
+  /** Explicit ordering; object key order is not a contract worth relying on. */
+  tickers: string[];
   closes: Record<string, number[]>;
 }
 
@@ -146,7 +148,7 @@ function optimize(scores: Map<string, number>, topN: number): Record<string, num
 }
 
 export function runBacktest(prices: PriceData, options: BacktestOptions): BacktestResult {
-  const tickers = Object.keys(prices.closes);
+  const tickers = prices.tickers;
   const { factors, topN, rebalanceEvery, initialCash, lookAhead = false } = options;
 
   let cash = initialCash;

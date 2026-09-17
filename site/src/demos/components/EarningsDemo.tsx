@@ -1,7 +1,27 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import data from "../../data/demos/earnings-drift.json";
+import { useDemoData } from "../useDemoData";
 import { ScatterChart, type ScatterGroup } from "./Chart";
+import { Loading } from "./Loading";
+
+interface Event {
+  date: string;
+  surprise: number;
+  d1: number;
+  d5: number;
+  d10: number;
+}
+
+interface Series {
+  ticker: string;
+  correlation_1d: number | null;
+  correlation_5d: number | null;
+  events: Event[];
+}
+
+interface DriftFile {
+  series: Series[];
+}
 
 type Horizon = "d1" | "d5" | "d10";
 
@@ -11,45 +31,116 @@ const HORIZONS: { id: Horizon; label: string }[] = [
   { id: "d10", label: "10 days" },
 ];
 
-// First three categorical slots: the only three that clear the all-pairs
-// colour-separation floor, which is what a scatter needs.
-const COLORS = ["var(--ai)", "var(--ds)", "var(--se)", "var(--dv4)"];
-
 export function EarningsDemo() {
+  const data = useDemoData<DriftFile>(() => import("../../data/demos/earnings-drift.json"));
+  if (!data) return <Loading label="Loading earnings history…" />;
+  return <Configured data={data} />;
+}
+
+/** Pearson correlation. Null below three pairs, where it carries no signal. */
+function correlate(xs: number[], ys: number[]): number | null {
+  if (xs.length < 3) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < xs.length; i++) {
+    num += (xs[i] - mx) * (ys[i] - my);
+    dx += (xs[i] - mx) ** 2;
+    dy += (ys[i] - my) ** 2;
+  }
+  const den = Math.sqrt(dx * dy);
+  return den === 0 ? null : num / den;
+}
+
+function Configured({ data }: { data: DriftFile }) {
+  const [ticker, setTicker] = useState("AAPL");
   const [horizon, setHorizon] = useState<Horizon>("d5");
-  const [ticker, setTicker] = useState<string>(data.series[0].ticker);
+  const [pooled, setPooled] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const tickers = useMemo(() => data.series.map((s) => s.ticker).sort(), [data]);
+  const visible = useMemo(() => {
+    const needle = filter.trim().toUpperCase();
+    return needle ? tickers.filter((t) => t.startsWith(needle)) : tickers;
+  }, [tickers, filter]);
 
   const active = data.series.find((s) => s.ticker === ticker) ?? data.series[0];
-  const correlation = horizon === "d1" ? active.correlation_1d : active.correlation_5d;
+
+  const events = pooled ? data.series.flatMap((s) => s.events) : active.events;
+  const correlation = correlate(
+    events.map((e) => e.surprise),
+    events.map((e) => e[horizon]),
+  );
 
   const groups: ScatterGroup[] = [
     {
-      label: active.ticker,
-      color: COLORS[data.series.findIndex((s) => s.ticker === ticker) % COLORS.length],
-      points: active.events.map((e) => ({
-        x: e.surprise,
-        y: e[horizon] * 100,
-        note: e.date,
-      })),
+      label: pooled ? `All ${data.series.length} companies` : active.ticker,
+      color: pooled ? "var(--ai)" : "var(--ds)",
+      points: events.map((e) => ({ x: e.surprise, y: e[horizon] * 100, note: e.date })),
     },
   ];
 
+  // Ranked so the interesting names are findable without clicking through 62.
+  const ranked = useMemo(
+    () =>
+      [...data.series]
+        .filter((s) => s.correlation_5d !== null)
+        .sort((a, b) => Math.abs(b.correlation_5d!) - Math.abs(a.correlation_5d!))
+        .slice(0, 5),
+    [data],
+  );
+
   return (
     <div className="demo">
-      <div className="demo-controls">
-        <div className="control">
+      <div className="picker">
+        <div className="picker-presets">
           <span className="control-label">Company</span>
-          {data.series.map((s) => (
+          <button className="chip" aria-pressed={pooled} onClick={() => setPooled((v) => !v)}>
+            Pool all {data.series.length}
+          </button>
+          {ranked.map((s) => (
             <button
               key={s.ticker}
               className="chip"
-              aria-pressed={s.ticker === ticker}
-              onClick={() => setTicker(s.ticker)}
+              aria-pressed={!pooled && ticker === s.ticker}
+              onClick={() => {
+                setTicker(s.ticker);
+                setPooled(false);
+              }}
+              title={`5-day correlation ${s.correlation_5d!.toFixed(2)}`}
             >
-              {s.ticker}
+              {s.ticker} {s.correlation_5d! > 0 ? "+" : ""}
+              {s.correlation_5d!.toFixed(2)}
+            </button>
+          ))}
+          <input
+            className="picker-filter"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="filter…"
+            spellCheck={false}
+            aria-label="Filter tickers"
+          />
+        </div>
+
+        <div className="picker-grid">
+          {visible.map((t) => (
+            <button
+              key={t}
+              className="ticker"
+              aria-pressed={!pooled && t === ticker}
+              onClick={() => {
+                setTicker(t);
+                setPooled(false);
+              }}
+            >
+              {t}
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="demo-controls">
         <div className="control">
           <span className="control-label">Drift over</span>
           {HORIZONS.map((h) => (
@@ -75,30 +166,47 @@ export function EarningsDemo() {
 
       <div className="metric-row">
         <div className="metric">
-          <div className="metric-label">Events</div>
-          <div className="metric-value">{active.events.length}</div>
+          <div className="metric-label">Announcements</div>
+          <div className="metric-value">{events.length}</div>
         </div>
         <div className="metric">
-          <div className="metric-label">Surprise vs 1-day drift</div>
+          <div className="metric-label">
+            Surprise vs {HORIZONS.find((h) => h.id === horizon)!.label} drift
+          </div>
           <div className="metric-value">
-            {active.correlation_1d === null ? "—" : active.correlation_1d.toFixed(2)}
+            {correlation === null ? "—" : correlation.toFixed(2)}
           </div>
         </div>
         <div className="metric">
-          <div className="metric-label">Surprise vs 5-day drift</div>
+          <div className="metric-label">Median surprise</div>
           <div className="metric-value">
-            {active.correlation_5d === null ? "—" : active.correlation_5d.toFixed(2)}
+            {events.length
+              ? `${[...events.map((e) => e.surprise)].sort((a, b) => a - b)[
+                  Math.floor(events.length / 2)
+                ].toFixed(1)}%`
+              : "—"}
+          </div>
+        </div>
+        <div className="metric">
+          <div className="metric-label">Beat rate</div>
+          <div className="metric-value">
+            {events.length
+              ? `${Math.round(
+                  (events.filter((e) => e.surprise > 0).length / events.length) * 100,
+                )}%`
+              : "—"}
           </div>
         </div>
       </div>
 
       <p className="demo-note">
-        Real reported-versus-estimated EPS and real daily closes. Each point is one
-        announcement: how far the estimate was beaten on the x-axis, how far the stock
-        moved afterwards on the y-axis. If post-earnings drift were a reliable effect the
-        cloud would slope upward — mostly it doesn't, and the correlation
-        {correlation !== null && ` (${correlation.toFixed(2)} here)`} is the honest
-        summary. Announcements on non-trading days use the prior session's close.
+        Real reported-versus-estimated EPS and real daily closes across{" "}
+        {data.series.length} companies. Each point is one announcement: how far the
+        estimate was beaten on the x-axis, how far the stock moved afterwards on the
+        y-axis. If post-earnings drift were a dependable effect the cloud would slope
+        upward. Mostly it doesn't — pooling every company collapses the correlation
+        toward zero, and the handful of names with a real slope are the interesting
+        part. Announcements on non-trading days use the prior session's close.
       </p>
     </div>
   );

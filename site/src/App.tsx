@@ -30,10 +30,18 @@ export default function App() {
     if (theme) document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  const visible = useMemo(
-    () => (active === "all" ? PROJECTS : PROJECTS.filter((p) => p.category === active)),
-    [active],
-  );
+  const visible = useMemo(() => {
+    const pool = active === "all" ? PROJECTS : PROJECTS.filter((p) => p.category === active);
+    // Ordered by engineering complexity, most involved first. Projects
+    // without a rank keep their authored order, after the ranked ones.
+    return [...pool].sort((a, b) => {
+      if (a.featured !== b.featured) return a.featured ? -1 : 1;
+      if (a.category !== b.category) {
+        return CATEGORIES.indexOf(a.category) - CATEGORIES.indexOf(b.category);
+      }
+      return (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER);
+    });
+  }, [active]);
 
   const totalTests = useMemo(
     () => PROJECTS.reduce((sum, p) => sum + (p.tests ?? 0), 0),
@@ -114,7 +122,7 @@ export default function App() {
               </button>
             ))}
             <span className="filter-count">
-              {visible.length} of {PROJECTS.length}
+              {visible.length} of {PROJECTS.length} · most involved first
             </span>
           </div>
 

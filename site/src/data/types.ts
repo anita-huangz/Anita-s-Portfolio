@@ -21,6 +21,12 @@ export interface Project {
   images?: { src: string; alt: string }[];
   /** Marks the lead project. */
   featured?: boolean;
+  /**
+   * Engineering complexity rank within the category, 1 = most complex.
+   * Judged on interacting subsystems, algorithmic depth, and how much domain
+   * reasoning the correctness depends on -- not on line count alone.
+   */
+  rank?: number;
 }
 
 export const CATEGORY_LABELS: Record<Category, string> = {

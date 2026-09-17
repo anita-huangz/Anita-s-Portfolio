@@ -439,3 +439,54 @@ footer {
 .tag-hit { color: var(--se); font-weight: 600; }
 .tag-miss { color: var(--muted); }
 .tag-evict { color: var(--ds); }
+
+/* ------------------------------------------------- pickers and ranges */
+
+.demo-loading {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-2); font-size: 14px;
+}
+.spinner-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--edge); border-top-color: var(--ai);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner-dot { animation: none; } }
+
+.picker { margin-bottom: 14px; }
+.picker-presets {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px;
+}
+.picker-filter {
+  font: inherit; font-size: 12px; font-family: var(--mono);
+  width: 92px; padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--edge); background: var(--surface); color: var(--text);
+}
+.picker-grid {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  /* Four full rows. A height that clips mid-row reads as a layout bug
+     rather than as "scroll for more". */
+  max-height: 120px; overflow-y: auto; padding: 2px;
+  scrollbar-width: thin;
+}
+.ticker {
+  font: inherit; font-family: var(--mono); font-size: 11.5px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  border-radius: 5px; padding: 3px 7px; min-width: 46px;
+}
+.ticker:hover { color: var(--text); border-color: var(--edge); }
+.ticker[aria-pressed="true"] {
+  background: var(--ai); border-color: var(--ai); color: #fff; font-weight: 600;
+}
+.picker-count { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+
+.range { margin: 4px 0 12px; }
+.range-sliders { display: grid; gap: 4px; margin-top: 6px; }
+.range-sliders input[type="range"] { width: 100%; accent-color: var(--ai); }
+
+.demo-warn {
+  font-size: 13px; color: var(--text-2); margin: 12px 0 0;
+  border-left: 3px solid var(--dv4); padding-left: 10px;
+}
+.chip:disabled { opacity: 0.4; cursor: not-allowed; }
