@@ -34,6 +34,10 @@ from filing_intel.contracts import ResearchRequest, ResearchResponse
 from filing_intel.runtime import FilingIntelRuntime
 from filing_intel.telemetry import percentile
 
+#: Resolved from this file, not the working directory, so the shipped
+#: dataset loads no matter where the harness is invoked from.
+DEFAULT_DATASET = Path(__file__).parent / "dataset.jsonl"
+
 # --------------------------------------------------------------------------- #
 # Dataset
 # --------------------------------------------------------------------------- #
@@ -388,7 +392,7 @@ async def _run(args: argparse.Namespace) -> tuple[EvalReport, list[RunResult]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the filing-research eval suite.")
-    parser.add_argument("--dataset", default="evals/dataset.jsonl")
+    parser.add_argument("--dataset", default=str(DEFAULT_DATASET))
     parser.add_argument("--repeats", type=int, default=1, help="Runs per case.")
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--json-out", default=None)

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import json
 
-from evals.harness import EvalCase, EvalReport, RunResult, grade, load_dataset, run_eval
+from evals.harness import (
+    DEFAULT_DATASET,
+    EvalCase,
+    EvalReport,
+    RunResult,
+    grade,
+    load_dataset,
+    run_eval,
+)
 
 from conftest import text_response
 from filing_intel.contracts import Citation, Finding, ResearchResponse
@@ -250,7 +258,7 @@ async def test_multiple_cases_run_concurrently_and_are_reported_per_case(
 
 
 def test_shipped_dataset_loads_and_is_well_formed():
-    cases = load_dataset("evals/dataset.jsonl")
+    cases = load_dataset(DEFAULT_DATASET)
     assert len(cases) >= 5
     assert len({c.case_id for c in cases}) == len(cases)  # ids unique
     for case in cases:
@@ -261,7 +269,7 @@ def test_shipped_dataset_loads_and_is_well_formed():
 def test_dataset_covers_every_tool():
     covered = {
         tool
-        for case in load_dataset("evals/dataset.jsonl")
+        for case in load_dataset(DEFAULT_DATASET)
         for tool in case.expect_tools
     }
     assert covered == {
