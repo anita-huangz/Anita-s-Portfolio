@@ -507,3 +507,10 @@ footer {
 @media (max-width: 620px) {
   .io > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* ------------------------------------------------------- live lookup */
+
+.live-lookup { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.live-input { width: 120px; }
+.live-error { font-size: 12px; color: var(--ds); }
+.live-off { margin-top: 10px; font-size: 12.5px; }

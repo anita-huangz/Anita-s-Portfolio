@@ -1,0 +1,6 @@
+name = "portfolio-price-proxy"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# No bindings, no secrets, no state. The Worker only reads a public endpoint
+# and writes to the edge cache.
