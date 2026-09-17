@@ -22,9 +22,10 @@ from pydantic import ValidationError
 
 from ..config import Settings, get_settings
 from ..contracts import ResearchRequest, ResearchResponse, Strict
-from ..errors import FilingIntelError, UpstreamDataError
+from ..errors import ConfigError, FilingIntelError, UpstreamDataError
 from ..runtime import FilingIntelRuntime
 from ..telemetry import TelemetrySummary
+from .limits import SlidingWindowLimiter, enforce
 
 
 class HealthResponse(Strict):
@@ -73,6 +74,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings or get_settings()
 
+    if app.state.settings.public_demo and app.state.settings.provider != "demo":
+        raise ConfigError(
+            "public_demo=true requires provider=demo. A publicly reachable "
+            f"instance on provider={app.state.settings.provider!r} would let "
+            "anyone spend real model credits."
+        )
+
+    limiter = SlidingWindowLimiter(
+        limit=app.state.settings.rate_limit_per_minute, window_seconds=60.0
+    )
+
     # The browser UI is served from a different origin in development.
     app.add_middleware(
         CORSMiddleware,
@@ -105,12 +117,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/v1/research", response_model=ResearchResponse)
     async def research(
-        body: ResearchRequest, runtime: Runtime
+        body: ResearchRequest, request: Request, runtime: Runtime
     ) -> ResearchResponse:
+        enforce(limiter, request)
         return await runtime.research(body)
 
     @app.get("/v1/research/stream")
-    async def research_stream(runtime: Runtime, ticker: str, question: str,
+    async def research_stream(request: Request, runtime: Runtime, ticker: str,
+                              question: str,
                               session_id: str | None = None) -> StreamingResponse:
         """Server-sent events, one per completed graph node.
 
@@ -118,6 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         GET requests. Validation still goes through ResearchRequest, so a bad
         ticker fails here exactly as it does on the POST route.
         """
+        enforce(limiter, request)
         try:
             body = ResearchRequest(
                 ticker=ticker, question=question, session_id=session_id

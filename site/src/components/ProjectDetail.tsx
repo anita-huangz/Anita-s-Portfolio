@@ -62,6 +62,25 @@ export function ProjectDetail({ project, onClose, baseUrl }: Props) {
           </>
         )}
 
+        {project.io && (
+          <dl className="io">
+            <div>
+              <dt>In</dt>
+              <dd>{project.io.input}</dd>
+            </div>
+            <div>
+              <dt>Out</dt>
+              <dd>{project.io.output}</dd>
+            </div>
+            {project.io.scale && (
+              <div>
+                <dt>Scale</dt>
+                <dd>{project.io.scale}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+
         <div className="techrow">
           {project.tech.map((t) => (
             <span className="tech" key={t}>

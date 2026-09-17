@@ -1,0 +1,27 @@
+# Render blueprint for a public read-only instance.
+#
+# Deliberately pinned to the demo provider. The endpoint is unauthenticated, so
+# a live model provider here would let any visitor spend real credits; the app
+# refuses to start in that combination (see `public_demo` in config.py).
+services:
+  - type: web
+    name: sec-filing-intelligence
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    rootDir: ai-platform-projects/sec-filing-intelligence
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: FILING_INTEL_PROVIDER
+        value: demo
+      - key: FILING_INTEL_PUBLIC_DEMO
+        value: "true"
+      - key: FILING_INTEL_RATE_LIMIT_PER_MINUTE
+        value: "6"
+      # EDGAR rejects a request whose User-Agent has no contact address.
+      - key: FILING_INTEL_SEC_USER_AGENT
+        sync: false
+      # Allow the portfolio site to call this instance from the browser.
+      - key: FILING_INTEL_CORS_ORIGINS
+        value: '["https://anita-huangz.github.io"]'

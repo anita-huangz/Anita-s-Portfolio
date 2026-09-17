@@ -115,7 +115,16 @@ SECTORS: dict[str, list[str]] = {
 
 UNIVERSE = [t for names in SECTORS.values() for t in names]
 
-START, END = "2019-01-01", "2025-01-01"
+# END is "today" so a scheduled refresh keeps the window current. The
+# generator is re-run weekly by .github/workflows/refresh-data.yml.
+START = "2019-01-01"
+END = date.today().isoformat()
+
+# Floors for the freshness check. A refresh that fetched a partial universe
+# should fail the workflow rather than commit a thinner dataset over a good
+# one -- silently shrinking the demo is worse than a stale demo.
+MIN_TICKERS = 45
+MIN_DAYS = 1200
 
 
 def write(name: str, payload: object) -> None:
@@ -141,6 +150,12 @@ def generate_factor_data() -> None:
     complete = [t for t in UNIVERSE if t in closes.columns and closes[t].notna().all()]
     closes = closes[complete].dropna(how="any")
     print(f"    universe: {len(complete)}/{len(UNIVERSE)} with a complete history")
+    if len(complete) < MIN_TICKERS or len(closes) < MIN_DAYS:
+        raise SystemExit(
+            f"refusing to write a thin dataset: {len(complete)} tickers "
+            f"(need {MIN_TICKERS}), {len(closes)} days (need {MIN_DAYS}). "
+            "The upstream fetch probably failed or was rate limited."
+        )
 
     # Round *before* backtesting, not just before serialising. The browser
     # receives cents-rounded prices, so the golden fixture has to be computed
@@ -153,6 +168,7 @@ def generate_factor_data() -> None:
         {
             "start": START,
             "end": END,
+            "generated": date.today().isoformat(),
             "source": "Yahoo Finance daily adjusted closes",
             "dates": [d.date().isoformat() for d in closes.index],
             # Cents precision: the backtest is ratio-based, so more digits
@@ -273,9 +289,16 @@ def generate_earnings_data() -> None:
             }
         )
 
+    if len(series) < MIN_TICKERS:
+        raise SystemExit(
+            f"refusing to write thin earnings data: {len(series)} tickers "
+            f"(need {MIN_TICKERS})."
+        )
+
     write(
         "earnings-drift.json",
         {
+            "generated": date.today().isoformat(),
             "source": "Yahoo Finance: reported vs estimated EPS, daily adjusted closes",
             "computed_by": "earnings_drift.analyze_drift",
             "series": series,

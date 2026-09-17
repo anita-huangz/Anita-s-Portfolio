@@ -490,3 +490,20 @@ footer {
   border-left: 3px solid var(--dv4); padding-left: 10px;
 }
 .chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ------------------------------------------------------- in / out / scale */
+
+.io {
+  margin: 0 0 16px; padding: 14px 16px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--page); display: grid; gap: 9px;
+}
+.io > div { display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: baseline; }
+.io dt {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 600;
+}
+.io dd { margin: 0; font-size: 13.5px; color: var(--text-2); }
+@media (max-width: 620px) {
+  .io > div { grid-template-columns: 1fr; gap: 2px; }
+}

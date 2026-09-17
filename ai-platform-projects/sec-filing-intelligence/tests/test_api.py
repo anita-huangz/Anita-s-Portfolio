@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -262,3 +263,105 @@ def test_api_routes_still_work_with_the_ui_mounted(client):
     """The UI is mounted last so it cannot shadow an API route."""
     assert client.get("/healthz").status_code == 200
     assert client.get("/v1/tools").status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# Rate limiting and the public-demo guard
+# --------------------------------------------------------------------------- #
+
+
+def test_research_is_rate_limited(settings, cache, telemetry):
+    from filing_intel.api.app import create_app, get_runtime
+    from filing_intel.providers import ScriptedProvider
+    from filing_intel.runtime import FilingIntelRuntime
+
+    settings.rate_limit_per_minute = 2
+    app = create_app(settings)
+    runtime = FilingIntelRuntime(
+        settings, ScriptedProvider(script(20)), cache, FakeEdgar(), FakePrices(), telemetry
+    )
+    app.dependency_overrides[get_runtime] = lambda: runtime
+    app.state.runtime = runtime
+
+    with TestClient(app) as client:
+        body = {"ticker": "AAPL", "question": "What are the risks?"}
+        assert client.post("/v1/research", json=body).status_code == 200
+        assert client.post("/v1/research", json=body).status_code == 200
+        blocked = client.post("/v1/research", json=body)
+        assert blocked.status_code == 429
+        assert "Retry-After" in blocked.headers
+
+
+def test_health_is_not_rate_limited(client):
+    """Liveness probes run constantly; limiting them would flap the deploy."""
+    for _ in range(30):
+        assert client.get("/healthz").status_code == 200
+
+
+def test_public_demo_refuses_a_live_provider(settings):
+    """An unauthenticated public endpoint on a real key is someone's budget."""
+    from filing_intel.api.app import create_app
+    from filing_intel.errors import ConfigError
+
+    settings.public_demo = True
+    settings.provider = "anthropic"
+    with pytest.raises(ConfigError, match="provider=demo"):
+        create_app(settings)
+
+
+def test_public_demo_allows_the_demo_provider(settings):
+    from filing_intel.api.app import create_app
+
+    settings.public_demo = True
+    settings.provider = "demo"
+    assert create_app(settings) is not None
+
+
+def test_limiter_separates_clients():
+    from filing_intel.api.limits import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(limit=1, window_seconds=60)
+    assert limiter.check("1.1.1.1")[0] is True
+    assert limiter.check("1.1.1.1")[0] is False
+    # A different caller is unaffected by the first one's usage.
+    assert limiter.check("2.2.2.2")[0] is True
+
+
+def test_limiter_reports_when_a_slot_frees():
+    from filing_intel.api.limits import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(limit=1, window_seconds=60)
+    limiter.check("x")
+    allowed, retry_after = limiter.check("x")
+    assert allowed is False
+    assert 0 < retry_after <= 60
+
+
+def test_limiter_window_expires():
+    from filing_intel.api.limits import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(limit=1, window_seconds=0.05)
+    assert limiter.check("x")[0] is True
+    assert limiter.check("x")[0] is False
+    time.sleep(0.06)
+    assert limiter.check("x")[0] is True
+
+
+def test_limiter_bounds_its_own_memory():
+    """A deque per IP seen is an unbounded leak on a public endpoint."""
+    from filing_intel.api.limits import SlidingWindowLimiter
+
+    limiter = SlidingWindowLimiter(limit=10, window_seconds=60, max_clients=50)
+    for i in range(500):
+        limiter.check(f"10.0.0.{i}")
+    assert len(limiter._hits) <= 50
+
+
+def test_forwarded_header_identifies_the_original_client():
+    from unittest.mock import Mock
+
+    from filing_intel.api.limits import client_key
+
+    request = Mock()
+    request.headers = {"x-forwarded-for": "203.0.113.9, 10.0.0.1"}
+    assert client_key(request) == "203.0.113.9"

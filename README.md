@@ -18,12 +18,21 @@ because the bugs are usually the more interesting half.
 
 ### ✅ [SEC Filing Intelligence](ai-platform-projects/sec-filing-intelligence) · 167 tests
 
-A multi-agent research platform over SEC EDGAR filings, served as **both an
-HTTP API and an MCP server**, with per-call token, cost, and latency telemetry.
-Ask a question about a public company; it plans the research, pulls the filings
-and XBRL financials it needs, drafts a cited answer, then runs a separate
-verification pass that checks every citation against the evidence actually
-gathered.
+Ask a question about a public company and get an answer with every claim cited
+to a specific SEC filing — then independently verified against the evidence that
+produced it. Served as **both an HTTP API and an MCP server**.
+
+**In** — a ticker and a plain-English question: `AAPL`, *"What supply chain
+risks does Apple disclose?"*
+**Out** — a cited answer plus structured findings, each carrying an accession
+number and filing date, a verified/unverified verdict, and the run's token
+count, dollar cost, and latency.
+
+The agent writes a research plan, then calls up to four tools against SEC
+EDGAR — listing filings, pulling a named section out of a 10-K, fetching
+reported XBRL figures, measuring the price move after a filing date. A separate
+verifier pass re-reads the gathered evidence and checks each citation actually
+supports its claim before the answer is returned.
 
 ```
 plan ─▶ research ⇄ tools ─▶ analyze ─▶ verify
