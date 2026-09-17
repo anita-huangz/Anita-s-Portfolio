@@ -368,12 +368,11 @@ async def _run(args: argparse.Namespace) -> tuple[EvalReport, list[RunResult]]:
         # Stub model, real EDGAR. Measures orchestration, not model quality.
         from filing_intel.cache import build_cache
         from filing_intel.data import EdgarClient, PriceClient
-
-        from .offline import OfflineProvider
+        from filing_intel.providers import DemoProvider
 
         cache = build_cache(settings.redis_url)
         runtime = FilingIntelRuntime(
-            settings, OfflineProvider(), cache, EdgarClient(settings),
+            settings, DemoProvider(), cache, EdgarClient(settings),
             PriceClient(settings),
         )
     else:

@@ -279,3 +279,72 @@ async def test_empty_result_is_an_upstream_error():
         await price_client_with(payload).daily_closes(
             "ZZZZ", date(2023, 11, 1), date(2023, 11, 5)
         )
+
+
+# --------------------------------------------------------------------------- #
+# XBRL period spans
+# --------------------------------------------------------------------------- #
+
+OVERLAPPING_CONCEPT = {
+    "units": {
+        "USD": [
+            # Same end date, two different spans: Q3 alone and the year to date.
+            {"val": 30_000, "start": "2024-04-01", "end": "2024-06-30", "form": "10-Q"},
+            {"val": 90_000, "start": "2024-01-01", "end": "2024-06-30", "form": "10-Q"},
+            # A restatement of an identical span in a later filing.
+            {"val": 90_000, "start": "2024-01-01", "end": "2024-06-30", "form": "10-K"},
+            {"val": 120_000, "start": "2023-01-01", "end": "2023-12-31", "form": "10-K"},
+        ]
+    }
+}
+
+
+def edgar_with_concept(payload):
+    def handler(request):
+        if "companyconcept" in str(request.url):
+            return httpx.Response(200, json=payload)
+        return default_handler(request)
+
+    return edgar_with(handler)
+
+
+async def test_period_start_is_captured():
+    facts = await edgar_with_concept(OVERLAPPING_CONCEPT).company_facts("AAPL")
+    assert facts[0].period_start is not None
+
+
+async def test_identical_spans_are_deduplicated():
+    """A restated period must not consume several of the requested slots."""
+    facts = await edgar_with_concept(OVERLAPPING_CONCEPT).company_facts("AAPL", periods=4)
+    spans = [(f.period_start, f.period_end) for f in facts]
+    assert len(spans) == len(set(spans))
+
+
+async def test_overlapping_quarter_and_ytd_are_both_kept_and_distinguishable():
+    """They are genuinely different facts; the span is what tells them apart."""
+    facts = await edgar_with_concept(OVERLAPPING_CONCEPT).company_facts("AAPL", periods=4)
+    same_end = [f for f in facts if f.period_end == date(2024, 6, 30)]
+    assert len(same_end) == 2
+    assert {f.period_label for f in same_end} == {"quarter", "H1/H2"}
+
+
+def test_period_label_names_the_span():
+    from filing_intel.contracts import FinancialFact
+
+    def fact(start, end):
+        return FinancialFact(
+            concept="Revenues", unit="USD", value=1.0,
+            period_start=start, period_end=end,
+        )
+
+    assert fact(date(2023, 1, 1), date(2023, 12, 31)).period_label == "FY"
+    assert fact(date(2024, 4, 1), date(2024, 6, 30)).period_label == "quarter"
+    assert fact(None, date(2024, 6, 30)).period_label == "as of"
+
+
+def test_duration_days_is_none_for_an_instant_fact():
+    from filing_intel.contracts import FinancialFact
+
+    assert FinancialFact(
+        concept="Assets", unit="USD", value=1.0, period_end=date(2024, 6, 30)
+    ).duration_days is None

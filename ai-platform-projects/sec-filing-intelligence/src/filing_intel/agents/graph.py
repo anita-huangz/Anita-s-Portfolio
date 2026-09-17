@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -337,12 +338,26 @@ class ResearchGraph:
         graph.add_edge("verify", END)
         return graph.compile()
 
-    async def run(self, state: GraphState) -> GraphState:
+    def _config(self) -> dict[str, Any]:
         # `recursion_limit` is LangGraph's own backstop; size it off the tool
         # ceiling so the graph's guard trips first and produces a real answer.
-        return await self._compiled.ainvoke(
-            state, config={"recursion_limit": self._settings.agent_max_tool_calls * 2 + 12}
-        )
+        return {"recursion_limit": self._settings.agent_max_tool_calls * 2 + 12}
+
+    async def run(self, state: GraphState) -> GraphState:
+        return await self._compiled.ainvoke(state, config=self._config())
+
+    async def stream(
+        self, state: GraphState
+    ) -> AsyncIterator[tuple[str, GraphState]]:
+        """Yield `(node_name, state_after_that_node)` as the graph advances.
+
+        Same graph and same nodes as `run`; only the delivery differs. A UI can
+        show the plan while research is still running instead of waiting on the
+        whole workflow, which takes tens of seconds.
+        """
+        async for update in self._compiled.astream(state, config=self._config()):
+            for node_name, node_state in update.items():
+                yield node_name, node_state
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:

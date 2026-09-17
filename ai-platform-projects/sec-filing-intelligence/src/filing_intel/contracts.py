@@ -84,9 +84,36 @@ class FinancialFact(Strict):
     unit: str
     value: float
     period_end: date
+    period_start: date | None = Field(
+        default=None,
+        description="Start of the reporting period. Absent for instant facts.",
+    )
     fiscal_year: int | None = None
     fiscal_period: str | None = None
     form_type: str | None = None
+
+    @property
+    def duration_days(self) -> int | None:
+        if self.period_start is None:
+            return None
+        return (self.period_end - self.period_start).days
+
+    @property
+    def period_label(self) -> str:
+        """'FY', 'Q', or 'as of' -- what span the number actually covers.
+
+        XBRL returns overlapping contexts for the same end date: a quarter and
+        the year-to-date that contains it. Without the span they look like two
+        contradictory values for one period.
+        """
+        days = self.duration_days
+        if days is None:
+            return "as of"
+        if days >= 300:
+            return "FY"
+        if days >= 150:
+            return "H1/H2"
+        return "quarter"
 
 
 class PriceReaction(Strict):

@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ProviderName = Literal["anthropic", "bedrock", "replay"]
+ProviderName = Literal["anthropic", "bedrock", "replay", "demo"]
 EffortLevel = Literal["low", "medium", "high", "xhigh", "max"]
 
 
@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     replay_record: bool = False
 
     agent_max_tool_calls: int = Field(default=8, ge=1, le=40)
+
+    #: Origins allowed to call the API from a browser. The Vite dev server
+    #: runs on 5173; a deployment serving the built UI from the same origin
+    #: needs none of these.
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
+    )
 
     @field_validator("sec_user_agent")
     @classmethod

@@ -152,3 +152,113 @@ def test_openapi_schema_is_generated(client):
     schema = client.get("/openapi.json").json()
     assert "/v1/research" in schema["paths"]
     assert "/v1/telemetry/summary" in schema["paths"]
+
+
+# --------------------------------------------------------------------------- #
+# Streaming
+# --------------------------------------------------------------------------- #
+
+
+def parse_sse(text: str) -> list[tuple[str, dict]]:
+    """Split an SSE body into (event, payload) pairs."""
+    events = []
+    for block in text.strip().split("\n\n"):
+        name, data = None, None
+        for line in block.splitlines():
+            if line.startswith("event: "):
+                name = line.removeprefix("event: ")
+            elif line.startswith("data: "):
+                data = json.loads(line.removeprefix("data: "))
+        if name is not None:
+            events.append((name, data))
+    return events
+
+
+def test_stream_emits_nodes_in_order_and_closes(client):
+    response = client.get(
+        "/v1/research/stream",
+        params={"ticker": "AAPL", "question": "What are the supply chain risks?"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+    events = parse_sse(response.text)
+    names = [name for name, _ in events]
+
+    assert names[0] == "started"
+    assert "plan" in names
+    assert "analysis" in names
+    assert names[-2:] == ["result", "close"]
+
+
+def test_stream_result_matches_the_non_streaming_shape(client):
+    response = client.get(
+        "/v1/research/stream",
+        params={"ticker": "AAPL", "question": "What are the supply chain risks?"},
+    )
+    result = next(data for name, data in parse_sse(response.text) if name == "result")
+    assert result["ticker"] == "AAPL"
+    assert result["verified"] is True
+    assert result["findings"][0]["citations"][0]["accession"] == "0000320193-23-000106"
+    assert result["estimated_cost_usd"] > 0
+
+
+def test_stream_reports_the_trace_id_up_front(client):
+    response = client.get(
+        "/v1/research/stream", params={"ticker": "AAPL", "question": "A question?"}
+    )
+    events = parse_sse(response.text)
+    started = next(data for name, data in events if name == "started")
+    result = next(data for name, data in events if name == "result")
+    # The client can correlate telemetry before the run finishes.
+    assert started["trace_id"] == result["trace_id"]
+
+
+def test_stream_rejects_a_bad_ticker_with_422(client):
+    response = client.get(
+        "/v1/research/stream", params={"ticker": "!!!", "question": "A question?"}
+    )
+    assert response.status_code == 422
+
+
+def test_stream_updates_the_session(client):
+    first = client.get(
+        "/v1/research/stream", params={"ticker": "AAPL", "question": "First question?"}
+    )
+    session_id = next(
+        d for n, d in parse_sse(first.text) if n == "result"
+    )["session_id"]
+    assert client.get(f"/v1/sessions/{session_id}").json()["turns"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# UI mount
+# --------------------------------------------------------------------------- #
+
+
+def test_ui_dist_ignores_a_directory_without_an_index(monkeypatch, tmp_path):
+    """A stale or half-built dist must not be mounted as if it were a UI."""
+    from filing_intel.api.app import _ui_dist
+
+    empty = tmp_path / "dist"
+    empty.mkdir()
+    monkeypatch.setenv("FILING_INTEL_UI_DIST", str(empty))
+    # Falls through to the other candidates; either way it never returns the
+    # index-less directory.
+    assert _ui_dist() != empty
+
+
+def test_ui_dist_honours_an_explicit_override(monkeypatch, tmp_path):
+    from filing_intel.api.app import _ui_dist
+
+    build = tmp_path / "dist"
+    build.mkdir()
+    (build / "index.html").write_text("<!doctype html>")
+    monkeypatch.setenv("FILING_INTEL_UI_DIST", str(build))
+    assert _ui_dist() == build
+
+
+def test_api_routes_still_work_with_the_ui_mounted(client):
+    """The UI is mounted last so it cannot shadow an API route."""
+    assert client.get("/healthz").status_code == 200
+    assert client.get("/v1/tools").status_code == 200

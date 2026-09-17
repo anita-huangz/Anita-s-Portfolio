@@ -11,6 +11,22 @@ actually gathered before the answer is returned.
 Everything it reads is public: SEC EDGAR and daily closing prices. No API key is
 needed to run the data layer, and the whole test suite runs offline.
 
+![The research UI, showing the agent's run timeline and live cost telemetry](docs/screenshot-light.png)
+
+## Try it without an API key
+
+```bash
+make install && make demo      # http://localhost:8000
+```
+
+`make demo` builds the UI and runs the stack against **real SEC EDGAR data**
+with no credentials. Filings, figures, and quoted passages are genuine; the
+answers are **extractive, not generative** — passages are selected by keyword
+overlap against the filing the agent actually fetched, so it can quote but
+cannot summarise, compare across filings, or decline an unanswerable question.
+The UI says so in a banner. Set `ANTHROPIC_API_KEY` and
+`FILING_INTEL_PROVIDER=anthropic` for real reasoning.
+
 ---
 
 ## Why it is built this way
@@ -161,6 +177,43 @@ whole workflow, and `telemetry_summary`.
 
 ---
 
+## The UI
+
+A React + Vite single-page app (`web/`) that streams the agent's run as it
+happens rather than spinning until the whole workflow finishes.
+
+- **Run timeline** — the plan, then each tool call with its actual arguments,
+  then the analysis and the verifier's verdict, appearing as they complete
+- **Cost telemetry** — tokens, estimated USD, latency, and tool-call count for
+  the run just executed
+- **Citations link to EDGAR** — every accession number resolves to the real
+  filing on sec.gov
+- **Light and dark** — both modes are selected from a validated palette and
+  checked against their own surface, not an automatic inversion
+
+Progress arrives over server-sent events from `GET /v1/research/stream`, one
+event per completed graph node. The client uses `fetch` with a stream reader
+rather than `EventSource`, because `EventSource` cannot surface a non-200 status
+— a 422 from a bad ticker would otherwise appear as an opaque connection error.
+
+```bash
+make web        # Vite dev server on :5173, proxying the API on :8000
+make web-build  # type-check and build into web/dist
+```
+
+When `web/dist` exists the API serves it at `/`, so the Docker image is the
+whole application rather than an API needing a separate static host. The mount
+is optional and happens last, so it can never shadow an API route.
+
+<details>
+<summary>Dark mode</summary>
+
+![The same view in dark mode](docs/screenshot-dark.png)
+
+</details>
+
+---
+
 ## Telemetry
 
 Every model call and tool call emits a typed event. `GET /v1/telemetry/summary`
@@ -248,7 +301,7 @@ deploy.
 ## Testing
 
 ```bash
-make test     # 154 tests, no network, no API key
+make test     # 167 tests, no network, no API key
 ```
 
 The suite covers cost arithmetic, cache and TTL semantics, telemetry
@@ -269,12 +322,13 @@ Every setting is `FILING_INTEL_`-prefixed and validated by `pydantic-settings`.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `FILING_INTEL_PROVIDER` | `replay` | `anthropic`, `bedrock`, or `replay` |
+| `FILING_INTEL_PROVIDER` | `replay` | `anthropic`, `bedrock`, `replay`, or `demo` |
 | `FILING_INTEL_MODEL` | `claude-opus-5` | |
 | `FILING_INTEL_EFFORT` | `high` | `low` … `max` |
 | `FILING_INTEL_REDIS_URL` | unset | Unset falls back to the in-process cache |
 | `FILING_INTEL_SEC_USER_AGENT` | — | Must contain a contact email; EDGAR 403s otherwise |
 | `FILING_INTEL_AGENT_MAX_TOOL_CALLS` | `8` | The loop ceiling |
+| `FILING_INTEL_UI_DIST` | unset | Override the built-UI location |
 
 The SEC user-agent rule is enforced at startup rather than left to surface as an
 opaque 403 mid-request.
@@ -296,8 +350,10 @@ src/filing_intel/
   agents/           the LangGraph workflow and its prompts
   api/              FastAPI surface
   mcp_server.py     MCP surface
-evals/              dataset, grading, harness, offline stub
-tests/              154 tests
+  providers/demo.py deterministic stub model, for running without a key
+evals/              dataset, grading, harness
+web/                React + Vite UI (components, SSE client, styles)
+tests/              167 tests
 ```
 
 ---
@@ -312,4 +368,8 @@ tests/              154 tests
   partner-priced separately; those events are flagged `cost_is_estimated`.
 - Sessions hold conversation state but the graph currently starts each question
   fresh; session accounting is wired, multi-turn context reuse is not.
+- The UI shows one run at a time and does not persist history across reloads.
 - Price data comes from a public unauthenticated endpoint with no SLA.
+- XBRL returns overlapping contexts for one end date (a quarter and the
+  year-to-date containing it). Facts carry their period span so the two are
+  distinguishable rather than looking like contradictory values.
