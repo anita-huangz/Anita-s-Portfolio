@@ -6,7 +6,7 @@ import { PROJECTS } from "./data/projects";
 import { CATEGORY_LABELS } from "./data/types";
 import type { Category, Project } from "./data/types";
 
-const REPO = "https://github.com/anita-huangz/Anita-s-Portfolio";
+const REPO = "https://github.com/anita-huangz/anita-huangz.github.io";
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
 const CATEGORY_COLOR: Record<Category, string> = {
   "ai-platform": "var(--ai)",
@@ -21,8 +21,9 @@ export default function App() {
   const [open, setOpen] = useState<Project | null>(null);
   const [theme, setTheme] = useState<Theme | null>(null);
 
-  // Vite rewrites BASE_URL at build time; it differs between the GitHub
-  // project page (/Anita-s-Portfolio/) and a local preview (/).
+  // Published as a user site, so BASE_URL is "/". Read it rather than
+  // hardcoding, so asset paths stay correct if the site ever moves under a
+  // prefix.
   const baseUrl = import.meta.env.BASE_URL;
 
   useEffect(() => {
