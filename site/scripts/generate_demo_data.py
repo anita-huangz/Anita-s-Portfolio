@@ -33,8 +33,89 @@ for project in [
 ]:
     sys.path.insert(0, str(ROOT / project / "src"))
 
-UNIVERSE = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "AVGO", "ORCL"]
-START, END = "2021-01-01", "2025-01-01"
+# A broad, liquid, multi-sector universe. Breadth is the point: factor
+# rotation is only interesting when the names do not all move together, and a
+# tech-only list makes every factor look the same.
+SECTORS: dict[str, list[str]] = {
+    "Technology": [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "META",
+        "NVDA",
+        "AVGO",
+        "ORCL",
+        "CRM",
+        "ADBE",
+        "AMD",
+        "INTC",
+        "CSCO",
+        "QCOM",
+        "TXN",
+        "IBM",
+        "NOW",
+        "INTU"
+    ],
+    "Financials": [
+        "JPM",
+        "BAC",
+        "WFC",
+        "GS",
+        "MS",
+        "AXP",
+        "BLK",
+        "SCHW",
+        "V",
+        "MA"
+    ],
+    "Healthcare": [
+        "JNJ",
+        "UNH",
+        "LLY",
+        "PFE",
+        "ABBV",
+        "MRK",
+        "TMO",
+        "ABT",
+        "AMGN"
+    ],
+    "Consumer": [
+        "WMT",
+        "COST",
+        "PG",
+        "KO",
+        "PEP",
+        "MCD",
+        "NKE",
+        "HD",
+        "SBUX",
+        "TGT"
+    ],
+    "Industrials & Energy": [
+        "CAT",
+        "BA",
+        "GE",
+        "HON",
+        "UPS",
+        "LMT",
+        "XOM",
+        "CVX",
+        "COP"
+    ],
+    "Comms & Utilities": [
+        "DIS",
+        "NFLX",
+        "T",
+        "VZ",
+        "NEE",
+        "DUK"
+    ]
+}
+
+UNIVERSE = [t for names in SECTORS.values() for t in names]
+
+START, END = "2019-01-01", "2025-01-01"
 
 
 def write(name: str, payload: object) -> None:
@@ -54,7 +135,12 @@ def generate_factor_data() -> None:
     from factor_sim import get_factors, performance_metrics, run_backtest
 
     raw = yf.download(UNIVERSE, start=START, end=END, progress=False, auto_adjust=True)
-    closes = raw["Close"][UNIVERSE].dropna(how="any")
+    closes = raw["Close"]
+    # Drop any name without a full history rather than forward-filling one:
+    # a synthetic price would flow straight into the factor scores.
+    complete = [t for t in UNIVERSE if t in closes.columns and closes[t].notna().all()]
+    closes = closes[complete].dropna(how="any")
+    print(f"    universe: {len(complete)}/{len(UNIVERSE)} with a complete history")
 
     # Round *before* backtesting, not just before serialising. The browser
     # receives cents-rounded prices, so the golden fixture has to be computed
@@ -71,16 +157,26 @@ def generate_factor_data() -> None:
             "dates": [d.date().isoformat() for d in closes.index],
             # Cents precision: the backtest is ratio-based, so more digits
             # only inflate the payload.
-            "closes": {t: [float(v) for v in closes[t]] for t in UNIVERSE},
+            "tickers": list(closes.columns),
+            "sectors": {
+                name: [t for t in members if t in closes.columns]
+                for name, members in SECTORS.items()
+            },
+            "closes": {t: [float(v) for v in closes[t]] for t in closes.columns},
         },
     )
 
     # Golden fixtures: the TypeScript port must reproduce these.
+    # The fixtures pin a fixed slice and a fixed ticker set, so regenerating
+    # with a wider universe does not silently invalidate them.
+    golden_tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "AVGO", "ORCL"]
+    golden_frame = closes[golden_tickers].loc["2021-01-01":"2025-01-01"]
+
     cases = []
     for names in (["momentum"], ["low_volatility"], ["momentum", "low_volatility"]):
         for top_n in (2, 3):
             result = run_backtest(
-                closes, get_factors(names), top_n=top_n, rebalance_every=21
+                golden_frame, get_factors(names), top_n=top_n, rebalance_every=21
             )
             metrics = performance_metrics(result.nav)
             cases.append(
@@ -99,7 +195,16 @@ def generate_factor_data() -> None:
                     ],
                 }
             )
-    write("factor-golden.json", {"initial_cash": 100000.0, "cases": cases})
+    write(
+        "factor-golden.json",
+        {
+            "initial_cash": 100000.0,
+            "tickers": golden_tickers,
+            "start": "2021-01-01",
+            "end": "2025-01-01",
+            "cases": cases,
+        },
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -115,7 +220,7 @@ def generate_earnings_data() -> None:
     from earnings_drift.drift import surprise_correlation
 
     series = []
-    for ticker in ["AAPL", "MSFT", "NVDA", "AMZN"]:
+    for ticker in UNIVERSE:
         handle = yf.Ticker(ticker)
         table = handle.get_earnings_dates(limit=40)
         table = table.dropna(subset=["EPS Estimate", "Reported EPS"])
@@ -125,8 +230,10 @@ def generate_earnings_data() -> None:
             continue
 
         prices = yf.download(
-            ticker, start="2019-01-01", end=END, progress=False, auto_adjust=True
+            ticker, start="2017-01-01", end=END, progress=False, auto_adjust=True
         )
+        if prices is None or prices.empty:
+            continue
         if isinstance(prices.columns, pd.MultiIndex):
             prices.columns = prices.columns.get_level_values(0)
 
@@ -144,6 +251,7 @@ def generate_earnings_data() -> None:
         drift = analyze_drift(stock, horizons=(1, 5, 10))
         if drift.empty:
             continue
+        print(f"    {ticker}: {len(drift)} events")
 
         series.append(
             {

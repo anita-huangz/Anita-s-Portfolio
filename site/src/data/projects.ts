@@ -48,6 +48,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "earnings-drift-tracker",
+    "rank": 5,
     "title": "Earnings Drift Tracker",
     "category": "software-engineering",
     "summary": "Measures post-earnings-announcement drift against the size of the analyst surprise, and correlates the two.",
@@ -69,6 +70,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "factor-based-portfolio-simulator",
+    "rank": 1,
     "title": "Factor Portfolio Simulator",
     "category": "software-engineering",
     "summary": "A point-in-time backtest of cross-sectional equity factor strategies, with Fama-French 3-factor attribution.",
@@ -96,6 +98,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "performance-optimization",
+    "rank": 6,
     "title": "fastcache \u2014 an O(1) LRU cache",
     "category": "software-engineering",
     "summary": "An LRU cache decorator in pure Python, benchmarked against functools and against the list-based approach it replaced.",
@@ -121,6 +124,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "web-crawler-and-search-engine",
+    "rank": 2,
     "title": "Trie Search",
     "category": "software-engineering",
     "summary": "Crawls a website, indexes every word into a trie, and searches it by prefix or single-character wildcard.",
@@ -147,6 +151,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "card-game-system",
+    "rank": 4,
     "title": "Card Game",
     "category": "software-engineering",
     "summary": "A single-player poker-style draw game: seven cards, discard up to five, score the hand.",
@@ -171,6 +176,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "course-catalog-scheduling-system",
+    "rank": 3,
     "title": "Course Catalog & Scheduling",
     "category": "software-engineering",
     "summary": "Searches a university course catalog and builds a schedule that does not double-book you.",
