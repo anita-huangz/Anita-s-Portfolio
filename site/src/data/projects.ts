@@ -49,7 +49,19 @@ export const PROJECTS: Project[] = [
       "input": "A ticker and a plain-English question \u2014 e.g. AAPL, \"What supply chain risks does Apple disclose?\"",
       "output": "A cited answer plus structured findings, each with an accession number and filing date, a verified/unverified verdict, and the run's token, cost, and latency figures.",
       "scale": "167 tests, all offline. Four tools, three model providers, one MCP server."
-    }
+    },
+    "sources": [
+      {
+        "label": "SEC EDGAR",
+        "url": "https://www.sec.gov/edgar/sec-api-documentation",
+        "note": "Company submissions, filing documents, and XBRL company facts."
+      },
+      {
+        "label": "Yahoo Finance",
+        "url": "https://finance.yahoo.com/",
+        "note": "Daily closes, for measuring the price reaction to a filing."
+      }
+    ]
   },
   {
     "slug": "earnings-drift-tracker",
@@ -76,7 +88,19 @@ export const PROJECTS: Project[] = [
       "input": "A ticker and a date range.",
       "output": "One row per announcement \u2014 surprise percentage and forward returns at each horizon \u2014 plus the correlation between them.",
       "scale": "29 tests. The demo covers 62 companies and 1,959 real announcements."
-    }
+    },
+    "sources": [
+      {
+        "label": "Yahoo Finance",
+        "url": "https://finance.yahoo.com/",
+        "note": "Reported vs estimated EPS, and daily closes."
+      },
+      {
+        "label": "Financial Modeling Prep",
+        "url": "https://site.financialmodelingprep.com/developer/docs",
+        "note": "The CLI's earnings-surprise source; needs a free API key."
+      }
+    ]
   },
   {
     "slug": "factor-based-portfolio-simulator",
@@ -109,7 +133,19 @@ export const PROJECTS: Project[] = [
       "input": "A list of tickers, a date range, which factors to use, how many names to hold, and how often to rebalance.",
       "output": "A daily NAV path, per-rebalance weights, total and annualized return, volatility, Sharpe, max drawdown, and a Fama-French attribution table.",
       "scale": "52 tests. The bundled demo runs 62 tickers over six years of real daily closes."
-    }
+    },
+    "sources": [
+      {
+        "label": "Yahoo Finance (via yfinance)",
+        "url": "https://finance.yahoo.com/",
+        "note": "Daily adjusted closes for the 62-name demo universe."
+      },
+      {
+        "label": "Kenneth French Data Library",
+        "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html",
+        "note": "Daily Fama-French factors, for the attribution regression."
+      }
+    ]
   },
   {
     "slug": "performance-optimization",
@@ -232,7 +268,14 @@ export const PROJECTS: Project[] = [
       "input": "A catalog CSV, a search term, and optionally the course codes you are already enrolled in.",
       "output": "Matching courses with their meeting times, conflicts excluded \u2014 or a named clash if you try to build an impossible schedule.",
       "scale": "52 tests. Ships with a 30-course MPCS catalog."
-    }
+    },
+    "sources": [
+      {
+        "label": "UChicago MPCS course catalog",
+        "url": "https://mpcs-inforstems.uchicago.edu/",
+        "note": "A 30-course snapshot, bundled with the package as CSV."
+      }
+    ]
   },
   {
     "slug": "bitcoin-and-asset-trading",
@@ -255,7 +298,14 @@ export const PROJECTS: Project[] = [
       "input": "Minute-resolution BTC/USD trade history, a lookback window, and a forecast horizon.",
       "output": "A trained model plus predicted-versus-actual price paths on a held-out period.",
       "scale": "127 MB of raw trades resampled to daily bars; 60-day lookback sequences."
-    }
+    },
+    "sources": [
+      {
+        "label": "Bitcoin Historical Data (Kaggle)",
+        "url": "https://www.kaggle.com/datasets/mczielinski/bitcoin-historical-data",
+        "note": "Minute-resolution BTC/USD trades, resampled to daily bars."
+      }
+    ]
   },
   {
     "slug": "fake-news-detection",
@@ -278,7 +328,14 @@ export const PROJECTS: Project[] = [
       "input": "4,000 labelled articles with title, body, author, source and structural metadata.",
       "output": "Per-model accuracy, ROC AUC and confusion matrices, plus feature importances.",
       "scale": "4,000 articles, 50.6% labelled fake. 39 code cells."
-    }
+    },
+    "sources": [
+      {
+        "label": "Fake News Detection (Kaggle)",
+        "url": "https://www.kaggle.com/datasets/khushikyad001/fake-news-detection",
+        "note": "4,000 rows. Synthetic: titles are 'Breaking News N' and labels appear randomly assigned."
+      }
+    ]
   },
   {
     "slug": "customer-churn-prediction",
@@ -299,7 +356,14 @@ export const PROJECTS: Project[] = [
       "input": "7,032 customers with contract type, tenure, services, and billing fields.",
       "output": "Churn probability per customer, plus ROC, confusion matrix and feature importances.",
       "scale": "7,032 customers, 26.6% churned. AUC 0.83, recall 49.7%."
-    }
+    },
+    "sources": [
+      {
+        "label": "Telco Customer Churn (Kaggle)",
+        "url": "https://www.kaggle.com/datasets/blastchar/telco-customer-churn",
+        "note": "7,043 customers; the notebook drops 11 rows with blank TotalCharges."
+      }
+    ]
   },
   {
     "slug": "global-security-threats",
@@ -323,7 +387,14 @@ export const PROJECTS: Project[] = [
       "input": "3,000 incident records with loss, users affected, resolution time and categorical attributes.",
       "output": "Cluster assignments, a 2-D projection, and a flagged set of anomalous incidents.",
       "scale": "3,000 incidents, 2015\u20132024, 6 attack types, 150 flagged anomalous."
-    }
+    },
+    "sources": [
+      {
+        "label": "Global Cybersecurity Threats 2015-2024 (Kaggle)",
+        "url": "https://www.kaggle.com/datasets/atharvasoundankar/global-cybersecurity-threats-2015-2024",
+        "note": "3,000 incidents across 7 industries and 6 attack types."
+      }
+    ]
   },
   {
     "slug": "personalized-recommendations-for-e-commerce",
@@ -344,7 +415,14 @@ export const PROJECTS: Project[] = [
       "input": "A customer's browsing and purchase history, segment, season, and the product catalogue.",
       "output": "Ranked product recommendations, with model comparison across the candidate approaches.",
       "scale": "10,000 customers \u00d7 10,000 products, 3 segments."
-    }
+    },
+    "sources": [
+      {
+        "label": "Personalized Recommendations for E-Commerce (Kaggle)",
+        "url": "https://www.kaggle.com/datasets/suvroo/personalized-recommendations-for-e-commerce",
+        "note": "Two 10,000-row tables: customer behaviour and product catalogue."
+      }
+    ]
   },
   {
     "slug": "stock-bond-portfolio-analysis",
@@ -367,7 +445,24 @@ export const PROJECTS: Project[] = [
       "input": "Five ETF tickers, a date range, and a client risk profile expressed as target factor weights.",
       "output": "Optimal portfolio weights per Sharpe preference, the factor exposures they imply, and realised performance over the period.",
       "scale": "463 lines, the largest analysis here. 5 assets, 2012\u20132024 daily."
-    }
+    },
+    "sources": [
+      {
+        "label": "Yahoo Finance (via yfinance)",
+        "url": "https://finance.yahoo.com/",
+        "note": "Daily prices for SPY, IWM, TLT, LQD and SHV, 2012-2024."
+      },
+      {
+        "label": "Kenneth French Data Library",
+        "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html",
+        "note": "Fama-French factor returns."
+      },
+      {
+        "label": "FRED",
+        "url": "https://fred.stlouisfed.org/",
+        "note": "Interest-rate and liquidity indicators."
+      }
+    ]
   },
   {
     "slug": "weather-trends-and-forecast",
@@ -389,6 +484,13 @@ export const PROJECTS: Project[] = [
       "input": "A latitude and longitude, plus a date range.",
       "output": "Cleaned historical series, descriptive statistics, a fitted trend, and a forward projection.",
       "scale": "Hourly ERA5 reanalysis. 3 scripts, ~200 lines."
-    }
+    },
+    "sources": [
+      {
+        "label": "Open-Meteo ERA5 archive API",
+        "url": "https://open-meteo.com/en/docs/historical-weather-api",
+        "note": "Hourly reanalysis by latitude and longitude. The README also cites Meteostat; the code calls Open-Meteo."
+      }
+    ]
   }
 ];

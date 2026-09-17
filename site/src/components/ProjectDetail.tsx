@@ -122,6 +122,22 @@ export function ProjectDetail({ project, onClose, baseUrl }: Props) {
           </>
         )}
 
+        {project.sources && project.sources.length > 0 && (
+          <>
+            <h4>Data sources</h4>
+            <ul className="sources">
+              {project.sources.map((src) => (
+                <li key={src.url}>
+                  <a href={src.url} target="_blank" rel="noreferrer">
+                    {src.label}
+                  </a>
+                  {src.note && <span className="source-note">{src.note}</span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
         <div className="sheet-links">
           <a
             className="primary"

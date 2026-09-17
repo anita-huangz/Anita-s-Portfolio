@@ -166,9 +166,13 @@ set leaks into training.
 ### 3. [Fake News Detection](data-science-projects/fake-news-detection)
 TF-IDF over article text, sentiment polarity, and structural metadata, compared
 across several classifiers under cross-validation. **The reportable result is
-negative:** metadata alone scores an ROC AUC of 0.46 — at or below a coin
-flip — so none of those structural signals separate a fake article here.
-**4,000 articles, 50.6% fake** · scikit-learn, XGBoost, TextBlob
+negative, and it is about the data:** every title is `Breaking News N`, every
+body is one templated sentence, no feature correlates above 0.03 with the
+label, and the fake rate sits near 50% for every source — The Onion and Reuters
+alike. The labels look randomly assigned, so no model can beat chance and any
+accuracy quoted on this dataset measures nothing.
+[Dataset](https://www.kaggle.com/datasets/khushikyad001/fake-news-detection) ·
+**4,000 articles** · scikit-learn, XGBoost, TextBlob
 
 ### 4. [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce)
 Joins customer behaviour against a product catalogue across boosting,
@@ -198,6 +202,22 @@ temperature trends, and projects them forward. One caveat stated plainly: the
 legislation-influence feature is synthetic, so it demonstrates the mechanism
 rather than measuring a real effect.
 **3 scripts, ~200 lines** · pandas, scikit-learn, requests
+
+## Data sources
+
+Every analysis links its source in the site's project panel. The datasets:
+
+| Project | Source |
+|---|---|
+| Churn | [Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) |
+| Fake news | [Fake News Detection](https://www.kaggle.com/datasets/khushikyad001/fake-news-detection) |
+| Threats | [Global Cybersecurity Threats 2015-2024](https://www.kaggle.com/datasets/atharvasoundankar/global-cybersecurity-threats-2015-2024) |
+| E-commerce | [Personalized Recommendations](https://www.kaggle.com/datasets/suvroo/personalized-recommendations-for-e-commerce) |
+| Bitcoin | [Bitcoin Historical Data](https://www.kaggle.com/datasets/mczielinski/bitcoin-historical-data) |
+| Stock-bond | [Yahoo Finance](https://finance.yahoo.com/), [Kenneth French Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html), [FRED](https://fred.stlouisfed.org/) |
+| Weather | [Open-Meteo ERA5](https://open-meteo.com/en/docs/historical-weather-api) |
+| SEC platform | [SEC EDGAR](https://www.sec.gov/edgar/sec-api-documentation), Yahoo Finance |
+| Factor sim / drift | [Yahoo Finance](https://finance.yahoo.com/) |
 
 ## Repository layout
 
