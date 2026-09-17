@@ -1,0 +1,146 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { ProjectCard } from "./components/ProjectCard";
+import { ProjectDetail } from "./components/ProjectDetail";
+import { PROJECTS } from "./data/projects";
+import { CATEGORY_LABELS } from "./data/types";
+import type { Category, Project } from "./data/types";
+
+const REPO = "https://github.com/anita-huangz/Anita-s-Portfolio";
+const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
+const CATEGORY_COLOR: Record<Category, string> = {
+  "ai-platform": "var(--ai)",
+  "software-engineering": "var(--se)",
+  "data-science": "var(--ds)",
+};
+
+type Theme = "light" | "dark";
+
+export default function App() {
+  const [active, setActive] = useState<Category | "all">("all");
+  const [open, setOpen] = useState<Project | null>(null);
+  const [theme, setTheme] = useState<Theme | null>(null);
+
+  // Vite rewrites BASE_URL at build time; it differs between the GitHub
+  // project page (/Anita-s-Portfolio/) and a local preview (/).
+  const baseUrl = import.meta.env.BASE_URL;
+
+  useEffect(() => {
+    if (theme) document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  const visible = useMemo(
+    () => (active === "all" ? PROJECTS : PROJECTS.filter((p) => p.category === active)),
+    [active],
+  );
+
+  const totalTests = useMemo(
+    () => PROJECTS.reduce((sum, p) => sum + (p.tests ?? 0), 0),
+    [],
+  );
+
+  return (
+    <>
+      <header className="topbar">
+        <div className="shell topbar-inner">
+          <span className="brand">Anita Huang</span>
+          <nav>
+            <a href="#projects" className="hide-sm">Projects</a>
+            <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
+            <button
+              className="ghost-btn"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+            >
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      <main className="shell">
+        <section className="hero">
+          <h1>AI platform engineering, backend systems, and quantitative work.</h1>
+          <p>
+            I build the infrastructure around language models — tool interfaces,
+            multi-provider access layers, cost and latency telemetry, and the
+            evaluation harnesses that tell you whether any of it actually works.
+            Before that, quantitative analysis in finance.
+          </p>
+          <p>
+            Everything below is in one repository. The projects marked with a test
+            count run their full suite offline in CI — no network, no API keys.
+          </p>
+
+          <div className="links">
+            <a className="primary" href="#projects">Browse projects</a>
+            <a href={REPO} target="_blank" rel="noreferrer">Source on GitHub</a>
+          </div>
+
+          <div className="stats">
+            <div className="stat">
+              <div className="n">{PROJECTS.length}</div>
+              <div className="l">projects</div>
+            </div>
+            <div className="stat">
+              <div className="n">{totalTests}</div>
+              <div className="l">tests, all offline</div>
+            </div>
+            <div className="stat">
+              <div className="n">3</div>
+              <div className="l">Python versions in CI</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="projects">
+          <div className="filters">
+            <button
+              className="chip"
+              aria-pressed={active === "all"}
+              onClick={() => setActive("all")}
+            >
+              All
+            </button>
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                className="chip"
+                aria-pressed={active === c}
+                onClick={() => setActive(c)}
+              >
+                <span className="dot" style={{ background: CATEGORY_COLOR[c] }} />
+                {CATEGORY_LABELS[c]}
+              </button>
+            ))}
+            <span className="filter-count">
+              {visible.length} of {PROJECTS.length}
+            </span>
+          </div>
+
+          <div className="grid">
+            {visible.map((project) => (
+              <ProjectCard
+                key={project.slug}
+                project={project}
+                onOpen={setOpen}
+                baseUrl={baseUrl}
+              />
+            ))}
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div className="shell">
+          Built with React and Vite; deployed from this repository by GitHub
+          Actions. Terminal output shown on project pages is real — captured by
+          running the code, not written by hand.
+        </div>
+      </footer>
+
+      {open && (
+        <ProjectDetail project={open} onClose={() => setOpen(null)} baseUrl={baseUrl} />
+      )}
+    </>
+  );
+}

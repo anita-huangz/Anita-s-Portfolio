@@ -22,6 +22,10 @@ jobs:
           - ai-platform-projects/sec-filing-intelligence
           - software-engineer-projects/earnings-drift-tracker
           - software-engineer-projects/factor-based-portfolio-simulator
+          - software-engineer-projects/card-game-system
+          - software-engineer-projects/course-catalog-scheduling-system
+          - software-engineer-projects/performance-optimization
+          - software-engineer-projects/web-crawler-and-search-engine
     defaults:
       run:
         working-directory: ${{ matrix.project }}
@@ -47,6 +51,23 @@ jobs:
         # uses its replay provider and fake data clients; the two quantitative
         # projects run on synthetic price paths.
         run: pytest -q
+
+  site:
+    name: portfolio site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npx tsc -b --noEmit
+      - run: npm run build
 
   web:
     name: web UI
