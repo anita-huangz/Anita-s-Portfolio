@@ -372,6 +372,52 @@ def generate_card_golden() -> None:
     write("cards-golden.json", {"cases": cases})
 
 
+def generate_advisor_golden() -> None:
+    """Exactly-computed discard values, for the TypeScript port to match.
+
+    Only the exact cases: zero, one and two discards enumerate every possible
+    draw, so the answer is a number and not a sample. The sampled path cannot
+    be cross-checked at all -- a different RNG draws different cards -- so the
+    port tests that one for convergence against full enumeration instead.
+    """
+    from card_game import evaluate_discard, parse_hand
+    from card_game.hand import HAND_SCORES, score_cards
+
+    hands = {
+        "flush draw": "Ah Kh 9h 4h 7c 7s 2d",
+        "trips": "Qh Qc Qs 8d 5c 3h 2s",
+        "royal draw": "Ah Kh Qh Jh 7c 7s 2d",
+        "made straight": "5c 6d 7h 8s 9c Kd 2s",
+        "nothing": "2c 5d 8h Js Kc 3h 7s",
+    }
+
+    cases = []
+    for label, text in hands.items():
+        cards = parse_hand(text)
+        for positions in ([], [6], [0], [5, 6], [0, 1]):
+            outcome = evaluate_discard(cards, set(positions))
+            cases.append(
+                {
+                    "label": label,
+                    "hand": [
+                        {"suit": c.suit.value, "rank": c.rank} for c in cards
+                    ],
+                    "currentRank": score_cards(cards).value,
+                    "currentPoints": HAND_SCORES[score_cards(cards)],
+                    "positions": sorted(positions),
+                    "expectedPoints": outcome.expected_points,
+                    "draws": outcome.draws,
+                    "exact": outcome.exact,
+                    "probabilityOfScoring": outcome.probability_of_scoring,
+                    "distribution": {
+                        rank.value: p for rank, p in outcome.distribution.items()
+                    },
+                }
+            )
+
+    write("advisor-golden.json", {"cases": cases})
+
+
 def generate_trie_golden() -> None:
     from trie_search import Trie
 
@@ -400,12 +446,297 @@ def generate_trie_golden() -> None:
     )
 
 
+#: A miniature crawl. Realistic enough that the ranking has something to say:
+#: page lengths differ by 10x, and "park" appears on every page, which is what
+#: makes the IDF floor visible rather than theoretical.
+SEARCH_PAGES: dict[str, str] = {
+    "/parks-directory": """
+        Park directory. Every park in the city, listed by neighbourhood.
+        Lincoln Park, Grant Park, Humboldt Park, Douglass Park, Jackson Park,
+        Washington Park, Garfield Park, Columbus Park, Marquette Park.
+        Each park entry lists opening hours, whether the park allows dogs,
+        park district contact details, and nearby parking. Use the park
+        finder to search parks by name, or browse every park on the map.
+        Park hours vary by season. Dog owners should check the park rules
+        page before visiting any park with a dog.
+    """,
+    "/dog-park-rules": """
+        Dog park rules. Dogs must be leashed outside the designated dog
+        park area. Inside the dog park, dogs may run off leash. Owners are
+        responsible for their dog at all times. Clean up after your dog.
+        Aggressive dogs will be removed from the dog park. The dog park
+        closes at dusk. Dog licences are required. One dog per owner in the
+        small dog enclosure.
+    """,
+    "/park-hours": """
+        Park hours. Most parks open at six in the morning and close at
+        eleven at night. Park field houses keep separate hours. Check the
+        park directory for hours at a specific park.
+    """,
+    "/about": """
+        About the park district. The park district maintains public parks,
+        beaches, and field houses across the city. We employ gardeners,
+        lifeguards, and recreation staff. Our mission is to provide clean,
+        safe, open space for every resident. The district was founded in
+        eighteen sixty nine. Read about our history, our budget, our board
+        of commissioners, and how the district is funded. Contact the
+        district office for records requests, permits for events in a park,
+        volunteer opportunities, employment, accessibility services, and
+        general enquiries about programmes, facilities, and planning.
+    """,
+    "/contact": """
+        Contact us. Call the district office or send an email. Office hours
+        are weekdays only.
+    """,
+}
+
+
+def generate_search_index() -> None:
+    """A ranked index built by the real crawler code, plus golden scores.
+
+    The demo ranks in the browser, so the browser needs the postings and page
+    lengths -- and a golden set of scored queries to prove the TypeScript
+    agrees with the Python that produced them.
+    """
+    import re
+
+    from trie_search.crawler import build_search_index
+
+    words = {
+        url: re.findall(r"[a-z]+", text.lower())
+        for url, text in SEARCH_PAGES.items()
+    }
+    index = build_search_index(words)
+
+    postings = {
+        term: dict(posting.counts)
+        for term, posting in index.trie.items()
+        if hasattr(posting, "counts")
+    }
+
+    queries = ["park", "dog", "dogs", "hours", "park hours", "par*", "d?g", "zebra"]
+    cases = []
+    for query in queries:
+        hits = index.search(query, require_all=True, limit=10)
+        cases.append(
+            {
+                "query": query,
+                "hits": [
+                    {"url": h.url, "score": h.score, "matched": h.matched}
+                    for h in hits
+                ],
+            }
+        )
+
+    write(
+        "search-index.json",
+        {
+            "lengths": dict(index.corpus.lengths),
+            "postings": postings,
+            "excerpts": {
+                url: " ".join(text.split())[:180] + "..."
+                for url, text in SEARCH_PAGES.items()
+            },
+            "cases": cases,
+        },
+    )
+
+
+def generate_solver_golden() -> None:
+    """Schedules the Python solver found, for the TypeScript port to match.
+
+    The port has to agree on the *whole* answer -- which schedules, in which
+    order, at what cost, and whether the search proved optimality. A pruning
+    bound that loses the optimum still returns a plausible schedule, so
+    comparing only the first result would miss it.
+    """
+    from course_catalog import Catalog, Preferences, parse_time, search
+    from course_catalog.meeting import Day
+
+    catalog = Catalog.bundled()
+
+    scenarios = [
+        {"name": "three, no preferences", "size": 3, "kwargs": {}, "prefs": {}},
+        {
+            "name": "three, mornings off",
+            "size": 3,
+            "kwargs": {},
+            "prefs": {"no_earlier_than": parse_time("10:00am")},
+        },
+        {
+            "name": "four, Algorithms required, no Friday",
+            "size": 4,
+            "kwargs": {"required": ["MPCS 55001"]},
+            "prefs": {
+                "days_off": frozenset({Day.FRIDAY}),
+                "no_earlier_than": parse_time("10:00am"),
+            },
+        },
+        {
+            "name": "four, strict days off",
+            "size": 4,
+            "kwargs": {},
+            "prefs": {
+                "days_off": frozenset({Day.FRIDAY, Day.SATURDAY, Day.SUNDAY}),
+                "require_days_off": True,
+            },
+        },
+        {
+            "name": "two, exact section required",
+            "size": 2,
+            "kwargs": {"required": ["MPCS 55001-2"]},
+            "prefs": {},
+        },
+        {
+            "name": "three from a shortlist",
+            "size": 3,
+            "kwargs": {
+                "among": ["MPCS 53001", "MPCS 51046", "MPCS 52560", "MPCS 51400"]
+            },
+            "prefs": {},
+        },
+        {
+            "name": "gaps ignored",
+            "size": 3,
+            "kwargs": {},
+            "prefs": {"minimize_gaps": False},
+        },
+        {
+            "name": "days ignored",
+            "size": 3,
+            "kwargs": {},
+            "prefs": {"minimize_days": False},
+        },
+        {
+            "name": "instructor preference",
+            "size": 3,
+            "kwargs": {},
+            "prefs": {"preferred_instructors": frozenset({"Chaudhary"})},
+        },
+        {"name": "impossible size", "size": 40, "kwargs": {}, "prefs": {}},
+    ]
+
+    cases = []
+    for scenario in scenarios:
+        result = search(
+            catalog,
+            scenario["size"],
+            preferences=Preferences(**scenario["prefs"]),
+            limit=5,
+            node_budget=10**9,
+            **scenario["kwargs"],
+        )
+        prefs = scenario["prefs"]
+        cases.append(
+            {
+                "name": scenario["name"],
+                "size": scenario["size"],
+                "required": list(scenario["kwargs"].get("required", [])),
+                "among": scenario["kwargs"].get("among"),
+                "preferences": {
+                    "noEarlierThan": prefs.get("no_earlier_than"),
+                    "noLaterThan": prefs.get("no_later_than"),
+                    "daysOff": sorted(int(d) for d in prefs.get("days_off", ())),
+                    "requireDaysOff": prefs.get("require_days_off", False),
+                    "preferredInstructors": sorted(
+                        prefs.get("preferred_instructors", ())
+                    ),
+                    "minimizeDays": prefs.get("minimize_days", True),
+                    "minimizeGaps": prefs.get("minimize_gaps", True),
+                },
+                "provenOptimal": result.proven_optimal,
+                "options": [
+                    {
+                        "codes": [c.code for c in o.courses],
+                        "cost": o.cost,
+                        "breakdown": o.breakdown,
+                        "gapMinutes": o.gap_minutes,
+                        "daysUsed": [int(d) for d in o.days_used],
+                    }
+                    for o in result.options
+                ],
+            }
+        )
+
+    write("solver-golden.json", {"cases": cases})
+
+
+def generate_ranking_golden() -> None:
+    """BM25 scores from the Python, for the TypeScript port to match.
+
+    Ranking is arithmetic, so a port can be wrong by a hair and still look
+    plausible -- the ordering survives while the scores drift. These cases
+    pin the numbers, including the ones that exercise the IDF floor.
+    """
+    from trie_search.ranking import Corpus, Posting, rank
+
+    pages = {
+        "https://example.com/parks-directory": {
+            "park": 14, "dog": 3, "open": 2, "city": 5,
+        },
+        "https://example.com/dog-park-rules": {"park": 6, "dog": 9, "rules": 4},
+        "https://example.com/about": {"city": 2, "about": 8, "park": 1},
+        "https://example.com/contact": {"city": 1, "contact": 3},
+    }
+    lengths = {
+        "https://example.com/parks-directory": 120,
+        "https://example.com/dog-park-rules": 60,
+        "https://example.com/about": 200,
+        "https://example.com/contact": 20,
+    }
+
+    corpus = Corpus(lengths=dict(lengths))
+    postings: dict[str, Posting] = {}
+    for url, counts in pages.items():
+        for term, count in counts.items():
+            postings.setdefault(term, Posting()).counts[url] = count
+
+    queries = [
+        (["park"], False),
+        (["dog"], False),
+        # "city" is on 3 of 4 pages, which is where the IDF floor bites.
+        (["city"], False),
+        (["park", "dog"], False),
+        (["park", "dog"], True),
+        (["park", "missing"], True),
+        (["missing"], False),
+    ]
+
+    cases = []
+    for terms, require_all in queries:
+        subset = {t: postings[t] for t in terms if t in postings}
+        hits = rank(subset, corpus, require_all=require_all)
+        cases.append(
+            {
+                "terms": terms,
+                "requireAll": require_all,
+                "hits": [
+                    {"url": h.url, "score": h.score, "matched": h.matched}
+                    for h in hits
+                ],
+            }
+        )
+
+    write(
+        "ranking-golden.json",
+        {
+            "lengths": lengths,
+            "postings": {t: p.counts for t, p in postings.items()},
+            "cases": cases,
+        },
+    )
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("generating demo data:")
     generate_catalog_data()
     generate_card_golden()
+    generate_advisor_golden()
     generate_trie_golden()
+    generate_ranking_golden()
+    generate_solver_golden()
+    generate_search_index()
     generate_factor_data()
     generate_earnings_data()
     print("done")

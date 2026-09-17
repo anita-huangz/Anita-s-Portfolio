@@ -9,30 +9,41 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
-from .crawler import build_index, crawl_site, index_pages
+from .crawler import SearchIndex, build_index, build_search_index, crawl_site
 from .fetch import Fetcher
+from .ranking import Hit
 from .trie import Trie
 
 console = Console()
 
 
-def show_results(query: str, matches: list[tuple[str, set[str]]]) -> None:
-    if not matches:
+def show_results(query: str, hits: list[Hit]) -> None:
+    """Ranked results, best first, each explaining why it matched."""
+    if not hits:
         console.print(f"[yellow]No matches for {query!r}.[/yellow]")
         return
 
     table = Table(title=f"Results for {query!r}")
-    table.add_column("Word", style="cyan", no_wrap=True)
-    table.add_column("Pages", justify="right", style="green")
-    table.add_column("URL(s)", style="magenta")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Score", justify="right", style="green")
+    table.add_column("Page", style="magenta")
+    table.add_column("Matched", style="cyan")
 
-    for word, urls in matches:
-        table.add_row(word, str(len(urls)), "\n".join(sorted(urls)))
+    for position, hit in enumerate(hits, 1):
+        terms = ", ".join(
+            f"{term} x{count}" for term, count in sorted(hit.matched.items())
+        )
+        table.add_row(str(position), f"{hit.score:.3f}", hit.url, terms)
     console.print(table)
 
 
 def search(index: Trie, query: str) -> list[tuple[str, set[str]]]:
-    """Wildcard search when the query contains '?', otherwise prefix search."""
+    """Unranked lookup over a set-valued index.
+
+    Retained because it is the simplest thing that answers "which pages
+    contain this word". `SearchIndex.search` is what the CLI uses -- a result
+    list with no ordering is not much use once there is more than a handful.
+    """
     query = query.strip().lower()
     if not query:
         return []
@@ -41,14 +52,16 @@ def search(index: Trie, query: str) -> list[tuple[str, set[str]]]:
     return sorted((word, index[word]) for word in index.keys_with_prefix(query))
 
 
-def interactive(index: Trie) -> None:
-    console.print("[bold blue]Search[/bold blue]  ('?' is a single-character wildcard, "
-                  "blank to quit)\n")
+def interactive(index: SearchIndex) -> None:
+    console.print(
+        "[bold blue]Search[/bold blue]  (space-separated words are ANDed, "
+        "'?' matches one character, trailing '*' matches a prefix; blank to quit)\n"
+    )
     while True:
         query = Prompt.ask("query", default="").strip()
         if not query:
             break
-        show_results(query, search(index, query))
+        show_results(query, index.search(query))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,11 +101,14 @@ def main(argv: list[str] | None = None) -> int:
         console.print("[red]Nothing was indexed.[/red]")
         return 1
 
-    index = index_pages(result.pages)
-    console.print(f"Indexed [bold]{len(index):,}[/bold] distinct words.\n")
+    index = build_search_index(result.pages)
+    console.print(
+        f"Indexed [bold]{len(index):,}[/bold] distinct words across "
+        f"{index.pages} page(s), ranked with BM25.\n"
+    )
 
     if args.query:
-        show_results(args.query, search(index, args.query))
+        show_results(args.query, index.search(args.query))
     else:
         interactive(index)
     return 0

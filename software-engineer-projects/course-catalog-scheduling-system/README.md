@@ -15,6 +15,97 @@ Enrolled (1):
 
 Anything overlapping what you're already enrolled in is filtered out.
 
+## It builds schedules now, not just checks them
+
+Filtering answers "what still fits?" The question a student actually asks is
+the other way round: *given these courses I need and these hours I refuse,
+what are my options?* That is a search, not a filter.
+
+```
+$ course-catalog --build 4 --require "MPCS 55001,MPCS 53001" \
+                 --days-off "Fri,Sat,Sun" --strict-days-off \
+                 --no-earlier-than 10:00am --options 2
+
+2 best schedule(s) of 4, cheapest first:
+
+1. MPCS 55001-1, MPCS 53001-1, MPCS 51046-1, MPCS 52560-1
+  cost 145
+    Tue  14:00-16:50 MPCS 55001-1, 17:30-20:30 MPCS 53001-1
+    Wed  14:30-17:20 MPCS 51046-1, 17:30-20:30 MPCS 52560-1
+    why: extra_days 120, gaps 25
+
+searched 320 nodes
+```
+
+Four courses, two days on campus, nothing before 10am, 25 idle minutes.
+
+Every preference is scored in one unit — **minutes of annoyance** — so the
+total is interpretable instead of an arbitrary weighted sum, and `why:` names
+what actually drove it. Preferences are soft by default: a hard "nothing before
+10am" can make a schedule impossible and report nothing, which is less useful
+than being shown the 9:30 option with its cost spelled out. `--strict-days-off`
+opts into a hard constraint where you want one.
+
+### Sections are alternatives, not additions
+
+`MPCS 55001-1` and `MPCS 55001-2` are the same Algorithms course at two
+different times. A schedule may contain either, never both — and picking *which
+section* is most of the value, because no filter over the catalog can do it. If
+a 6:30 seminar rules out the 6:00 section, only a search will switch you to the
+7:30 one.
+
+This also surfaced a bug in the old `build_schedule`: it checked times and
+nothing else, and two sections of one course deliberately *don't* overlap, so
+
+```python
+build_schedule(catalog, ["MPCS 55001-1", "MPCS 55001-2"])
+```
+
+happily enrolled you in Algorithms twice, under two different instructors. It
+now rejects that.
+
+### Why it is branch-and-bound
+
+Choosing 4 courses from a 164-section catalog is 29 million combinations. Two
+prunes cut it down:
+
+1. **Conflicts.** A partial schedule that already clashes cannot be rescued by
+   adding to it, so the branch dies at depth 2 instead of depth 4.
+2. **Cost.** Every penalty except gaps only grows as courses are added, so a
+   partial schedule's accumulated penalty is a lower bound on anything below
+   it, and the branch can be cut the moment that bound reaches the cost of the
+   worst schedule currently kept.
+
+Gaps are the subtle term. They are **not** monotone — inserting a class into an
+idle afternoon *reduces* total gap time by the length of the class — so a bound
+that assumed gaps only grow would prune the gap-filling schedule, which is
+usually the best one. The admissible version subtracts the most the remaining
+picks could possibly fill. There's a test for exactly that case.
+
+Measured on a synthetic 164-section, 80-course catalog, best 4-course schedule,
+no preferences:
+
+| | time | |
+|---|---:|---|
+| conflict pruning only | 137 s | |
+| + cost bound, exhaustive | 19 s | 4.9M nodes, proven optimal |
+| + default 200k node budget | 0.8 s | same cheapest cost, not proven |
+
+The bundled 30-course catalog searches in 320 nodes. A test cross-checks the
+bound against brute force, because a pruning bug that loses the optimum is
+invisible — you still get a plausible schedule.
+
+### It says whether the answer is proven
+
+`search()` returns a `SearchResult` carrying `proven_optimal`. "These are the 5
+best" and "these are the 5 best I had time to find" are different claims, and
+reporting the second as the first would be the real bug. Two rules keep the
+anytime behaviour honest: the budget never fires before at least one complete
+schedule exists — an anytime algorithm that answers *nothing* is worse than a
+slow one — and past a hard ceiling it gives up anyway, because the constraints
+may simply be unsatisfiable and proving that can cost the whole tree.
+
+
 ## Run it
 
 ```bash
@@ -26,7 +117,12 @@ course-catalog --keyword algorithms              # title or instructor
 course-catalog --day tuesday                     # by day
 course-catalog --schedule "MPCS 51040-1" --free  # what still fits
 
-pytest -q       # 52 tests
+# build a schedule rather than filter one
+course-catalog --build 3 --no-earlier-than 10:00am --days-off Fri
+course-catalog --build 4 --require "MPCS 55001" --among "MPCS 53001,MPCS 51046,MPCS 52560,MPCS 51400"
+course-catalog --build 3 --prefer-instructor "Chaudhary" --options 5
+
+pytest -q       # 84 tests
 ruff check .
 ```
 
@@ -36,6 +132,7 @@ ruff check .
 src/course_catalog/
   meeting.py   Day, Meeting, time parsing, overlap   (pure)
   catalog.py   Course, Catalog, search, scheduling   (pure)
+  solver.py    preferences, scoring, branch-and-bound  (pure)
   cli.py       argument parsing and output
   data/        the bundled catalog CSV
 ```

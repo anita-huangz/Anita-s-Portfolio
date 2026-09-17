@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from earnings_drift import EarningsReport, Stock, analyze_drift, drift_for_event
-from earnings_drift.drift import summarize, surprise_correlation
+from earnings_drift.drift import (
+    hit_rate,
+    pool,
+    spread_test,
+    summarize,
+    surprise_buckets,
+    surprise_correlation,
+)
 from earnings_drift.report import format_summary
 from earnings_drift.sources import MissingAPIKey, fmp_api_key, parse_surprises
 
@@ -127,10 +135,10 @@ def test_analyze_produces_one_row_per_measurable_event():
     stock.add_earnings(EarningsReport.from_iso("2023-01-10", 0.9, 1.0))
     stock.add_earnings(EarningsReport.from_iso("2019-01-01", 1.0, 1.0))  # too early
 
-    drift = analyze_drift(stock, horizons=(1, 5))
+    drift = analyze_drift(stock, horizons=(1, 5), pre_window=0)
     assert len(drift) == 2
     assert list(drift.columns) == [
-        "event_date", "baseline_date", "surprise_pct", "1d", "5d"
+        "event_date", "baseline_date", "surprise_pct", "ticker", "1d", "5d"
     ]
 
 
@@ -253,5 +261,161 @@ def test_summary_reports_counts_means_and_correlation():
         stock.add_earnings(EarningsReport.from_iso(day, actual, 1.0))
     text = format_summary(analyze_drift(stock, horizons=(1, 5)), horizons=(1, 5))
     assert "3 earnings events" in text
-    assert "Average post-earnings drift" in text
+    # Labelled "raw" now that market-adjusted drift is also reported.
+    assert "Average raw drift" in text
     assert "correlation" in text.lower()
+
+
+# --------------------------------------------------------------------------- #
+# Market adjustment
+# --------------------------------------------------------------------------- #
+
+
+def test_abnormal_return_strips_out_the_market_move():
+    """A stock that exactly tracked the market has zero abnormal return.
+
+    Without this adjustment the project reports beta as if it were drift.
+    """
+    stock_prices = prices([100.0, 110.0, 120.0])
+    bench = prices([200.0, 220.0, 240.0])  # identical percentage moves
+    report = EarningsReport.from_iso("2023-01-02", 1.2, 1.0)
+
+    row = drift_for_event(stock_prices, report, horizons=(1, 2), benchmark=bench)
+    assert row.returns[1] == pytest.approx(0.10)
+    assert row.abnormal[1] == pytest.approx(0.0, abs=1e-12)
+    assert row.abnormal[2] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_abnormal_return_isolates_outperformance():
+    stock_prices = prices([100.0, 115.0])
+    bench = prices([100.0, 105.0])
+    report = EarningsReport.from_iso("2023-01-02", 1.2, 1.0)
+    row = drift_for_event(stock_prices, report, horizons=(1,), benchmark=bench)
+    assert row.returns[1] == pytest.approx(0.15)
+    assert row.abnormal[1] == pytest.approx(0.10)
+
+
+def test_abnormal_return_survives_a_benchmark_missing_a_session():
+    """Aligning by position rather than date would offset the windows."""
+    stock_prices = prices([100.0, 110.0, 121.0], start="2023-01-02")
+    bench = prices([100.0, 110.0, 121.0], start="2023-01-02").drop(
+        pd.Timestamp("2023-01-03")
+    )
+    report = EarningsReport.from_iso("2023-01-02", 1.2, 1.0)
+    row = drift_for_event(stock_prices, report, horizons=(1,), benchmark=bench)
+    # The benchmark's next available session is a day later, so the windows
+    # differ -- but the baseline is still located by date, not by index slot.
+    assert row.baseline_date == date(2023, 1, 2)
+    assert 1 in row.abnormal
+
+
+def test_no_benchmark_means_no_abnormal_columns():
+    stock = build_stock()
+    stock.add_earnings(EarningsReport.from_iso("2023-01-03", 1.2, 1.0))
+    drift = analyze_drift(stock, horizons=(1,))
+    assert not any(c.startswith("abn_") for c in drift.columns)
+
+
+def test_run_up_measures_the_move_into_the_announcement():
+    frame = prices([100.0, 105.0, 110.0, 121.0], start="2023-01-02")
+    # Sessions are 01-02, 01-03, 01-04, 01-05; the event lands on the last.
+    report = EarningsReport.from_iso("2023-01-05", 1.2, 1.0)
+    row = drift_for_event(frame, report, horizons=(), pre_window=2)
+    # Announcement close 121 against 105 two sessions earlier.
+    assert row.run_up == pytest.approx(121 / 105 - 1)
+
+
+def test_run_up_is_none_without_enough_prior_history():
+    frame = prices([100.0, 110.0], start="2023-01-02")
+    report = EarningsReport.from_iso("2023-01-02", 1.2, 1.0)
+    row = drift_for_event(frame, report, horizons=(1,), pre_window=5)
+    assert row.run_up is None
+
+
+# --------------------------------------------------------------------------- #
+# Pooling and cross-sectional tests
+# --------------------------------------------------------------------------- #
+
+
+def synthetic_drift(n: int, effect: float, seed: int = 0) -> pd.DataFrame:
+    """Events whose 5-day abnormal return is `effect` x surprise plus noise."""
+    rng = np.random.default_rng(seed)
+    surprise = rng.normal(0, 10, n)
+    noise = rng.normal(0, 0.02, n)
+    return pd.DataFrame(
+        {
+            "event_date": pd.bdate_range("2020-01-01", periods=n),
+            "surprise_pct": surprise,
+            "abn_5d": effect * surprise / 100 + noise,
+        }
+    )
+
+
+def test_pool_stacks_frames_and_sorts_by_date():
+    a = synthetic_drift(10, 0.0, seed=1)
+    b = synthetic_drift(10, 0.0, seed=2)
+    pooled = pool([a, b])
+    assert len(pooled) == 20
+    assert pooled["event_date"].is_monotonic_increasing
+
+
+def test_pool_ignores_empty_frames():
+    assert len(pool([synthetic_drift(5, 0.0), pd.DataFrame()])) == 5
+
+
+def test_pool_of_nothing_is_empty():
+    assert pool([]).empty
+
+
+def test_buckets_are_ordered_by_surprise():
+    buckets = surprise_buckets(synthetic_drift(200, 0.3), horizon=5)
+    assert len(buckets) == 5
+    surprises = [b.mean_surprise for b in buckets]
+    assert surprises == sorted(surprises)
+
+
+def test_buckets_detect_a_real_effect():
+    """With a genuine relationship, drift should rise across the groups."""
+    buckets = surprise_buckets(synthetic_drift(400, 0.5, seed=7), horizon=5)
+    assert buckets[-1].mean_return > buckets[0].mean_return
+    spread = spread_test(synthetic_drift(400, 0.5, seed=7), horizon=5)
+    assert spread.spread > 0
+    assert spread.significant
+    assert spread.monotonic
+
+
+def test_buckets_report_no_effect_when_there_is_none():
+    """The important case: the test must fail to find what is not there."""
+    frame = synthetic_drift(400, 0.0, seed=11)
+    spread = spread_test(frame, horizon=5)
+    assert spread is not None
+    assert not spread.significant
+
+
+def test_buckets_need_enough_events_per_group():
+    assert surprise_buckets(synthetic_drift(8, 0.5), horizon=5) == []
+
+
+def test_buckets_return_nothing_for_a_missing_horizon():
+    assert surprise_buckets(synthetic_drift(200, 0.5), horizon=99) == []
+
+
+def test_hit_rate_is_near_a_half_with_no_effect():
+    rate = hit_rate(synthetic_drift(600, 0.0, seed=3), horizon=5)
+    assert 0.4 < rate < 0.6
+
+
+def test_hit_rate_is_high_with_a_strong_effect():
+    rate = hit_rate(synthetic_drift(600, 3.0, seed=3), horizon=5)
+    assert rate > 0.8
+
+
+def test_hit_rate_ignores_zero_surprises():
+    frame = synthetic_drift(50, 1.0)
+    frame.loc[:10, "surprise_pct"] = 0.0
+    assert hit_rate(frame, horizon=5) is not None
+
+
+def test_report_states_when_the_effect_is_absent():
+    text = format_summary(synthetic_drift(400, 0.0, seed=5), horizons=(1, 5, 10))
+    assert "does not hold up" in text or "Not distinguishable" in text

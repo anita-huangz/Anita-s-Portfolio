@@ -22,7 +22,12 @@ from factor_sim import (
     zscore,
 )
 from factor_sim.attribution import align, attribute
-from factor_sim.metrics import format_metrics
+from factor_sim.metrics import (
+    benchmark_metrics,
+    drawdown_periods,
+    format_metrics,
+    turnover,
+)
 
 
 def price_frame(series: dict[str, list[float]], start: str = "2021-01-04") -> pd.DataFrame:
@@ -452,3 +457,181 @@ def test_attribution_needs_enough_observations():
     nav = nav_frame([100.0, 101.0, 102.0, 103.0])
     with pytest.raises(ValueError, match="observations"):
         attribute(nav, ff_frame(4))
+
+
+# --------------------------------------------------------------------------- #
+# Benchmark-relative metrics
+# --------------------------------------------------------------------------- #
+
+
+def series_from(returns: list[float], start: float = 100.0) -> pd.Series:
+    values, level = [], start
+    for r in returns:
+        level *= 1 + r
+        values.append(level)
+    return pd.Series(
+        [start, *values], index=pd.bdate_range("2021-01-04", periods=len(values) + 1)
+    )
+
+
+def test_a_strategy_identical_to_its_benchmark_has_beta_one_and_no_alpha():
+    rng = np.random.default_rng(0)
+    moves = list(rng.normal(0.0004, 0.01, 300))
+    bench = series_from(moves)
+    nav = pd.DataFrame({"NAV": bench.to_numpy()}, index=bench.index)
+
+    m = benchmark_metrics(nav, bench)
+    assert m["beta"] == pytest.approx(1.0, abs=1e-6)
+    assert m["alpha"] == pytest.approx(0.0, abs=1e-9)
+    assert m["tracking_error"] == pytest.approx(0.0, abs=1e-9)
+    assert m["excess_total_return"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_levered_strategy_has_beta_two():
+    rng = np.random.default_rng(1)
+    moves = list(rng.normal(0.0003, 0.01, 400))
+    bench = series_from(moves)
+    nav = pd.DataFrame({"NAV": series_from([2 * r for r in moves]).to_numpy()},
+                       index=bench.index)
+    assert benchmark_metrics(nav, bench)["beta"] == pytest.approx(2.0, abs=0.02)
+
+
+def test_a_strategy_beaten_by_its_benchmark_reports_negative_excess():
+    """The question a standalone return figure cannot answer."""
+    rng = np.random.default_rng(2)
+    moves = [0.002 + r for r in rng.normal(0, 0.005, 300)]
+    bench = series_from(moves)
+    # Same shape, consistently weaker.
+    nav = pd.DataFrame({"NAV": series_from([r - 0.0008 for r in moves]).to_numpy()},
+                       index=bench.index)
+
+    m = benchmark_metrics(nav, bench)
+    assert m["strategy_total_return"] > 0      # looks like a winner alone
+    assert m["excess_total_return"] < 0        # but lost to the index
+    assert m["alpha"] < 0
+    assert m["information_ratio"] < 0
+
+
+def test_capture_ratios_separate_upside_from_downside():
+    bench = series_from([0.02, -0.02, 0.02, -0.02] * 40)
+    # Follows the upside fully, only half the downside.
+    nav = pd.DataFrame(
+        {"NAV": series_from([0.02, -0.01, 0.02, -0.01] * 40).to_numpy()},
+        index=bench.index,
+    )
+    m = benchmark_metrics(nav, bench)
+    assert m["up_capture"] == pytest.approx(1.0, abs=0.05)
+    assert m["down_capture"] == pytest.approx(0.5, abs=0.05)
+
+
+def test_benchmark_metrics_refuse_too_little_overlap():
+    bench = series_from([0.01] * 10)
+    nav = pd.DataFrame({"NAV": bench.to_numpy()}, index=bench.index)
+    with pytest.raises(ValueError, match="30 overlapping"):
+        benchmark_metrics(nav, bench)
+
+
+def test_benchmark_metrics_use_only_shared_dates():
+    rng = np.random.default_rng(3)
+    # Benchmark covers a longer span than the strategy.
+    bench = series_from(list(rng.normal(0, 0.01, 250)))
+    short = bench.iloc[:150]
+    nav = pd.DataFrame({"NAV": short.to_numpy()}, index=short.index)
+
+    m = benchmark_metrics(nav, bench)
+    assert m["overlapping_days"] == len(short) - 1     # one return per date pair
+    assert m["beta"] == pytest.approx(1.0, abs=1e-6)   # the shared slice is identical
+
+
+# --------------------------------------------------------------------------- #
+# Drawdown periods
+# --------------------------------------------------------------------------- #
+
+
+def test_drawdown_period_records_peak_trough_and_recovery():
+    nav = nav_frame([100, 120, 90, 100, 130])
+    periods = drawdown_periods(nav)
+    assert len(periods) == 1
+    d = periods[0]
+    assert d.depth == pytest.approx(0.25)          # 120 -> 90
+    assert d.peak_date == nav.index[1]
+    assert d.trough_date == nav.index[2]
+    assert d.recovered
+    assert d.recovery_days is not None
+
+
+def test_an_unrecovered_drawdown_has_no_recovery_date():
+    nav = nav_frame([100, 150, 120, 110])
+    d = drawdown_periods(nav)[0]
+    assert not d.recovered
+    assert d.recovery_days is None
+    assert d.depth == pytest.approx((150 - 110) / 150)
+
+
+def test_drawdowns_are_ranked_deepest_first():
+    nav = nav_frame([100, 110, 105, 120, 60, 120, 125])
+    periods = drawdown_periods(nav)
+    depths = [d.depth for d in periods]
+    assert depths == sorted(depths, reverse=True)
+    assert depths[0] == pytest.approx(0.5)         # 120 -> 60
+
+
+def test_drawdown_periods_distinguish_depth_from_duration():
+    """A single max-drawdown number cannot separate these two."""
+    quick = nav_frame([100, 70, 100] + [100] * 30)
+    slow = nav_frame([100, 70] + [72] * 30 + [100])
+    assert drawdown_periods(quick)[0].depth == pytest.approx(
+        drawdown_periods(slow)[0].depth
+    )
+    assert drawdown_periods(slow)[0].drawdown_days >= drawdown_periods(quick)[0].drawdown_days
+
+
+def test_a_monotonic_rise_has_no_drawdowns():
+    assert drawdown_periods(nav_frame([100, 110, 120])) == []
+
+
+def test_drawdown_periods_are_capped():
+    values = []
+    for i in range(20):
+        values += [100 + i, 100 + i - 5, 100 + i]
+    assert len(drawdown_periods(nav_frame(values), top=3)) == 3
+
+
+# --------------------------------------------------------------------------- #
+# Turnover
+# --------------------------------------------------------------------------- #
+
+
+def weights_frame(rows: list[dict[str, float]]) -> pd.DataFrame:
+    return pd.DataFrame(rows, index=pd.bdate_range("2021-01-04", periods=len(rows), freq="21D"))
+
+
+def test_holding_the_same_book_is_zero_turnover():
+    w = weights_frame([{"A": 0.5, "B": 0.5}] * 4)
+    assert turnover(w)["average_turnover"] == pytest.approx(0.0)
+
+
+def test_replacing_the_book_entirely_is_full_turnover():
+    w = weights_frame([{"A": 1.0, "B": 0.0}, {"A": 0.0, "B": 1.0}])
+    # One-way: sold all of A and bought all of B, so 100% of the book moved.
+    assert turnover(w)["average_turnover"] == pytest.approx(1.0)
+
+
+def test_turnover_annualises_from_the_rebalance_cadence():
+    w = weights_frame([{"A": 1.0, "B": 0.0}, {"A": 0.0, "B": 1.0}] * 6)
+    stats = turnover(w)
+    assert stats["annualised_turnover"] > stats["average_turnover"]
+    assert stats["rebalances"] == 12
+
+
+def test_turnover_of_a_single_rebalance_is_zero():
+    assert turnover(weights_frame([{"A": 1.0}]))["average_turnover"] == 0.0
+
+
+def test_turnover_handles_a_name_entering_the_universe():
+    w = weights_frame([{"A": 1.0}, {"A": 0.5, "B": 0.5}])
+    assert turnover(w)["average_turnover"] == pytest.approx(0.5)
+
+
+def test_turnover_of_an_empty_frame_is_zero():
+    assert turnover(pd.DataFrame())["rebalances"] == 0.0

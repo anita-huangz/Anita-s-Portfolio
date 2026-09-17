@@ -9,14 +9,16 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**430 tests.** I've noted what each project gets wrong as well as what it does,
-because the bugs are usually the more interesting half.
+**706 tests** — 635 in Python, 71 cross-checking the site's TypeScript ports
+against fixtures the Python generated. I've noted what each project gets wrong
+as well as what it does, because the bugs are usually the more interesting
+half.
 
 ---
 
 ## AI Platform
 
-### ✅ [SEC Filing Intelligence](ai-platform-projects/sec-filing-intelligence) · 167 tests
+### ✅ [SEC Filing Intelligence](ai-platform-projects/sec-filing-intelligence) · 176 tests
 
 Ask a question about a public company and get an answer with every claim cited
 to a specific SEC filing — then independently verified against the evidence that
@@ -66,16 +68,19 @@ Docker · React · TypeScript**
 
 Ordered by engineering complexity — interacting subsystems, algorithmic depth,
 and how much the correctness depends on domain reasoning. Not line count: the
-last entry is the smallest project here and also the subtlest.
+last entry is the smallest project here and also the subtlest, and the one
+above it has the most tests.
 
-### ✅ [Factor Portfolio Simulator](software-engineer-projects/factor-based-portfolio-simulator) · 52 tests
+### ✅ [Factor Portfolio Simulator](software-engineer-projects/factor-based-portfolio-simulator) · 70 tests
 
 Point-in-time backtest of cross-sectional equity factor strategies, with
-Fama-French 3-factor attribution.
+Fama-French 3-factor attribution — reported **against a benchmark**, because a
+backtest that only quotes its own return cannot answer the first question
+anyone asks.
 
 Fixed a **look-ahead bias that overstated total return by 92 percentage
-points** — factors were computed once from the entire sample and reused at every
-rebalance, so the 2021 allocation was picked using 2024 returns.
+points** — factors were computed once from the entire sample and reused at
+every rebalance, so the 2021 allocation was picked using 2024 returns.
 [`examples/lookahead_demo.py`](software-engineer-projects/factor-based-portfolio-simulator/examples/lookahead_demo.py)
 reproduces both loops over identical prices:
 
@@ -84,15 +89,31 @@ reproduces both loops over identical prices:
 | total return | 2.85% | **95.43%** |
 | Sharpe | 0.14 | **1.42** |
 
-Also: performance metrics were computed on the last five rows of the backtest
-while describing three years.
+The report now carries beta, annualised alpha, tracking error, information
+ratio and up/down capture against SPY; drawdown *periods* with peak, trough
+and recovery dates, since a single max-drawdown number says nothing about time
+underwater; and turnover annualised from the real rebalance cadence, so the
+transaction costs it was already charging finally appear in the output. It also
+flags the way a factor backtest flatters itself: the default strategy beats SPY
+by 234 points while carrying 1.38× its market exposure, and says so.
 
 **Python · pandas · NumPy · statsmodels · yfinance**
 
-### ✅ [Trie Search](software-engineer-projects/web-crawler-and-search-engine) · 58 tests
+### ✅ [Trie Search](software-engineer-projects/web-crawler-and-search-engine) · 77 tests
 
 Crawls a website, indexes every word into a trie, searches by prefix or
-single-character wildcard.
+single-character wildcard — and **ranks** the results with BM25.
+
+The index used to map each word to the *set* of pages containing it and return
+that set alphabetically. That is retrieval without ranking: a page mentioning
+"park" once and a park directory mentioning it nineteen times were
+indistinguishable, and a two-word query had no way to prefer pages matching
+both. BM25 needs three things the set could not provide — term frequency, page
+length, and how many pages hold the term at all.
+
+The subtle part is the IDF floor. Without `max(idf, 0)`, a term appearing on
+more than half the pages scores *negative*, and a page improves its rank by
+**not** matching the query.
 
 `Trie.__iter__` yielded `(key, value)` tuples — and since `MutableMapping`
 builds `keys()`, `values()`, and `items()` on top of `__iter__`, all three
@@ -100,47 +121,117 @@ raised and `dict(trie)` didn't work. The class claimed a contract it failed.
 
 **Python · httpx · lxml · data structures**
 
-### ✅ [Course Catalog & Scheduling](software-engineer-projects/course-catalog-scheduling-system) · 52 tests
+### ✅ [Course Catalog & Scheduling](software-engineer-projects/course-catalog-scheduling-system) · 84 tests
 
-Searches a course catalog and builds a schedule that doesn't double-book you.
+Searches a course catalog and **builds** a schedule, rather than only checking
+one. Filtering answers "what still fits?" The question a student asks is the
+reverse: given these courses I need and these hours I refuse, what are my
+options? That's a search.
+
+Sections turned out to be the interesting part. `MPCS 55001-1` and
+`MPCS 55001-2` are the same Algorithms course at two different times, so they
+deliberately *don't* overlap — and `build_schedule`, which checked only times,
+happily enrolled you in Algorithms twice under two different instructors.
+
+The solver is branch-and-bound over sections, scoring preferences in one
+interpretable unit — minutes of annoyance. Gaps are the subtle term: they are
+**not** monotone, because inserting a class into an idle afternoon *reduces*
+total gap time, so a bound that assumed gaps only grow would prune the
+gap-filling schedule, which is usually the best one. On a 164-section catalog
+the search goes from 137 seconds to 19 exhaustive, or 0.8s inside a node
+budget; a test cross-checks the bound against brute force, because a pruning
+bug that loses the optimum still hands you a plausible schedule.
+
+It also reports whether its answer is *proven* optimal. "These are the 5 best"
+and "these are the 5 best I had time to find" are different claims.
+
 A meeting is a day plus a **half-open** interval, which is the whole conflict
 rule: a class ending at 7:30 and one starting at 7:30 are back to back, not a
-conflict.
-
-Prefix search was actually *substring* search, so `"530"` matched
+conflict. Prefix search was actually *substring* search, so `"530"` matched
 `MPCS 53014-1` via digits in the middle of the number.
 
 **Python · csv · interval logic**
 
-### ✅ [Card Game](software-engineer-projects/card-game-system) · 48 tests
+### ✅ [fastcache](software-engineer-projects/performance-optimization) · 67 tests
 
-A single-player poker-style draw game. Two scoring bugs, both from testing for
-an *exact* count in a seven-card hand: six- and seven-card flushes scored as
-nothing, and two triples scored as three-of-a-kind rather than a full house.
+An LRU cache decorator benchmarked against `functools`, plus a general `cached`
+decorator with TTL expiry and a choice of eviction policy.
+
+The original called `list.remove` on every cache hit — a linear scan on the one
+path a cache exists to make fast. Across cache sizes 128 → 32,768 the
+list-based hit path slows **8.7×** while this one stays flat at ~0.45µs.
+
+`lru_cache` answers *has this been computed?* A service needs *has this been
+computed recently enough?* Expiry needs no heap: every entry gets the same TTL,
+so deadline order is insertion order and the next entry to die is the front of
+the dict. An expired entry must not count as a hit — that inflates the number
+people judge the cache by — and it still occupies capacity, so eviction takes a
+dead entry before a live one.
+
+The project also shipped one eviction policy with no evidence it was the right
+one. It now measures LRU against LFU across five access patterns, and
+**neither wins everywhere:**
+
+| workload | LRU hit | LFU hit | winner |
+|---|---:|---:|---|
+| zipf (skewed) | 71.3% | 76.4% | LFU +5 pts |
+| uniform (no locality) | 10.1% | 10.1% | tie |
+| sequential scan | 0.0% | 0.0% | tie |
+| hot set + scans | 14.3% | 24.9% | **LFU +11 pts** |
+| shifting hot set | 96.4% | 10.7% | **LRU +86 pts** |
+
+LFU keeps a stable hot set that scans would flush out of an LRU. But when the
+hot set *moves*, the old keys carry counts the new ones can't reach — so a new
+key is the least frequently used thing in the cache and is evicted immediately,
+never cached at all. There's no decay, so it's permanent, and the benchmark
+shows what that costs rather than hiding it.
+
+**Python · threading · benchmarking**
+
+### ✅ [Card Game](software-engineer-projects/card-game-system) · 114 tests
+
+A single-player poker-style draw game — now with straights, and with an advisor
+that tells you what to throw away.
+
+**Straights were missing entirely,** which in a seven-card game is not a small
+omission: a straight is *more likely* than a flush, so hands that should have
+scored were scoring nothing and ending the run. Detecting one in seven cards
+needs duplicates collapsed first (a pair inside the run otherwise reads as a
+gap) and the ace valued at both ends without wrapping, so `A 2 3 4 5` counts
+and `K A 2 3 4` doesn't. Straight flushes are checked **per suit**, because
+"has a straight and has a flush" is a different question — `5♥ 6♦ 7♥ 8♠ 9♥ K♥
+2♥` holds both and is neither.
+
+The game used to ask for discards and give the player nothing to decide with.
+The advisor values all 120 legal discards, enumerating exactly where that's
+cheap (45 draws for one card, 990 for two) and sampling above it — and says
+which. Options within combined sampling error of the leader are reported as
+tied rather than ranked, because printing them 1st and 2nd would be reporting
+noise as a finding.
+
+Two earlier scoring bugs, both from testing for an *exact* count in a
+seven-card hand: six- and seven-card flushes scored as nothing, and two triples
+scored as three-of-a-kind rather than a full house.
 
 **Python · rich · OOP**
 
-### ✅ [Earnings Drift Tracker](software-engineer-projects/earnings-drift-tracker) · 29 tests
+### ✅ [Earnings Drift Tracker](software-engineer-projects/earnings-drift-tracker) · 47 tests
 
 Measures post-earnings-announcement drift against the size of the analyst
-surprise. Announcements landing on a non-trading day now fall back to the prior
-session's close; requiring an exact index match silently dropped a large and
-non-random slice of events.
+surprise — **as abnormal return**, not raw return, because a stock that rose 2%
+in a week the market rose 2% did not drift.
+
+Across 8 companies and 311 announcements the raw 10-day drift is +1.43% and the
+market-adjusted drift is **+0.43%** — two thirds of the apparent effect was
+just the market. The top-minus-bottom surprise quintile spread is +3.33%
+(t = +2.18), significant but **not monotonic**, and the report says so rather
+than quoting only the spread.
+
+Announcements landing on a non-trading day now fall back to the prior session's
+close; requiring an exact index match silently dropped a large and non-random
+slice of events.
 
 **Python · pandas · NumPy · REST APIs**
-
----
-
-### ✅ [fastcache — an O(1) LRU cache](software-engineer-projects/performance-optimization) · 24 tests
-
-An LRU cache decorator benchmarked against `functools` and against the
-list-based approach it replaced. The original called `list.remove` on every
-cache hit — a linear scan on the one path a cache exists to make fast.
-
-Across cache sizes 128 → 32,768 the list-based hit path slows **8.5×** while
-this one stays flat at ~0.45µs.
-
-**Python · threading · benchmarking**
 
 ## Data Science
 

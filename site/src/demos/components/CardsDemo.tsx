@@ -1,5 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import {
+  type Outcome,
+  bestDiscards,
+  statisticalTies,
+} from "../lib/advisor";
 import {
   type Card,
   type HandRank,
@@ -71,6 +76,23 @@ export function CardsDemo() {
   }, []);
 
   const total = state.rounds.reduce((sum, r) => sum + HAND_SCORES[r], 0);
+
+  const [showAdvice, setShowAdvice] = useState(false);
+  // 250 trials keeps the click responsive; the one- and two-card discards are
+  // enumerated regardless, so the cheap answers are also the exact ones. Even
+  // so this is ~44,000 hand evaluations, which is why scoreCards counts suits
+  // before looking for a straight flush.
+  const advice = useMemo(
+    () =>
+      showAdvice && state.phase === "discard"
+        ? bestDiscards(state.hand, 250, 4, mulberry32(state.hand.length * 7919))
+        : [],
+    [showAdvice, state.hand, state.phase],
+  );
+  const tiedSet = useMemo(
+    () => new Set(statisticalTies(advice).map((o: Outcome) => advice.indexOf(o))),
+    [advice],
+  );
   const preview = scoreCards(state.hand);
 
   return (
@@ -92,6 +114,80 @@ export function CardsDemo() {
           </button>
         ))}
       </div>
+
+      {state.phase === "discard" && (
+        <div className="advice-panel">
+          <div className="advice-head">
+            <h5 className="demo-h" style={{ margin: 0 }}>
+              What should you throw?
+            </h5>
+            <button
+              className="chip"
+              aria-pressed={showAdvice}
+              onClick={() => setShowAdvice((v) => !v)}
+            >
+              {showAdvice ? "hide" : "advise me"}
+            </button>
+          </div>
+          {showAdvice && advice.length > 0 && (
+            <>
+              <ol className="advice-list">
+                {advice.map((option, i) => (
+                  <li
+                    key={option.positions.join() || "none"}
+                    className={`advice-row${tiedSet.has(i) ? " tied" : ""}`}
+                  >
+                    <button
+                      className="advice-apply"
+                      onClick={() =>
+                        setState((cur) => ({
+                          ...cur,
+                          selected: new Set(option.positions),
+                        }))
+                      }
+                      title="Mark these cards to discard"
+                    >
+                      {option.positions.length === 0
+                        ? "keep all 7"
+                        : option.positions
+                            .map(
+                              (pos) =>
+                                `${state.hand[pos].rank}${SUIT_SYMBOL[state.hand[pos].suit]}`,
+                            )
+                            .join(" ")}
+                    </button>
+                    <span className="advice-points">
+                      {option.expectedPoints.toFixed(1)} pts
+                    </span>
+                    <span className="advice-kind">
+                      {option.exact
+                        ? `exact, ${option.draws.toLocaleString()} draws`
+                        : `±${(2 * option.standardError).toFixed(0)}, ${option.draws} samples`}
+                    </span>
+                    <span className="advice-scores">
+                      scores {(option.probabilityOfScoring * 100).toFixed(0)}%
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <p className="demo-note">
+                {tiedSet.size > 1 ? (
+                  <>
+                    The top {tiedSet.size} are within sampling error of each
+                    other, so any of them is a defensible choice — presenting
+                    them as 1st and 2nd would be reporting noise as a finding.
+                  </>
+                ) : (
+                  <>A clear winner: the gap is larger than the sampling error.</>
+                )}{" "}
+                One and two-card discards are <strong>enumerated</strong> — 45
+                and 990 possible draws, so those are not estimates. Five
+                discards is 1,221,759, so that one is sampled and says so.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="demo-controls">
         {state.phase === "discard" ? (
@@ -140,10 +236,15 @@ export function CardsDemo() {
       </div>
 
       <p className="demo-note">
-        Scored by the same rules as the Python, checked against 400 hands it scored.
-        All seven cards count, so a flush needs five of a suit anywhere in the hand —
-        the original missed six- and seven-card flushes entirely, and scored two
-        triples as three-of-a-kind rather than a full house.
+        Scored by the same rules as the Python, checked against 400 hands it
+        scored. All seven cards count, so a flush needs five of a suit anywhere
+        in the hand — the original missed six- and seven-card flushes entirely,
+        and scored two triples as three-of-a-kind rather than a full house.
+        Straights were missing altogether, which matters because a straight is{" "}
+        <em>more likely</em> than a flush: hands that should have scored were
+        ending the run. A-2-3-4-5 counts and K-A-2-3-4 does not, and a straight
+        flush is checked per suit — a hand can hold a straight and a flush
+        without any five cards being both.
       </p>
     </div>
   );

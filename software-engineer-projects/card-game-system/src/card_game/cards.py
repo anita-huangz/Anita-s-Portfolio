@@ -43,6 +43,56 @@ class Card:
         return f"{self.rank}{self.suit.symbol}"
 
 
+#: Single-letter suit codes, for typing a hand at a terminal.
+SUIT_CODES: dict[str, Suit] = {
+    "c": Suit.CLUBS,
+    "d": Suit.DIAMONDS,
+    "h": Suit.HEARTS,
+    "s": Suit.SPADES,
+}
+
+#: Accepted rank spellings. "T" is allowed for the ten because "10h" and "Th"
+#: are both common and rejecting one is a pointless way to fail.
+RANK_CODES: dict[str, str] = {rank.lower(): rank for rank in RANKS} | {"t": "10"}
+
+
+def parse_card(text: str) -> Card:
+    """Read a card from shorthand: `Ah`, `10s`, `Td`, `qc`.
+
+    The rank is everything but the last character, so the two-character "10"
+    does not need a special case -- and the suit is the last character, not the
+    second, which is the bug that shape avoids.
+    """
+    cleaned = text.strip().lower()
+    if len(cleaned) < 2:
+        raise ValueError(f"not a card: {text!r}")
+
+    rank_text, suit_text = cleaned[:-1], cleaned[-1]
+    if suit_text not in SUIT_CODES:
+        raise ValueError(
+            f"not a suit: {suit_text!r} in {text!r} (use one of cdhs)"
+        )
+    if rank_text not in RANK_CODES:
+        raise ValueError(f"not a rank: {rank_text!r} in {text!r}")
+    return Card(SUIT_CODES[suit_text], RANK_CODES[rank_text])
+
+
+def parse_hand(text: str) -> list[Card]:
+    """Read a whitespace- or comma-separated hand. Rejects duplicates.
+
+    A repeated card is a typo, not a hand: accepting it would have the advisor
+    compute odds against a deck that cannot exist.
+    """
+    tokens = [t for t in text.replace(",", " ").split() if t]
+    cards = [parse_card(token) for token in tokens]
+    seen: set[Card] = set()
+    for card in cards:
+        if card in seen:
+            raise ValueError(f"{card} appears twice; a deck has one of each")
+        seen.add(card)
+    return cards
+
+
 class OutOfCards(RuntimeError):
     """The deck was asked for a card it does not have."""
 

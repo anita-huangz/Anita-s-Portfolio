@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass, field
 
 from .fetch import Fetcher, FetchError, get_links, get_text, tokenize
+from .ranking import Corpus, Hit, Posting, rank
 from .trie import Trie
 
 
@@ -78,7 +79,12 @@ def build_index(
 
 
 def index_pages(pages: dict[str, list[str]]) -> Trie:
-    """Build the word -> {urls} index from already-crawled pages."""
+    """Build the word -> {urls} index from already-crawled pages.
+
+    Kept for callers that only need membership. `build_search_index` is the
+    one to use for ranked search, since a set cannot express how often a term
+    occurs and BM25 needs exactly that.
+    """
     index: Trie = Trie()
     for url, words in pages.items():
         for word in words:
@@ -87,4 +93,100 @@ def index_pages(pages: dict[str, list[str]]) -> Trie:
                 index[word] = {url}
             else:
                 urls.add(url)
+    return index
+
+
+@dataclass
+class SearchIndex:
+    """A ranked index: the trie for lookup, the corpus for scoring.
+
+    The trie answers "which words look like this". The corpus answers "how
+    important is this word on this page". Neither substitutes for the other.
+    """
+
+    trie: Trie = field(default_factory=Trie)
+    corpus: Corpus = field(default_factory=Corpus)
+
+    def __len__(self) -> int:
+        return len(self.trie)
+
+    @property
+    def pages(self) -> int:
+        return self.corpus.size
+
+    def posting(self, term: str) -> Posting | None:
+        value = self.trie.get(term)
+        return value if isinstance(value, Posting) else None
+
+    def expand(self, token: str) -> dict[str, Posting]:
+        """Resolve one query token into the concrete terms it matches.
+
+        A bare word is exact, `?` is a single-character wildcard, and a
+        trailing `*` is a prefix. Expansion happens here so the scorer only
+        ever sees real terms.
+        """
+        token = token.strip().lower()
+        if not token:
+            return {}
+
+        if "?" in token:
+            return {
+                term: posting
+                for term, posting in self.trie.wildcard_search(token)
+                if isinstance(posting, Posting)
+            }
+        if token.endswith("*"):
+            found: dict[str, Posting] = {}
+            for term in self.trie.keys_with_prefix(token[:-1]):
+                posting = self.posting(term)
+                if posting is not None:
+                    found[term] = posting
+            return found
+
+        posting = self.posting(token)
+        return {token: posting} if posting is not None else {}
+
+    def search(
+        self, query: str, require_all: bool = True, limit: int = 20
+    ) -> list[Hit]:
+        """Rank pages for a whitespace-separated query.
+
+        `require_all` defaults to True: someone typing two words almost always
+        means both, and an OR search buries the good hits under pages that only
+        matched the commoner word.
+        """
+        tokens = [t for t in query.strip().lower().split() if t]
+        if not tokens:
+            return []
+
+        postings: dict[str, Posting] = {}
+        matched_tokens = 0
+        for token in tokens:
+            expanded = self.expand(token)
+            if expanded:
+                matched_tokens += 1
+            postings.update(expanded)
+
+        if require_all and matched_tokens < len(tokens):
+            # A token nothing matches means the AND can never be satisfied.
+            return []
+
+        # A wildcard token expands to many terms, so requiring every *term* to
+        # be present would be wrong; the intent is every *token*. The two only
+        # coincide when each token resolved to exactly one term.
+        strict = require_all and len(tokens) == len(postings)
+        return rank(postings, self.corpus, require_all=strict)[:limit]
+
+
+def build_search_index(pages: dict[str, list[str]]) -> SearchIndex:
+    """Build a ranked index: term frequencies per page, plus page lengths."""
+    index = SearchIndex()
+    for url, words in pages.items():
+        index.corpus.add(url, len(words))
+        for word, count in Counter(words).items():
+            posting = index.posting(word)
+            if posting is None:
+                index.trie[word] = Posting(counts={url: count})
+            else:
+                posting.counts[url] = count
     return index

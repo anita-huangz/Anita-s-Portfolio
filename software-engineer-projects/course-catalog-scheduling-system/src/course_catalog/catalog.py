@@ -50,6 +50,22 @@ class Course:
         parts = self.code.split(None, 1)
         return parts[1] if len(parts) > 1 else ""
 
+    @property
+    def base_code(self) -> str:
+        """'MPCS 55001' from 'MPCS 55001-2'.
+
+        Sections of one course share a base code. They are alternatives -- you
+        take one of them -- which is what makes scheduling a search over
+        choices rather than a filter over rows.
+        """
+        return self.code.split("-")[0].strip()
+
+    @property
+    def section(self) -> str:
+        """'2' from 'MPCS 55001-2', or '' if the code carries no section."""
+        parts = self.code.split("-", 1)
+        return parts[1].strip() if len(parts) > 1 else ""
+
     def conflicts_with(self, other: Course) -> bool:
         return any(a.overlaps(b) for a in self.meetings for b in other.meetings)
 
@@ -188,6 +204,18 @@ def build_schedule(catalog: Catalog, codes: Iterable[str]) -> list[Course]:
         course = by_code.get(code)
         if course is None:
             raise KeyError(f"no course with code {code!r}")
+        # Two sections of the same course are not two courses. Their times
+        # rarely overlap -- that is the point of offering two -- so a pure
+        # conflict check happily enrolled you in Algorithms twice, under two
+        # different instructors.
+        duplicate = next(
+            (c for c in schedule if c.base_code == course.base_code), None
+        )
+        if duplicate is not None:
+            raise ValueError(
+                f"{course.code} is another section of {duplicate.code}; "
+                "pick one"
+            )
         clash = next((c for c in schedule if c.conflicts_with(course)), None)
         if clash is not None:
             raise ValueError(f"{course.code} conflicts with {clash.code}")

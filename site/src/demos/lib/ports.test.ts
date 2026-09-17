@@ -8,14 +8,34 @@
 
 import { describe, expect, it } from "vitest";
 
+import advisorGolden from "../../data/demos/advisor-golden.json";
 import cardsGolden from "../../data/demos/cards-golden.json";
 import coursesGolden from "../../data/demos/courses-golden.json";
 import coursesData from "../../data/demos/courses.json";
 import factorGolden from "../../data/demos/factor-golden.json";
 import prices from "../../data/demos/factor-prices.json";
+import rankingGolden from "../../data/demos/ranking-golden.json";
+import searchIndexData from "../../data/demos/search-index.json";
+import solverGolden from "../../data/demos/solver-golden.json";
 import trieGolden from "../../data/demos/trie-golden.json";
 
-import { type Card, type Rank, type Suit, HAND_SCORES, scoreCards } from "./cards";
+import {
+  type Card,
+  type HandRank,
+  type Rank,
+  type Suit,
+  HAND_SCORES,
+  mulberry32,
+  scoreCards,
+} from "./cards";
+import {
+  allDiscards,
+  bestDiscards,
+  evaluateDiscard,
+  parseCard,
+  statisticalTies,
+  unseenCards,
+} from "./advisor";
 import {
   type FactorName,
   type PriceData,
@@ -24,8 +44,31 @@ import {
   zscore,
 } from "./factor";
 import { LruCache } from "./lru";
-import { type Course, coursesConflict, meetingsOverlap, searchByCode } from "./schedule";
-import { Trie, characterToKey } from "./trie";
+import {
+  type Course,
+  type Preferences,
+  baseCode,
+  coursesConflict,
+  daysUsed,
+  gapMinutes,
+  meetingsOverlap,
+  normaliseCode,
+  searchByCode,
+  searchSchedules,
+  sectionOf,
+  sectionsByCourse,
+  solveSchedules,
+} from "./schedule";
+import {
+  Trie,
+  bm25Score,
+  buildIndex,
+  characterToKey,
+  expandToken,
+  inverseDocumentFrequency,
+  rank,
+  searchIndex,
+} from "./trie";
 
 // --------------------------------------------------------------------------- //
 // Trie
@@ -316,5 +359,428 @@ describe("lru cache", () => {
 
   it("reports a zero hit rate before any call", () => {
     expect(new LruCache(4).hitRate).toBe(0);
+  });
+});
+
+describe("BM25 ranking", () => {
+  const golden = rankingGolden as {
+    lengths: Record<string, number>;
+    postings: Record<string, Record<string, number>>;
+    cases: {
+      terms: string[];
+      requireAll: boolean;
+      hits: { url: string; score: number; matched: Record<string, number> }[];
+    }[];
+  };
+  const corpus = { lengths: golden.lengths };
+
+  it("agrees with the Python on every scored query", () => {
+    for (const testCase of golden.cases) {
+      const postings = Object.fromEntries(
+        testCase.terms
+          .filter((t) => t in golden.postings)
+          .map((t) => [t, golden.postings[t]]),
+      );
+      const hits = rank(postings, corpus, testCase.requireAll);
+      expect(hits.map((h) => h.url)).toEqual(testCase.hits.map((h) => h.url));
+      hits.forEach((hit, i) => {
+        // Scores, not just order: a port can be wrong by a hair and still
+        // produce the same ranking, which is the drift worth catching.
+        expect(hit.score).toBeCloseTo(testCase.hits[i].score, 6);
+        expect(hit.matched).toEqual(testCase.hits[i].matched);
+      });
+    }
+  });
+
+  it("floors the IDF so a common term never scores negative", () => {
+    // "city" is on 3 of 4 pages. Without the floor its IDF goes negative and
+    // a page improves its rank by not matching.
+    expect(inverseDocumentFrequency(4, 3)).toBeGreaterThanOrEqual(0);
+    expect(inverseDocumentFrequency(100, 99)).toBeGreaterThanOrEqual(0);
+    for (const testCase of golden.cases) {
+      for (const hit of testCase.hits) expect(hit.score).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("requireAll turns the query from OR into AND", () => {
+    const or = rank(
+      { park: golden.postings.park, dog: golden.postings.dog },
+      corpus,
+      false,
+    );
+    const and = rank(
+      { park: golden.postings.park, dog: golden.postings.dog },
+      corpus,
+      true,
+    );
+    expect(and.length).toBeLessThan(or.length);
+    expect(and.every((h) => Object.keys(h.matched).length === 2)).toBe(true);
+  });
+
+  it("returns nothing for an empty query or an empty corpus", () => {
+    expect(rank({}, corpus)).toEqual([]);
+    expect(rank({ park: golden.postings.park }, { lengths: {} })).toEqual([]);
+  });
+
+  it("saturates term frequency rather than scaling with it", () => {
+    // Doubling occurrences must not double the score, or one keyword-stuffed
+    // page outranks everything.
+    const once = bm25Score(1, 100, 100, 1);
+    const ten = bm25Score(10, 100, 100, 1);
+    const hundred = bm25Score(100, 100, 100, 1);
+    expect(ten).toBeGreaterThan(once);
+    expect(hundred).toBeGreaterThan(ten);
+    expect(hundred).toBeLessThan(once * 3);
+  });
+
+  it("penalises a long page for its length without erasing it", () => {
+    const short = bm25Score(3, 50, 100, 1);
+    const long = bm25Score(3, 400, 100, 1);
+    expect(short).toBeGreaterThan(long);
+    expect(long).toBeGreaterThan(0);
+  });
+});
+
+describe("the schedule solver", () => {
+  const golden = solverGolden as {
+    cases: {
+      name: string;
+      size: number;
+      required: string[];
+      among: string[] | null;
+      preferences: Preferences;
+      provenOptimal: boolean;
+      options: {
+        codes: string[];
+        cost: number;
+        breakdown: Record<string, number>;
+        gapMinutes: number;
+        daysUsed: number[];
+      }[];
+    }[];
+  };
+  const catalog = coursesData.courses as Course[];
+
+  it("agrees with the Python on every scenario", () => {
+    for (const testCase of golden.cases) {
+      const result = searchSchedules(catalog, testCase.size, {
+        required: testCase.required,
+        among: testCase.among,
+        preferences: testCase.preferences,
+        limit: 5,
+        nodeBudget: 1e9,
+      });
+      // The whole answer, not just the first row: a bound that loses the
+      // optimum still returns a plausible schedule.
+      expect(
+        result.options.map((o) => o.courses.map((c) => c.code)),
+        testCase.name,
+      ).toEqual(testCase.options.map((o) => o.codes));
+      expect(result.provenOptimal, testCase.name).toBe(testCase.provenOptimal);
+      result.options.forEach((option, i) => {
+        expect(option.cost, testCase.name).toBeCloseTo(testCase.options[i].cost, 6);
+        expect(option.breakdown, testCase.name).toEqual(
+          testCase.options[i].breakdown,
+        );
+        expect(gapMinutes(option.courses), testCase.name).toBe(
+          testCase.options[i].gapMinutes,
+        );
+        expect(daysUsed(option), testCase.name).toEqual(
+          testCase.options[i].daysUsed,
+        );
+      });
+    }
+  });
+
+  it("never returns a schedule that double-books or repeats a course", () => {
+    for (const option of solveSchedules(catalog, 3, { limit: 20 })) {
+      const codes = option.courses;
+      for (let i = 0; i < codes.length; i++) {
+        for (let j = i + 1; j < codes.length; j++) {
+          expect(coursesConflict(codes[i], codes[j])).toBe(false);
+          expect(baseCode(codes[i])).not.toBe(baseCode(codes[j]));
+        }
+      }
+    }
+  });
+
+  it("splits a code into its base and section", () => {
+    const course = catalog.find((c) => c.code === "MPCS 55001-2")!;
+    expect(baseCode(course)).toBe("MPCS 55001");
+    expect(sectionOf(course)).toBe("2");
+    expect(normaliseCode("mpcs 55001-2")).toBe("MPCS 55001");
+  });
+
+  it("groups sections under one course", () => {
+    const groups = sectionsByCourse(catalog);
+    expect(groups.get("MPCS 55001")!.map((c) => c.code)).toEqual([
+      "MPCS 55001-1",
+      "MPCS 55001-2",
+    ]);
+  });
+
+  it("counts only the idle time between classes", () => {
+    const at = (day: number, start: number, end: number): Course => ({
+      code: `X ${start}-1`,
+      name: "x",
+      instructor: "x",
+      location: "x",
+      meetings: [{ day, start, end }],
+    });
+    expect(gapMinutes([at(0, 540, 600), at(0, 690, 750)])).toBe(90);
+    expect(gapMinutes([at(0, 540, 600)])).toBe(0);
+    // Back to back is not a gap, and neither is a different day.
+    expect(gapMinutes([at(0, 540, 600), at(0, 600, 660)])).toBe(0);
+    expect(gapMinutes([at(0, 540, 600), at(1, 690, 750)])).toBe(0);
+  });
+
+  it("reports when the node budget ran out instead of hiding it", () => {
+    const bounded = searchSchedules(catalog, 3, { limit: 5, nodeBudget: 1 });
+    expect(bounded.provenOptimal).toBe(false);
+    // An anytime search that answers "nothing" is worse than a slow one.
+    expect(bounded.options.length).toBeGreaterThan(0);
+  });
+
+  it("terminates on an impossible search instead of hunting forever", () => {
+    expect(searchSchedules(catalog, 40, { nodeBudget: 1 }).options).toEqual([]);
+  });
+
+  it("rejects a size of zero and an unknown required course", () => {
+    expect(() => searchSchedules(catalog, 0)).toThrow(/at least 1/);
+    expect(() => searchSchedules(catalog, 2, { required: ["MPCS 99999"] })).toThrow(
+      /no course matching/,
+    );
+    expect(() =>
+      searchSchedules(catalog, 2, { required: ["MPCS 55001-1", "MPCS 55001-2"] }),
+    ).toThrow(/required twice/);
+    expect(() =>
+      searchSchedules(catalog, 1, { required: ["MPCS 55001", "MPCS 53001"] }),
+    ).toThrow(/do not fit/);
+  });
+
+  it("treats a soft day off as a penalty and a strict one as an exclusion", () => {
+    const soft = solveSchedules(catalog, 1, {
+      among: ["MPCS 53112"],
+      preferences: { daysOff: [2] },
+    });
+    expect(soft[0].breakdown.day_off).toBeGreaterThan(0);
+    const strict = solveSchedules(catalog, 1, {
+      among: ["MPCS 53112"],
+      preferences: { daysOff: [2], requireDaysOff: true },
+    });
+    expect(strict).toEqual([]);
+  });
+});
+
+describe("the ranked search index", () => {
+  const data = searchIndexData as {
+    lengths: Record<string, number>;
+    postings: Record<string, Record<string, number>>;
+    cases: {
+      query: string;
+      hits: { url: string; score: number; matched: Record<string, number> }[];
+    }[];
+  };
+  const index = buildIndex(data.postings, data.lengths);
+
+  it("agrees with the Python on every query, scores included", () => {
+    for (const testCase of data.cases) {
+      const hits = searchIndex(index, testCase.query);
+      expect(hits.map((h) => h.url), testCase.query).toEqual(
+        testCase.hits.map((h) => h.url),
+      );
+      hits.forEach((hit, i) => {
+        expect(hit.score, testCase.query).toBeCloseTo(testCase.hits[i].score, 6);
+        expect(hit.matched, testCase.query).toEqual(testCase.hits[i].matched);
+      });
+    }
+  });
+
+  it("expands a prefix and a wildcard into real terms", () => {
+    expect(Object.keys(expandToken(index, "par*")).sort()).toContain("parking");
+    expect(Object.keys(expandToken(index, "d?g"))).toEqual(["dog"]);
+    expect(expandToken(index, "zebra")).toEqual({});
+    expect(expandToken(index, "  ")).toEqual({});
+  });
+
+  it("returns nothing when one token of an AND query matches nothing", () => {
+    expect(searchIndex(index, "park zebra")).toEqual([]);
+    // As an OR query the other token still ranks.
+    expect(searchIndex(index, "park zebra", false).length).toBeGreaterThan(0);
+  });
+
+  it("does not require every expanded term of a wildcard to be present", () => {
+    // "par*" resolves to park, parks, parking. Requiring all three would
+    // return nothing; the intent is the one token.
+    const hits = searchIndex(index, "par*");
+    expect(hits.length).toBeGreaterThan(1);
+  });
+
+  it("prefers a short page over a keyword-stuffed long one", () => {
+    // /park-hours says "park" 4 times in 32 words; /dog-park-rules says it 5
+    // times in 64. Length normalisation is the whole reason it wins.
+    const hits = searchIndex(index, "park");
+    const rankOf = (url: string) => hits.findIndex((h) => h.url === url);
+    expect(rankOf("/park-hours")).toBeLessThan(rankOf("/dog-park-rules"));
+  });
+
+  it("prefers matching both terms over stuffing one", () => {
+    const hits = searchIndex(index, "park hours");
+    expect(hits[0].url).toBe("/park-hours");
+    expect(Object.keys(hits[0].matched).sort()).toEqual(["hours", "park"]);
+  });
+
+  it("honours the limit", () => {
+    expect(searchIndex(index, "par*", true, 2).length).toBe(2);
+  });
+});
+
+describe("the discard advisor", () => {
+  const golden = advisorGolden as {
+    cases: {
+      label: string;
+      hand: { suit: string; rank: string }[];
+      currentRank: string;
+      currentPoints: number;
+      positions: number[];
+      expectedPoints: number;
+      draws: number;
+      exact: boolean;
+      probabilityOfScoring: number;
+      // Each hand reaches a different set of ranks, so the keys vary per case.
+      distribution: Partial<Record<string, number>>;
+    }[];
+  };
+
+  const toHand = (cards: { suit: string; rank: string }[]): Card[] =>
+    cards.map((c) => ({ suit: c.suit as Suit, rank: c.rank as Rank }));
+
+  it("matches the Python on every exactly-computed discard", () => {
+    for (const testCase of golden.cases) {
+      const hand = toHand(testCase.hand);
+      const label = `${testCase.label} ${testCase.positions.join()}`;
+      const outcome = evaluateDiscard(hand, testCase.positions);
+      expect(outcome.exact, label).toBe(testCase.exact);
+      expect(outcome.draws, label).toBe(testCase.draws);
+      expect(outcome.expectedPoints, label).toBeCloseTo(
+        testCase.expectedPoints,
+        9,
+      );
+      expect(outcome.probabilityOfScoring, label).toBeCloseTo(
+        testCase.probabilityOfScoring,
+        9,
+      );
+      expect(outcome.standardError, label).toBe(0);
+      for (const [rankName, p] of Object.entries(testCase.distribution)) {
+        expect(outcome.distribution[rankName as HandRank], `${label} ${rankName}`)
+          .toBeCloseTo(p as number, 9);
+      }
+    }
+  });
+
+  it("agrees with the Python on the current rank of each hand", () => {
+    for (const testCase of golden.cases) {
+      const hand = toHand(testCase.hand);
+      expect(scoreCards(hand)).toBe(testCase.currentRank);
+      expect(HAND_SCORES[scoreCards(hand)]).toBe(testCase.currentPoints);
+    }
+  });
+
+  it("draws from the deck minus the hand, not a fresh deck", () => {
+    const hand = toHand(golden.cases[0].hand);
+    const pool = unseenCards(hand);
+    expect(pool.length).toBe(52 - hand.length);
+    const held = new Set(hand.map((c) => `${c.rank}${c.suit}`));
+    expect(pool.some((c) => held.has(`${c.rank}${c.suit}`))).toBe(false);
+  });
+
+  it("enumerates all 120 legal discards of a seven-card hand", () => {
+    const options = allDiscards(7);
+    expect(options.length).toBe(120);
+    expect(Math.max(...options.map((o) => o.length))).toBe(5);
+    expect(options[0]).toEqual([]);
+  });
+
+  it("samples above the exact limit and reports an error bar", () => {
+    const hand = toHand(golden.cases[0].hand);
+    const sampled = evaluateDiscard(hand, [2, 3, 4, 5, 6], 300, mulberry32(7));
+    expect(sampled.exact).toBe(false);
+    expect(sampled.draws).toBe(300);
+    expect(sampled.standardError).toBeGreaterThan(0);
+  });
+
+  it("converges on the enumerated truth when it samples", () => {
+    // Three discards is 14,190 draws — over the exact limit, so the advisor
+    // samples it, but small enough to enumerate here as ground truth.
+    const hand = toHand(golden.cases[5].hand);
+    const positions = [4, 5, 6];
+    const kept = hand.filter((_, i) => !positions.includes(i));
+    const pool = unseenCards(hand);
+
+    let sum = 0;
+    let n = 0;
+    for (let a = 0; a < pool.length; a++) {
+      for (let b = a + 1; b < pool.length; b++) {
+        for (let c = b + 1; c < pool.length; c++) {
+          sum += HAND_SCORES[scoreCards([...kept, pool[a], pool[b], pool[c]])];
+          n += 1;
+        }
+      }
+    }
+    const truth = sum / n;
+
+    const sampled = evaluateDiscard(hand, positions, 4000, mulberry32(3));
+    expect(sampled.exact).toBe(false);
+    expect(Math.abs(sampled.expectedPoints - truth)).toBeLessThan(
+      4 * sampled.standardError,
+    );
+  });
+
+  it("keeps four to a flush", () => {
+    const hand = toHand(golden.cases[0].hand);
+    expect(bestDiscards(hand, 600, 1, mulberry32(1))[0].positions).toEqual([
+      4, 5, 6,
+    ]);
+  });
+
+  it("returns options best first", () => {
+    const hand = toHand(golden.cases[5].hand);
+    const points = bestDiscards(hand, 200, 10, mulberry32(1)).map(
+      (o) => o.expectedPoints,
+    );
+    expect(points).toEqual([...points].sort((a, b) => b - a));
+  });
+
+  it("calls a clear winner a winner and a close call a tie", () => {
+    const hand = toHand(golden.cases[0].hand);
+    const strong = evaluateDiscard(hand, [4, 5, 6], 3000, mulberry32(5));
+    const weak = evaluateDiscard(hand, [0, 1, 2], 3000, mulberry32(5));
+    expect(statisticalTies([strong, weak]).length).toBe(1);
+    // An option tied with itself is a tie.
+    expect(statisticalTies([strong, strong]).length).toBe(2);
+    expect(statisticalTies([])).toEqual([]);
+  });
+
+  it("keeping everything is exact, needs no draws, and scores the hand", () => {
+    const hand = toHand(golden.cases[5].hand);
+    const outcome = evaluateDiscard(hand, []);
+    expect(outcome.exact).toBe(true);
+    expect(outcome.draws).toBe(1);
+    expect(outcome.expectedPoints).toBe(HAND_SCORES[scoreCards(hand)]);
+  });
+
+  it("rejects an out-of-range position and an over-long discard", () => {
+    const hand = toHand(golden.cases[0].hand);
+    expect(() => evaluateDiscard(hand, [9])).toThrow(/no card at position/);
+    expect(() => evaluateDiscard(hand, [0, 1, 2, 3, 4, 5])).toThrow(/at most/);
+  });
+
+  it("parses card shorthand the way the Python does", () => {
+    expect(parseCard("Ah")).toEqual({ suit: "hearts", rank: "A" });
+    expect(parseCard("10d")).toEqual(parseCard("Td"));
+    expect(parseCard("  qc ")).toEqual({ suit: "clubs", rank: "Q" });
+    expect(() => parseCard("Ax")).toThrow(/not a suit/);
+    expect(() => parseCard("Zs")).toThrow(/not a rank/);
+    expect(() => parseCard("h")).toThrow(/not a card/);
   });
 });

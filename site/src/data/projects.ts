@@ -26,7 +26,7 @@ export const PROJECTS: Project[] = [
       "TypeScript"
     ],
     "path": "ai-platform-projects/sec-filing-intelligence",
-    "tests": 167,
+    "tests": 176,
     "highlights": [
       "Multi-provider model access: Anthropic, AWS Bedrock, and a deterministic replay provider behind one interface, switched by config",
       "A verifier node audits every citation against gathered evidence and can mark the answer unverified",
@@ -65,7 +65,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "earnings-drift-tracker",
-    "rank": 5,
+    "rank": 6,
     "title": "Earnings Drift Tracker",
     "category": "software-engineering",
     "summary": "Measures whether a stock keeps drifting in the direction of an earnings surprise, by pairing each announcement with the return over the days that followed.",
@@ -78,7 +78,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "software-engineer-projects/earnings-drift-tracker",
-    "tests": 29,
+    "tests": 47,
     "highlights": [
       "Announcements landing on a non-trading day fall back to the prior session's close; requiring an exact index match silently dropped a large, non-random slice of events",
       "A horizon with insufficient history is omitted rather than zero-filled, so a missing return is never read as a flat one",
@@ -118,7 +118,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "software-engineer-projects/factor-based-portfolio-simulator",
-    "tests": 52,
+    "tests": 70,
     "highlights": [
       "Fixed a look-ahead bias that overstated total return by 92 percentage points -- factors were computed once from the whole sample and reused at every rebalance",
       "Performance metrics were being computed on the last five rows of the backtest while describing three years",
@@ -149,11 +149,11 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "performance-optimization",
-    "rank": 6,
+    "rank": 4,
     "title": "fastcache \u2014 an O(1) LRU cache",
     "category": "software-engineering",
     "summary": "A drop-in memoization decorator with O(1) lookup, insertion, and eviction, benchmarked against the standard library and against the list-based version it replaced.",
-    "detail": "Wraps a function so repeated calls with the same arguments return a stored result, evicting the least recently used entry once the cache is full. Recency is tracked in the dictionary's own insertion order, so promoting a key on a hit is a delete-and-reinsert rather than a scan. The argument key folds in each value's type, because 1, 1.0 and True are all equal in Python and would otherwise share one entry. It is thread-safe, and the wrapped function is deliberately called outside the lock so one slow call cannot block every other reader.",
+    "detail": "An LRU cache decorator with O(1) lookup, insert, and eviction, plus a general `cached` decorator adding TTL expiry and a choice of eviction policy. The benchmark harness measures the hit path against `functools.lru_cache` and the list-based version this replaced, and measures LRU against LFU across five access patterns \u2014 because neither policy wins everywhere, and shipping one with no evidence it was the right one was the gap.",
     "tech": [
       "Python",
       "threading",
@@ -161,21 +161,22 @@ export const PROJECTS: Project[] = [
       "benchmarking"
     ],
     "path": "software-engineer-projects/performance-optimization",
-    "tests": 24,
+    "tests": 67,
     "highlights": [
-      "The list-based hit path slows 8.5x from a 128-entry cache to 32,768; this one stays flat at ~0.45us",
-      "Thread-safe, with the wrapped function called outside the lock so a slow call does not block every reader",
-      "1, 1.0 and True no longer share a cache entry -- they are all == in Python, which broke any function branching on type",
-      "Exceptions are not cached, so a failed call is retried rather than memoised as a permanent failure"
+      "The original called `list.remove` on every cache hit -- a linear scan on the one path a cache exists to make fast. Across sizes 128 to 32,768 it slows 8.7x while this one stays flat at ~0.45us",
+      "Expiry needs no heap: every entry gets the same TTL, so deadline order is insertion order and the next entry to die is the front of the dict",
+      "An expired entry must not count as a hit, or the hit rate is inflated by entries that were discarded -- and it still occupies capacity, so eviction now takes a dead entry before a live one",
+      "LFU wins the scan-flushes-a-hot-set workload by 11 points; LRU wins the shifting-hot-set workload by 86, because LFU never decays counts and so refuses to admit a new key at all",
+      "Under LFU the entry just inserted can be the one evicted, and the code then read it back out of the cache"
     ],
     "output": {
-      "caption": "fastcache-bench \u2014 20,000 calls, best of 5, microseconds per call",
-      "text": "20,000 calls, best of 5. Microseconds per call.\n\n                 HIT PATH (us/call)                  MISS PATH        \n  size   fastcache  functools   list-based   fastcache   functools\n------------------------------------------------------------------------------\n   128       0.420      0.033        0.520       0.671       0.070\n  1024       0.458      0.042        0.648       0.856       0.070\n  8192       0.446      0.044        1.187       1.203       0.071\n 32768       0.470      0.045        4.422       0.663       0.070\n\nfastcache and functools stay flat as the cache grows. The list-based\nrecency tracking -- what this project used to do -- climbs, because every\nhit scans the recency list.\nOver this sweep the list-based hit path got 8.5x slower while fastcache stayed flat.\n\n(functools.lru_cache is C. Matching it in Python is not the goal;\n growing with n is the thing to avoid.)"
+      "caption": "LRU against LFU: 50,000 accesses over 2,000 keys, cache holds 200",
+      "text": "workload                 LRU hit  LFU hit    winner\nzipf (skewed)              71.3%    76.4%   LFU +5\nuniform (no locality)      10.1%    10.1%      tie\nsequential scan             0.0%     0.0%      tie\nhot set + scans            14.3%    24.9%  LFU +11\nshifting hot set           96.4%    10.7%  LRU +86"
     },
     "io": {
-      "input": "Any function, plus a maximum cache size.",
-      "output": "The same function, memoized, with hit/miss counters, a hit rate, and the current LRU ordering exposed for inspection.",
-      "scale": "24 tests. Benchmarks show the list-based approach slowing 8.5x across cache sizes where this stays flat."
+      "input": "A function to memoise, a max size, optionally a TTL in seconds and a policy (`lru` or `lfu`).",
+      "output": "A wrapped function plus hits, misses, evictions, expirations, and hit rate; the benchmark emits microseconds per call and hit rate by workload.",
+      "scale": "67 tests. Benchmarked to 32,768 entries, and 50,000 accesses over 2,000 keys."
     }
   },
   {
@@ -184,7 +185,7 @@ export const PROJECTS: Project[] = [
     "title": "Trie Search",
     "category": "software-engineering",
     "summary": "Crawls a website, indexes every word it finds into a prefix tree, and answers prefix and single-character-wildcard queries against it.",
-    "detail": "A breadth-first crawler walks a site to a given link depth, strips each page to its visible text, and folds every word into a trie that maps it to the set of pages it appeared on. The trie is a full MutableMapping, so it behaves like a dict, and each node has 27 children \u2014 one per letter plus a bucket for everything else. That fixed small alphabet is the design trade: it makes the index case-insensitive and lossy about punctuation, but it turns a wildcard query into a bounded walk down the tree instead of a scan across every key.",
+    "detail": "A breadth-first crawler walks a site to a given link depth, strips each page to its visible text, and folds every word into a trie. The trie answers which words look like the query \u2014 by prefix or single-character wildcard \u2014 and a BM25 scorer answers which pages those words make relevant, which the original set-valued index could not: a page mentioning a word once and a directory mentioning it nineteen times were indistinguishable. Each node has 27 children, one per letter plus a bucket for everything else, which is what turns a wildcard query into a bounded walk down the tree instead of a scan across every key.",
     "tech": [
       "Python",
       "httpx",
@@ -193,30 +194,32 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "software-engineer-projects/web-crawler-and-search-engine",
-    "tests": 58,
+    "tests": 77,
     "highlights": [
+      "Search was retrieval without ranking: each word mapped to the set of pages holding it, returned alphabetically, with no way to prefer a page matching both words of a two-word query",
+      "BM25's IDF needs a floor at zero -- a term on more than half the pages otherwise scores negative, and a page improves its rank by not matching the query",
+      "A wildcard token expands to many terms, so requiring every term to be present would be wrong; the intent is every token, and the two coincide only when each token resolved to one term",
       "Trie.__iter__ yielded (key, value) tuples, which broke keys(), values(), items() and dict(trie) -- the class claimed a contract it failed",
       "Wildcard search matched '*' while every doc promised '?', so all documented examples returned nothing",
-      "The visited-URL set was a module-level global, so the second crawl in a process returned nothing",
-      "HTML extraction glued adjacent elements together, turning <a>C</a><p>alpha</p> into 'Calpha' and losing both words"
+      "The visited-URL set was a module-level global, so the second crawl in a process returned nothing"
     ],
     "output": {
-      "caption": "A crawl of a four-page test site, then prefix and wildcard search",
-      "text": "Crawled 4 pages, 22 words.\nIndexed 18 distinct words.\n\nprefix search  'par'\n  park           3 page(s)\n  parking        1 page(s)\n  parks          1 page(s)\n  participate    1 page(s)\n  partner        1 page(s)\n\nwildcard       'par?'\n  park           3 page(s)"
+      "caption": "Ranked search over a five-page crawl",
+      "text": "query 'park'\n  1  /parks-directory   0.650   park x19   82 words\n  2  /park-hours        0.573   park x4    32 words\n  3  /dog-park-rules    0.540   park x5    64 words\n  4  /about             0.422   park x3    86 words\n\n/park-hours beats /dog-park-rules on fewer mentions:\n4 in 32 words is denser than 5 in 64."
     },
     "io": {
-      "input": "A start URL and a link depth, then a query like `park` or `c?t`.",
-      "output": "For each matching word, the set of pages it appeared on. Plus a report of pages that could not be fetched.",
-      "scale": "58 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
+      "input": "A start URL and a link depth, then a query: words, `par*` for a prefix, `d?g` for a wildcard.",
+      "output": "Pages ranked by BM25, each showing its score and which terms matched how many times. Plus a report of pages that could not be fetched.",
+      "scale": "77 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
     }
   },
   {
     "slug": "card-game-system",
-    "rank": 4,
+    "rank": 5,
     "title": "Card Game",
     "category": "software-engineering",
     "summary": "A single-player poker-style draw game: you are dealt seven cards, discard up to five, and the resulting hand is scored \u2014 score nothing and the run ends.",
-    "detail": "Deals seven cards, takes your discards, draws replacements, and evaluates the hand against a six-tier scoring table from a pair up to four of a kind. Scoring reads all seven cards rather than the best five, which is where the interesting edge cases live: a flush needs five of a suit anywhere in the hand, and two separate triples make a full house. Rules, scoring, and display are separate, so a test can play a dozen rounds without a terminal.",
+    "detail": "Deals seven cards, takes your discards, draws replacements, and evaluates the hand against an eight-tier table from a pair up to a straight flush. Scoring reads all seven cards rather than the best five, which is where the edge cases live: a flush needs five of a suit anywhere in the hand, two triples make a full house, a pair inside a run does not break the run, and the ace plays both high and low without wrapping. A Monte Carlo advisor then values all 120 legal discards \u2014 enumerating exactly where that is cheap, sampling above it \u2014 and reports which options are indistinguishable rather than ranking noise.",
     "tech": [
       "Python",
       "rich",
@@ -224,20 +227,22 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "software-engineer-projects/card-game-system",
-    "tests": 48,
+    "tests": 114,
     "highlights": [
+      "Straights and straight flushes were missing entirely, and a straight is more likely than a flush -- hands that should have scored were ending the run",
+      "\"Has a straight and has a flush\" is not a straight flush: 5h 6d 7h 8s 9h Kh 2h holds both and is neither, so the search runs per suit",
       "Six- and seven-card flushes scored as nothing: `5 in suit_counts.values()` is False when you hold six of a suit",
       "Two separate triples scored as three-of-a-kind rather than a full house, worth 100 instead of 250",
       "Dealing from an empty deck returned None, which entered the hand and crashed later in scoring, far from the cause"
     ],
     "output": {
-      "caption": "The scorer on four representative hands",
-      "text": "  2\u2665 2\u2660 2\u2663 5\u2665 5\u2660 5\u2663 9\u2666               -> FullHouse    250\n  2\u2665 4\u2665 6\u2665 8\u2665 10\u2665 Q\u2665 3\u2660              -> Flush        200\n  2\u2665 2\u2660 5\u2663 5\u2665 8\u2666 9\u2663 K\u2660               -> 2Pair         50\n  2\u2665 4\u2660 6\u2663 8\u2665 10\u2666 Q\u2663 K\u2660              -> None           0"
+      "caption": "The advisor on four to a royal flush, holding a pair",
+      "text": "holding A\u2665 K\u2665 Q\u2665 J\u2665 7\u2663 7\u2660 2\u2666 -> Pair\n  1. discard 7\u2663, 7\u2660, 2\u2666      534.6 pts (\u00b1136), scores 93.0%\n  2. discard 7\u2663, 7\u2660          309.6 pts (exact), scores 84.5%\n  3. discard 7\u2663, 2\u2666          308.9 pts (exact), scores 82.7%\n  5. discard 2\u2666              176.7 pts (exact), scores 100.0%"
     },
     "io": {
-      "input": "Your discard choices each round, up to five of the seven cards.",
-      "output": "A hand rank and points per round, and a running total until a hand fails to score.",
-      "scale": "48 tests. The deck recycles discards so a long run never stalls."
+      "input": "Your discard choices each round, up to five of the seven cards -- or a hand typed as `Ah Kh Qh Jh 7c 7s 2d` for the advisor to analyse.",
+      "output": "A hand rank and points per round with a running total, plus the expected value of every legal discard, labelled exact or sampled.",
+      "scale": "114 tests. 120 discards evaluated per recommendation: 45 draws enumerated for one card, 990 for two, sampled above that."
     }
   },
   {
@@ -246,7 +251,7 @@ export const PROJECTS: Project[] = [
     "title": "Course Catalog & Scheduling",
     "category": "software-engineering",
     "summary": "Searches a university course catalog and tells you which courses still fit around the ones you have already enrolled in.",
-    "detail": "Loads a catalog from CSV, parsing each course's meeting times into days and minute intervals. Search works by course-code prefix or by keyword across titles and instructors, and any search can be filtered against a schedule you are already holding so conflicting options never appear. A meeting is modelled as a half-open interval, which is the entire conflict rule: a class ending at 7:30pm and another starting at 7:30pm are back to back, and treating that as a clash would reject a perfectly valid timetable.",
+    "detail": "Searches a course catalogue by code prefix, keyword, or day, and then builds a schedule rather than only checking one: given the courses you need and the hours you refuse, a branch-and-bound search returns the best conflict-free options. Sections are alternatives, not additions \u2014 two sections of one course are the same course at two times, so picking which one is most of the value, and no filter over the catalogue can do it. Preferences are scored in one interpretable unit, minutes of annoyance, and the search reports whether its answer is proven optimal or merely the best it had time to find.",
     "tech": [
       "Python",
       "csv",
@@ -254,20 +259,22 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "software-engineer-projects/course-catalog-scheduling-system",
-    "tests": 52,
+    "tests": 84,
     "highlights": [
-      "Prefix search was actually substring search, so '530' matched 'MPCS 53014-1' via digits in the middle of the number",
-      "The default CSV path resolved to a directory that did not exist, so the default argument could never load",
-      "Malformed times parsed into plausible-looking numbers instead of raising, silently misplacing a class"
+      "`build_schedule` checked times and nothing else, and two sections of one course deliberately do not overlap -- so it enrolled you in Algorithms twice, under two different instructors",
+      "Gaps are not monotone: inserting a class into an idle afternoon reduces total gap time, so a bound that assumed gaps only grow would prune the gap-filling schedule, which is usually the best one",
+      "Branch-and-bound takes a 164-section search from 137 seconds to 19 exhaustive, or 0.8s inside a node budget; a test cross-checks the bound against brute force, because a pruning bug that loses the optimum still returns a plausible schedule",
+      "Prefix search was actually substring search, so `\"530\"` matched `MPCS 53014-1` via the digits in the middle of the number",
+      "A meeting is a half-open interval, so a class ending at 19:30 and one starting at 19:30 are back to back, not a conflict"
     ],
     "output": {
-      "caption": "Searching within an existing schedule; conflicts are filtered out",
-      "text": "Enrolled (1):\n  MPCS 53112-1: Advanced Data Analytics (Wed 17:30-20:30)\n\n3 course(s) \u2014 code ~ 'MPCS 530':\n  MPCS 53014-1: Big Data Application Architecture (Mon 17:30-20:30)\n  MPCS 53001-1: Databases (Tue 17:30-20:30)\n  MPCS 53001-2: Databases (Thu 17:30-20:30)"
+      "caption": "Four courses, Algorithms required, nothing before 10am, Friday and the weekend free",
+      "text": "1. MPCS 55001-1, MPCS 53001-1, MPCS 51046-1, MPCS 52560-1\n  cost 145\n    Tue  14:00-16:50 MPCS 55001-1, 17:30-20:30 MPCS 53001-1\n    Wed  14:30-17:20 MPCS 51046-1, 17:30-20:30 MPCS 52560-1\n    why: extra_days 120, gaps 25\n\nsearched 320 nodes"
     },
     "io": {
-      "input": "A catalog CSV, a search term, and optionally the course codes you are already enrolled in.",
-      "output": "Matching courses with their meeting times, conflicts excluded \u2014 or a named clash if you try to build an impossible schedule.",
-      "scale": "52 tests. Ships with a 30-course MPCS catalog."
+      "input": "A catalogue CSV, plus either a search (code prefix, keyword, day) or a request: how many courses, which are required, which days to keep free, nothing before a given time.",
+      "output": "Matching courses, or the best conflict-free schedules ranked by cost with the penalty that drove each, the nodes searched, and whether optimality was proven.",
+      "scale": "84 tests. The bundled 30-course catalogue searches in 320 nodes; a node budget caps a large catalogue at well under a second."
     },
     "sources": [
       {
