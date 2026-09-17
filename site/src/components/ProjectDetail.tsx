@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { DEMOS } from "../demos/registry";
 import type { Project } from "../data/types";
 import { CategoryTag } from "./ProjectCard";
 import { Terminal } from "./Terminal";
@@ -14,6 +15,7 @@ interface Props {
 
 export function ProjectDetail({ project, onClose, baseUrl }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
+  const demo = DEMOS[project.slug];
 
   // Escape closes, and focus moves into the sheet so keyboard users are not
   // left behind on the card underneath.
@@ -33,7 +35,7 @@ export function ProjectDetail({ project, onClose, baseUrl }: Props) {
   return (
     <div className="overlay" onClick={onClose} role="presentation">
       <div
-        className="sheet"
+        className={`sheet${demo ? " wide" : ""}`}
         ref={sheetRef}
         tabIndex={-1}
         role="dialog"
@@ -52,6 +54,13 @@ export function ProjectDetail({ project, onClose, baseUrl }: Props) {
         </div>
 
         <p className="lede">{project.detail}</p>
+
+        {demo && (
+          <>
+            <h4>{demo.title} — live, in your browser</h4>
+            <demo.component />
+          </>
+        )}
 
         <div className="techrow">
           {project.tech.map((t) => (
