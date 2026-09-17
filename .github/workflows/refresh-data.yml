@@ -26,7 +26,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install
-        run: pip install yfinance pandas numpy
+        # httpx is for the MPCS course catalog, which the generator now
+        # fetches quarter by quarter.
+        run: pip install yfinance pandas numpy httpx
 
       - name: Regenerate
         # The generator imports the projects themselves and refuses to write a

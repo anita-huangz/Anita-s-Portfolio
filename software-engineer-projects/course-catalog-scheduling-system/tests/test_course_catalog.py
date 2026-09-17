@@ -20,7 +20,7 @@ from course_catalog import (
     sections_by_course,
     solve,
 )
-from course_catalog.meeting import format_time
+from course_catalog.meeting import format_clock_time, format_time
 from course_catalog.solver import _gap_minutes
 
 CSV = """code,name,instructor,location,"meeting times"
@@ -58,7 +58,24 @@ def test_time_parsing_is_case_and_space_insensitive():
     assert parse_time(" 6:00PM ") == parse_time("6:00pm")
 
 
-@pytest.mark.parametrize("bad", ["6pm", "25:00pm", "6:75pm", "", "noon", "13:00pm"])
+@pytest.mark.parametrize(
+    ("text", "minutes"),
+    [("6pm", 1080), ("6am", 360), ("12pm", 720), ("12am", 0), ("11am", 660)],
+)
+def test_the_minutes_are_optional(text, minutes):
+    """The live MPCS catalog writes minutes only when they are not zero.
+
+    This used to be in the rejected list, on the assumption that a time
+    without minutes was malformed. Half the real listing is written that way --
+    `Monday 6pm - 8pm` sits beside `Monday 5:30pm - 8:30pm` on the same page --
+    so rejecting it dropped real courses.
+    """
+    assert parse_time(text) == minutes
+
+
+@pytest.mark.parametrize(
+    "bad", ["6", "pm", "25:00pm", "6:75pm", "", "noon", "13:00pm", "6:5pm"]
+)
 def test_malformed_times_raise_rather_than_guess(bad):
     with pytest.raises(ValueError):
         parse_time(bad)
@@ -608,3 +625,41 @@ def test_the_gap_bound_stays_admissible():
     best = result.options[0]
     # Filling the 7-hour gap beats adding a second day.
     assert {c.code for c in best.courses} == {"X 1-1", "X 2-1", "X 3-1"}
+
+
+# --------------------------------------------------------------------------- #
+# Writing a catalog back out
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("minutes", "text"),
+    [(0, "12:00am"), (540, "9:00am"), (720, "12:00pm"), (1080, "6:00pm"),
+     (1050, "5:30pm"), (1439, "11:59pm")],
+)
+def test_clock_time_uses_the_catalogs_own_spelling(minutes, text):
+    assert format_clock_time(minutes) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Monday 6:00pm - 7:30pm", "Tuesday 11:00am - 12:20pm",
+     "Friday 9:30am - 11:20am", "Saturday 10:00am - 12:00pm"],
+)
+def test_a_meeting_round_trips_through_catalog_text(text):
+    """The bundled CSV is generated from a live fetch, so this has to hold.
+
+    `str(Meeting)` renders `Mon 17:30-20:30` for a terminal, which
+    `Meeting.parse` cannot read -- writing a snapshot with it produces a CSV
+    that will not load.
+    """
+    meeting = Meeting.parse(text)
+    assert meeting.to_catalog_text() == text
+    assert Meeting.parse(meeting.to_catalog_text()) == meeting
+
+
+def test_the_display_form_is_not_the_round_trip_form():
+    meeting = Meeting.parse("Monday 5:30pm - 8:30pm")
+    assert str(meeting) == "Mon 17:30-20:30"
+    with pytest.raises(ValueError):
+        Meeting.parse(str(meeting))

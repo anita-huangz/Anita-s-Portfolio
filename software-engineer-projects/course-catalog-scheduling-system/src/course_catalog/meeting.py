@@ -11,7 +11,10 @@ import re
 from dataclasses import dataclass
 from enum import IntEnum
 
-TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})\s*([ap]m)$", re.IGNORECASE)
+#: `6:00pm` and `6pm` are both real -- the MPCS catalog writes the minutes
+#: only when they are not zero, so a parser demanding `:MM` rejects half
+#: the live listing.
+TIME_RE = re.compile(r"^(\d{1,2})(?::(\d{2}))?\s*([ap]m)$", re.IGNORECASE)
 
 
 class Day(IntEnum):
@@ -40,7 +43,7 @@ class Day(IntEnum):
 
 
 def parse_time(text: str) -> int:
-    """Minutes since midnight, from a string like '6:00pm'.
+    """Minutes since midnight, from a string like '6:00pm' or '6pm'.
 
     Raises rather than guessing: a malformed time in the catalog would
     otherwise become a plausible-looking number and silently misplace a class.
@@ -49,7 +52,8 @@ def parse_time(text: str) -> int:
     if not match:
         raise ValueError(f"cannot parse time: {text!r}")
 
-    hour, minute, period = int(match[1]), int(match[2]), match[3].lower()
+    # Minutes are optional in the source, so an absent group means :00.
+    hour, minute, period = int(match[1]), int(match[2] or 0), match[3].lower()
     if not 1 <= hour <= 12 or minute >= 60:
         raise ValueError(f"time out of range: {text!r}")
 
@@ -62,6 +66,19 @@ def parse_time(text: str) -> int:
 
 def format_time(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def format_clock_time(minutes: int) -> str:
+    """`1080` -> `6:00pm`. The catalog's own spelling, not the 24-hour one.
+
+    `format_time` is for display; this is for writing a catalog back out.
+    `str(Meeting)` renders `Mon 17:30-20:30`, which `Meeting.parse` cannot
+    read -- so a snapshot written with it produces a CSV that will not load.
+    """
+    hour, minute = divmod(minutes, 60)
+    period = "am" if hour < 12 else "pm"
+    hour12 = hour % 12 or 12
+    return f"{hour12}:{minute:02d}{period}"
 
 
 @dataclass(frozen=True, order=True)
@@ -101,6 +118,18 @@ class Meeting:
     @property
     def duration_minutes(self) -> int:
         return self.end - self.start
+
+    def to_catalog_text(self) -> str:
+        """`Monday 6:00pm - 7:30pm` -- the form `Meeting.parse` accepts.
+
+        Round-tripping matters because the bundled CSV is generated from a
+        live fetch, and `str(self)` deliberately renders something shorter for
+        a terminal.
+        """
+        return (
+            f"{self.day.name.title()} {format_clock_time(self.start)} - "
+            f"{format_clock_time(self.end)}"
+        )
 
     def __str__(self) -> str:
         return f"{self.day.short} {format_time(self.start)}-{format_time(self.end)}"

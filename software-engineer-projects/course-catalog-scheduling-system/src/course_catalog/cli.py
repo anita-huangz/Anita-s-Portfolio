@@ -7,6 +7,13 @@ import sys
 
 from .catalog import Catalog, build_schedule
 from .meeting import Day, parse_time
+from .mpcs import (
+    BASE_URL,
+    CatalogUnavailable,
+    fetch_catalog,
+    fetch_quarters,
+    parse_quarter,
+)
 from .solver import Preferences, search
 
 
@@ -15,6 +22,18 @@ def main(argv: list[str] | None = None) -> int:
         description="Search a course catalog and check for schedule conflicts."
     )
     parser.add_argument("--csv", default=None, help="Catalog CSV (default: bundled).")
+    parser.add_argument(
+        "--quarter",
+        default=None,
+        metavar="YEAR/SEASON",
+        help="Fetch this quarter live from mpcs-courses.cs.uchicago.edu, "
+        "e.g. 2026-27/winter. Use 'current' for the newest published quarter.",
+    )
+    parser.add_argument(
+        "--list-quarters",
+        action="store_true",
+        help="List the quarters the site has published, then exit.",
+    )
     parser.add_argument("--code", help="Match courses whose code starts with this.")
     parser.add_argument("--keyword", help="Match course title or instructor.")
     parser.add_argument("--day", help="Match courses meeting on this day.")
@@ -60,13 +79,59 @@ def main(argv: list[str] | None = None) -> int:
     builder.add_argument(
         "--options", type=int, default=3, help="How many schedules to show."
     )
+    builder.add_argument(
+        "--include-unscheduled",
+        action="store_true",
+        help="Allow courses with no published meeting time. They conflict with "
+        "nothing and so score zero, which outranks every real timetable.",
+    )
     args = parser.parse_args(argv)
 
+    if args.list_quarters:
+        try:
+            quarters = fetch_quarters()
+        except CatalogUnavailable as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"{len(quarters)} quarter(s) published at {BASE_URL}:")
+        for quarter in quarters:
+            print(f"  {quarter.slug:<18} {quarter.label}")
+        return 0
+
+    source = "the bundled snapshot"
     try:
-        catalog = Catalog.from_csv(args.csv) if args.csv else Catalog.bundled()
+        if args.quarter:
+            quarter = (
+                fetch_quarters()[0]
+                if args.quarter.lower() in {"current", "latest", "newest"}
+                else parse_quarter(args.quarter)
+            )
+            catalog = fetch_catalog(quarter)
+            source = f"{quarter.label}, live from the department"
+        elif args.csv:
+            catalog = Catalog.from_csv(args.csv)
+            source = args.csv
+        else:
+            catalog = Catalog.bundled()
+    except CatalogUnavailable as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        print(
+            "hint: --list-quarters shows what has been published.", file=sys.stderr
+        )
+        return 1
     except (FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+
+    print(f"{len(catalog)} course(s) from {source}.")
+    without_times = [c for c in catalog if not c.meetings]
+    if without_times:
+        # Stdout, not stderr: it belongs immediately under the count it
+        # qualifies, and interleaving the two streams put it above.
+        print(
+            f"  {len(without_times)} of them have no published meeting time "
+            "yet, so they cannot be placed on a timetable."
+        )
 
     enrolled = [c.strip() for c in args.schedule.split(",") if c.strip()]
     try:
@@ -109,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 preferences=prefs,
                 limit=args.options,
+                include_unscheduled=args.include_unscheduled,
             )
             options = result.options
         except (KeyError, ValueError) as exc:
@@ -120,6 +186,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"No conflict-free schedule of {args.build} course(s) exists "
                 "under those constraints."
             )
+            if result.unscheduled_excluded:
+                print(
+                    f"{result.unscheduled_excluded} course(s) were set aside "
+                    "for having no published meeting time. The department "
+                    "posts the course list before it sets the times."
+                )
             return 1
 
         print(f"{len(options)} best schedule(s) of {args.build}, cheapest first:")
@@ -128,6 +200,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n{i}. {codes}")
             print(option.render())
         print(f"\nsearched {result.nodes:,} nodes")
+        if result.unscheduled_excluded:
+            print(
+                f"{result.unscheduled_excluded} course(s) set aside: no "
+                "published meeting time."
+            )
         if not result.proven_optimal:
             print(
                 "note: the node budget ran out, so these are the best found, "

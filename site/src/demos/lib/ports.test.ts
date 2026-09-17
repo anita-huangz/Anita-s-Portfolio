@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import advisorGolden from "../../data/demos/advisor-golden.json";
 import cardsGolden from "../../data/demos/cards-golden.json";
 import coursesGolden from "../../data/demos/courses-golden.json";
-import coursesData from "../../data/demos/courses.json";
+
 import factorGolden from "../../data/demos/factor-golden.json";
 import prices from "../../data/demos/factor-prices.json";
 import rankingGolden from "../../data/demos/ranking-golden.json";
@@ -44,6 +44,13 @@ import {
   zscore,
 } from "./factor";
 import { LruCache } from "./lru";
+import {
+  CATALOG,
+  DEFAULT_QUARTER,
+  QUARTERS,
+  quarterBySlug,
+  scheduledCourses,
+} from "./quarters";
 import {
   type Course,
   type Preferences,
@@ -173,7 +180,7 @@ describe("card scoring", () => {
 // --------------------------------------------------------------------------- //
 
 describe("schedule", () => {
-  const courses = coursesData.courses as Course[];
+  const courses = DEFAULT_QUARTER.courses;
   const byCode = new Map(courses.map((c) => [c.code, c]));
 
   it("matches the Python on every course pair", () => {
@@ -459,7 +466,7 @@ describe("the schedule solver", () => {
       }[];
     }[];
   };
-  const catalog = coursesData.courses as Course[];
+  const catalog = DEFAULT_QUARTER.courses;
 
   it("agrees with the Python on every scenario", () => {
     for (const testCase of golden.cases) {
@@ -559,16 +566,43 @@ describe("the schedule solver", () => {
   });
 
   it("treats a soft day off as a penalty and a strict one as an exclusion", () => {
-    const soft = solveSchedules(catalog, 1, {
-      among: ["MPCS 53112"],
-      preferences: { daysOff: [2] },
-    });
+    // The day comes from the course rather than a constant: which day a given
+    // course meets on changes every quarter, and the catalog is refetched.
+    const course = catalog.find((c) => c.meetings.length > 0)!;
+    const day = course.meetings[0].day;
+    const among = [baseCode(course)];
+
+    const soft = solveSchedules(catalog, 1, { among, preferences: { daysOff: [day] } });
     expect(soft[0].breakdown.day_off).toBeGreaterThan(0);
+
     const strict = solveSchedules(catalog, 1, {
-      among: ["MPCS 53112"],
-      preferences: { daysOff: [2], requireDaysOff: true },
+      among,
+      preferences: { daysOff: [day], requireDaysOff: true },
     });
     expect(strict).toEqual([]);
+  });
+
+  it("leaves out courses with no published meeting time", () => {
+    // Such a course conflicts with nothing and scores zero, so left in it
+    // outranks every real timetable — the best schedule becomes the one that
+    // schedules nothing.
+    const unschedulable = QUARTERS.find((q) => q.scheduled < q.courses.length);
+    if (!unschedulable) return;
+
+    const mixed = [...scheduledCourses(DEFAULT_QUARTER).slice(0, 6),
+                   ...unschedulable.courses.filter((c) => c.meetings.length === 0).slice(0, 6)];
+
+    const honest = searchSchedules(mixed, 3, { limit: 3 });
+    expect(honest.unscheduledExcluded).toBe(6);
+    expect(honest.options.every((o) => o.cost > 0)).toBe(true);
+    expect(
+      honest.options.every((o) => o.courses.every((c) => c.meetings.length > 0)),
+    ).toBe(true);
+
+    // Opting in reproduces the zero-cost nonsense, on purpose.
+    const included = searchSchedules(mixed, 3, { limit: 3, includeUnscheduled: true });
+    expect(included.options[0].cost).toBe(0);
+    expect(included.unscheduledExcluded).toBe(0);
   });
 });
 
@@ -782,5 +816,59 @@ describe("the discard advisor", () => {
     expect(() => parseCard("Ax")).toThrow(/not a suit/);
     expect(() => parseCard("Zs")).toThrow(/not a rank/);
     expect(() => parseCard("h")).toThrow(/not a card/);
+  });
+});
+
+describe("the bundled MPCS catalog", () => {
+  it("carries several quarters, newest first", () => {
+    expect(QUARTERS.length).toBeGreaterThanOrEqual(3);
+    expect(CATALOG.source).toContain("mpcs-courses.cs.uchicago.edu");
+    // Every quarter is labelled and non-empty.
+    for (const q of QUARTERS) {
+      expect(q.slug, q.label).toMatch(/^\d{4}-\d{2}\/(autumn|winter|spring|summer)$/);
+      expect(q.courses.length, q.label).toBeGreaterThan(0);
+    }
+  });
+
+  it("opens on a quarter that can actually be scheduled", () => {
+    // A quarter's course list goes up months before its meeting times do, so
+    // the newest quarter is often entirely unschedulable. Opening there would
+    // look broken rather than early.
+    expect(scheduledCourses(DEFAULT_QUARTER).length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("reports how many courses each quarter has scheduled", () => {
+    for (const q of QUARTERS) {
+      expect(q.scheduled, q.label).toBe(scheduledCourses(q).length);
+    }
+  });
+
+  it("keeps courses with no published time rather than dropping them", () => {
+    // They are still searchable; they just cannot go on a calendar. At least
+    // one recent quarter is normally in this state.
+    const partial = QUARTERS.filter((q) => q.scheduled < q.courses.length);
+    for (const q of partial) {
+      expect(q.courses.some((c) => c.meetings.length === 0), q.label).toBe(true);
+    }
+  });
+
+  it("agrees with the quarter the goldens were generated from", () => {
+    // If these drift, the conflict and solver fixtures describe a different
+    // catalog than the demo shows.
+    expect(coursesGolden.quarter).toBe(CATALOG.default);
+  });
+
+  it("was fetched recently enough to be worth calling current", () => {
+    const fetched = new Date(CATALOG.fetched);
+    expect(Number.isNaN(fetched.getTime())).toBe(false);
+    // The refresh action runs weekly; 120 days of slack allows for a pause
+    // without turning into a permanently red test.
+    const ageDays = (Date.now() - fetched.getTime()) / 86_400_000;
+    expect(ageDays).toBeLessThan(120);
+  });
+
+  it("looks a quarter up by slug and falls back to the default", () => {
+    expect(quarterBySlug(DEFAULT_QUARTER.slug)).toBe(DEFAULT_QUARTER);
+    expect(quarterBySlug("1999-00/autumn")).toBe(DEFAULT_QUARTER);
   });
 });
