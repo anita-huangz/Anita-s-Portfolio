@@ -75,6 +75,52 @@ python examples/lookahead_demo.py    # reproduce the table above
 
 ---
 
+## What the report answers now
+
+A backtest that only reports its own return cannot answer the first question
+anyone asks: *was this better than just buying the index?* Three additions,
+all in [`metrics.py`](src/factor_sim/metrics.py):
+
+**Benchmark-relative performance** (`--benchmark SPY`, on by default). Beta,
+annualised alpha, tracking error, information ratio, and up/down capture from a
+regression of the strategy's daily returns on the benchmark's, over their shared
+sessions only. A strategy up 300% while the market rose 400% lost money in the
+only sense that matters, and total return alone hides that. The report also
+flags the specific way a factor backtest flatters itself:
+
+```
+Versus SPY:
+  strategy total     +337.71%
+  SPY                +103.89%
+  excess             +233.82%  (beat SPY over 1001 sessions)
+  beta               1.38
+  alpha (annual)     +15.05%
+  information ratio  1.07
+  up / down capture  1.53 / 1.38
+  note: it beat SPY while carrying 1.38x its market exposure, so leverage
+  explains part of the gap.
+```
+
+**Drawdown periods, not just a maximum.** A single max-drawdown figure says how
+deep the worst loss was and nothing about how long it lasted — and time
+underwater is what decides whether a strategy actually gets held. Each period
+carries its peak, trough, and recovery date, and an open drawdown is reported as
+open rather than silently closed at the sample's end:
+
+```
+    depth        peak      trough   recovered  days
+   36.18%  2024-07-10  2025-04-08  2025-06-26  351
+   18.12%  2026-05-14  2026-06-25     not yet  42+
+```
+
+**Turnover against the cost assumption.** Transaction costs were charged but
+never reported, so a strategy could look good while its edge was eaten by
+trading. One-way turnover is half the sum of absolute weight changes, annualised
+from the actual rebalance cadence; at 5 bps a side the default strategy's 733%
+annual turnover is a 0.73%/yr drag — worth knowing next to a 15% alpha.
+
+---
+
 ## Other corrections
 
 **Metrics were computed on five rows.** `run_simulation` ended with

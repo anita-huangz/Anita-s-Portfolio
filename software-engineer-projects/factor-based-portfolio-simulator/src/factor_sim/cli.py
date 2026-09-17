@@ -7,7 +7,16 @@ import sys
 from datetime import date, timedelta
 
 from .factors import FACTOR_REGISTRY, get_factors
-from .metrics import format_metrics, performance_metrics
+from .metrics import (
+    benchmark_metrics,
+    drawdown_periods,
+    format_benchmark,
+    format_drawdowns,
+    format_metrics,
+    format_turnover,
+    performance_metrics,
+    turnover,
+)
 from .simulation import run_backtest
 
 SNAPSHOT_FACTORS = {"value", "size"}
@@ -45,6 +54,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scheme", choices=["equal", "rank"], default="equal")
     parser.add_argument("--rebalance-every", type=int, default=21)
     parser.add_argument("--cost-bps", type=float, default=0.0)
+    parser.add_argument(
+        "--benchmark",
+        default="SPY",
+        help="Ticker to measure against, or 'none' to skip (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--drawdowns",
+        type=int,
+        default=3,
+        help="How many of the worst drawdowns to list (0 to skip)",
+    )
     parser.add_argument("--attribution", action="store_true")
     parser.add_argument("--plot", action="store_true")
     args = parser.parse_args(argv)
@@ -69,12 +89,32 @@ def main(argv: list[str] | None = None) -> int:
 
     from .data import download_prices, fetch_fundamentals
 
+    benchmark_ticker = args.benchmark.strip().upper()
+    if benchmark_ticker in {"", "NONE"}:
+        benchmark_ticker = ""
+
     try:
         prices = download_prices(tickers, args.start, args.end)
         static = fetch_fundamentals(tickers) if needs_snapshot else None
     except Exception as exc:
         print(f"error: failed to load market data: {exc}", file=sys.stderr)
         return 1
+
+    benchmark = None
+    if benchmark_ticker:
+        # A separate download: the benchmark must not enter the tradable
+        # universe, or the strategy could end up holding the thing it is
+        # being measured against.
+        try:
+            benchmark = download_prices(
+                [benchmark_ticker], args.start, args.end
+            )[benchmark_ticker]
+        except Exception as exc:
+            print(
+                f"warning: no {benchmark_ticker} prices, skipping the "
+                f"benchmark comparison ({exc})",
+                file=sys.stderr,
+            )
 
     result = run_backtest(
         prices=prices,
@@ -93,6 +133,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{result.skipped_rebalances} rebalances skipped (no scorable names)")
     print()
     print(format_metrics(performance_metrics(result.nav)))
+
+    if benchmark is not None:
+        try:
+            print(f"\nVersus {benchmark_ticker}:")
+            print(format_benchmark(
+                benchmark_metrics(result.nav, benchmark), benchmark_ticker
+            ))
+        except ValueError as exc:
+            print(f"  benchmark comparison unavailable: {exc}", file=sys.stderr)
+
+    if args.drawdowns > 0:
+        print(f"\nWorst {args.drawdowns} drawdowns:")
+        print(format_drawdowns(drawdown_periods(result.nav, top=args.drawdowns)))
+
+    print("\nTrading activity:")
+    print(format_turnover(turnover(result.weights), cost_bps=args.cost_bps))
 
     if args.attribution:
         from .attribution import attribute
