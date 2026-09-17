@@ -1,0 +1,5 @@
+# The repository routes *.csv through Git LFS for the large data-science
+# datasets. This 3 KB catalogue is packaged with the library and has to be a
+# real file in a fresh checkout -- actions/checkout does not fetch LFS content
+# by default, so under LFS the tests receive a pointer file and fail to parse.
+src/course_catalog/data/*.csv -filter -diff -merge text
