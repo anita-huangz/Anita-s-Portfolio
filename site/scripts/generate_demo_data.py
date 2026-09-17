@@ -311,37 +311,110 @@ def generate_earnings_data() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def generate_catalog_data() -> None:
-    from course_catalog import Catalog
+#: How many recent quarters to bundle. Each is a few KB, and going back
+#: further stops being useful -- nobody plans a timetable for 2019.
+CATALOG_QUARTERS = 6
 
-    catalog = Catalog.bundled()
+#: A quarter needs this many courses with real meeting times before the
+#: timetable builder has anything to work with.
+MIN_SCHEDULED = 10
+
+
+def _course_json(course) -> dict:
+    return {
+        "code": course.code,
+        "name": course.name,
+        "instructor": course.instructor,
+        "location": course.location,
+        "meetings": [
+            {"day": int(m.day), "start": m.start, "end": m.end}
+            for m in course.meetings
+        ],
+    }
+
+
+def generate_catalog_data() -> None:
+    """Bundle the last few quarters of the real MPCS catalog.
+
+    The browser cannot fetch the department's site itself: it sends no CORS
+    headers, so the request is blocked before it starts. The quarters are
+    therefore fetched here and refreshed weekly by `refresh-data.yml`, which
+    is the same arrangement the price data uses and for the same reason.
+
+    The *default* quarter is the newest one with published meeting times, not
+    simply the newest. A quarter's course list goes up months before its times
+    do -- Winter 2026-27 was published with all thirty courses and not one
+    meeting time -- and opening the demo on a quarter that cannot be scheduled
+    would look broken.
+    """
+    from course_catalog import fetch_catalog, fetch_quarters
+
+    quarters = fetch_quarters()[:CATALOG_QUARTERS]
+    if not quarters:
+        raise SystemExit("no quarters published; refusing to write an empty catalog")
+
+    bundled = []
+    for quarter in quarters:
+        catalog = fetch_catalog(quarter)
+        courses = list(catalog)
+        scheduled = sum(1 for c in courses if c.meetings)
+        bundled.append(
+            {
+                "slug": quarter.slug,
+                "label": quarter.label,
+                "scheduled": scheduled,
+                "courses": [_course_json(c) for c in courses],
+            }
+        )
+        print(f"    {quarter.label:<18} {len(courses):>3} courses, {scheduled} scheduled")
+
+    default = next(
+        (q for q in bundled if q["scheduled"] >= MIN_SCHEDULED), bundled[0]
+    )
+    total = sum(len(q["courses"]) for q in bundled)
+    if total < 50:
+        raise SystemExit(
+            f"only {total} courses across {len(bundled)} quarters; refusing to "
+            "replace good data with a partial fetch"
+        )
+
     write(
         "courses.json",
         {
-            "courses": [
-                {
-                    "code": c.code,
-                    "name": c.name,
-                    "instructor": c.instructor,
-                    "location": c.location,
-                    "meetings": [
-                        {"day": int(m.day), "start": m.start, "end": m.end}
-                        for m in c.meetings
-                    ],
-                }
-                for c in catalog
-            ]
+            "source": "https://mpcs-courses.cs.uchicago.edu/",
+            "fetched": date.today().isoformat(),
+            "default": default["slug"],
+            "quarters": bundled,
         },
     )
 
-    # Every pair, with the Python's conflict verdict.
-    courses = list(catalog)
+    # Every pair in the default quarter, with the Python's conflict verdict.
+    # Pinned to the default so the cross-check stays deterministic as new
+    # quarters appear.
+    from course_catalog import Catalog
+    from course_catalog.catalog import Course
+    from course_catalog.meeting import Day, Meeting
+
+    courses = [
+        Course(
+            code=c["code"],
+            name=c["name"],
+            instructor=c["instructor"],
+            location=c["location"],
+            meetings=tuple(
+                Meeting(day=Day(m["day"]), start=m["start"], end=m["end"])
+                for m in c["meetings"]
+            ),
+        )
+        for c in default["courses"]
+    ]
     pairs = [
         {"a": a.code, "b": b.code, "conflicts": a.conflicts_with(b)}
         for i, a in enumerate(courses)
         for b in courses[i + 1 :]
     ]
-    write("courses-golden.json", {"pairs": pairs})
+    write("courses-golden.json", {"quarter": default["slug"], "pairs": pairs})
+    globals()["_DEFAULT_CATALOG"] = Catalog(courses)
 
 
 # --------------------------------------------------------------------------- #
@@ -553,7 +626,9 @@ def generate_solver_golden() -> None:
     from course_catalog import Catalog, Preferences, parse_time, search
     from course_catalog.meeting import Day
 
-    catalog = Catalog.bundled()
+    # The same courses the browser gets, so the port test compares like with
+    # like. `generate_catalog_data` runs first and leaves it here.
+    catalog: Catalog = globals().get("_DEFAULT_CATALOG") or Catalog.bundled()
 
     scenarios = [
         {"name": "three, no preferences", "size": 3, "kwargs": {}, "prefs": {}},
@@ -615,6 +690,25 @@ def generate_solver_golden() -> None:
         },
         {"name": "impossible size", "size": 40, "kwargs": {}, "prefs": {}},
     ]
+
+    # A scenario naming a course the quarter does not offer would crash the
+    # weekly refresh. Catalogs change every quarter, so the scenarios that no
+    # longer apply are dropped and the rest still pin the port.
+    available = {c.base_code for c in catalog}
+
+    def offered(scenario) -> bool:
+        wanted = [
+            *scenario["kwargs"].get("required", []),
+            *(scenario["kwargs"].get("among") or []),
+        ]
+        return all(code.split("-")[0].strip() in available for code in wanted)
+
+    scenarios = [s for s in scenarios if offered(s)]
+    if len(scenarios) < 5:
+        raise SystemExit(
+            f"only {len(scenarios)} solver scenarios still apply to this "
+            "quarter; the golden fixture would stop testing much"
+        )
 
     cases = []
     for scenario in scenarios:

@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**706 tests** — 635 in Python, 71 cross-checking the site's TypeScript ports
+**781 tests** — 696 in Python, 85 cross-checking the site's TypeScript ports
 against fixtures the Python generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
 half.
@@ -121,12 +121,30 @@ raised and `dict(trie)` didn't work. The class claimed a contract it failed.
 
 **Python · httpx · lxml · data structures**
 
-### ✅ [Course Catalog & Scheduling](software-engineer-projects/course-catalog-scheduling-system) · 84 tests
+### ✅ [Course Catalog & Scheduling](software-engineer-projects/course-catalog-scheduling-system) · 145 tests
 
-Searches a course catalog and **builds** a schedule, rather than only checking
+Reads the **live** MPCS catalog at
+[mpcs-courses.cs.uchicago.edu](https://mpcs-courses.cs.uchicago.edu/) for any
+quarter back to 2015-16, and **builds** a schedule rather than only checking
 one. Filtering answers "what still fits?" The question a student asks is the
 reverse: given these courses I need and these hours I refuse, what are my
 options? That's a search.
+
+The bundled CSV was a snapshot, so it went stale the moment the department
+published a new quarter. Going live surfaced three things about the real
+listing, each of which cost a wrong guess first — two weekly meetings are one
+table cell split by `<br/>`, minutes are omitted when they're zero (the time
+parser used to *reject* `6pm`, with a test asserting it), and **a quarter is
+published before its times are set.** That last one breaks the solver:
+
+> A course with no meeting time conflicts with nothing, occupies no day and
+> leaves no gap — so it scores **zero**, which beats every real timetable. Left
+> in, the "best schedule" for a partly-published quarter is the one that
+> schedules nothing at all.
+
+Winter 2026-27 is in exactly that state: thirty courses, no times. Unplaceable
+courses are now excluded by default, the count is reported, and they stay
+searchable.
 
 Sections turned out to be the interesting part. `MPCS 55001-1` and
 `MPCS 55001-2` are the same Algorithms course at two different times, so they
@@ -315,6 +333,7 @@ Every analysis links its source in the site's project panel. The datasets:
 | Weather | [Open-Meteo ERA5](https://open-meteo.com/en/docs/historical-weather-api) |
 | SEC platform | [SEC EDGAR](https://www.sec.gov/edgar/sec-api-documentation), Yahoo Finance |
 | Factor sim / drift | [Yahoo Finance](https://finance.yahoo.com/) |
+| Course catalog | [UChicago MPCS courses](https://mpcs-courses.cs.uchicago.edu/) |
 
 ## Repository layout
 

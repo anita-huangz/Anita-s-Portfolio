@@ -7,7 +7,8 @@ name = "course-catalog"
 version = "0.2.0"
 description = "Search a course catalog and build a conflict-free schedule."
 requires-python = ">=3.11"
-dependencies = []
+# Only the live-catalog fetcher needs it; parsing and scheduling are pure.
+dependencies = ["httpx>=0.27"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.7"]

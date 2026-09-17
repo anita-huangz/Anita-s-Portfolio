@@ -726,3 +726,4 @@ footer {
   text-decoration-color: var(--ai); text-underline-offset: 2px; color: var(--text);
 }
 .term-sample .term-mark { color: var(--ai); }
+.chip-warn { color: var(--ds); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }

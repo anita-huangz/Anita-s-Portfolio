@@ -201,6 +201,8 @@ class SearchResult:
     options: list[ScheduleOption]
     nodes: int
     proven_optimal: bool
+    #: Courses left out because the department has not published their times.
+    unscheduled_excluded: int = 0
 
 
 def monotone_penalty(course: Course, prefs: Preferences) -> float:
@@ -244,6 +246,7 @@ def solve(
     preferences: Preferences | None = None,
     limit: int = 5,
     node_budget: int = DEFAULT_NODE_BUDGET,
+    include_unscheduled: bool = False,
 ) -> list[ScheduleOption]:
     """The best `limit` conflict-free schedules of `size` courses.
 
@@ -258,6 +261,7 @@ def solve(
         preferences=preferences,
         limit=limit,
         node_budget=node_budget,
+        include_unscheduled=include_unscheduled,
     ).options
 
 
@@ -270,8 +274,16 @@ def search(
     preferences: Preferences | None = None,
     limit: int = 5,
     node_budget: int = DEFAULT_NODE_BUDGET,
+    include_unscheduled: bool = False,
 ) -> SearchResult:
     """The best `limit` conflict-free schedules of `size` courses.
+
+    `include_unscheduled` admits courses with no published meeting time. It
+    defaults to False, and that default is load-bearing: a course that cannot
+    be placed on a calendar conflicts with nothing, occupies no day and leaves
+    no gap, so it scores **zero** -- which beats every real timetable. On a
+    live listing published before the times are set, the "best schedule" then
+    turns out to be the one that schedules nothing at all.
 
     `required` names courses that must appear -- by base code (`MPCS 55001`,
     any section) or by exact section (`MPCS 55001-2`). `among` restricts the
@@ -281,7 +293,14 @@ def search(
     if size <= 0:
         raise ValueError("size must be at least 1")
 
-    all_sections = sections_by_course(catalog)
+    candidates = list(catalog)
+    unscheduled_excluded = 0
+    if not include_unscheduled:
+        placeable = [course for course in candidates if course.meetings]
+        unscheduled_excluded = len(candidates) - len(placeable)
+        candidates = placeable
+
+    all_sections = sections_by_course(candidates)
     pool = dict(all_sections)
     if among is not None:
         keys = {_normalise(code) for code in among}
@@ -289,9 +308,12 @@ def search(
 
     fixed_groups: list[list[Course]] = []
     seen: set[str] = set()
+    every_section = sections_by_course(catalog)
     for code in required:
         key = _normalise(code)
-        sections = all_sections.get(key)
+        # Look in the full catalog, not the filtered pool: a course named
+        # explicitly is wanted even if its time is not published yet.
+        sections = every_section.get(key)
         if sections is None:
             raise KeyError(f"no course matching {code!r}")
         if key in seen:
@@ -430,7 +452,12 @@ def search(
     recurse(0)
     # Already in (cost, codes) order by construction.
     best = [entry[2] for entry in kept]
-    return SearchResult(options=best, nodes=nodes, proven_optimal=not exhausted)
+    return SearchResult(
+        options=best,
+        nodes=nodes,
+        proven_optimal=not exhausted,
+        unscheduled_excluded=unscheduled_excluded,
+    )
 
 
 def _normalise(code: str) -> str:

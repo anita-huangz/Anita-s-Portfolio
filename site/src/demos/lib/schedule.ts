@@ -144,6 +144,8 @@ export interface SearchResult {
   options: ScheduleOption[];
   nodes: number;
   provenOptimal: boolean;
+  /** Courses left out for having no published meeting time. */
+  unscheduledExcluded: number;
 }
 
 function prefs(p: Preferences) {
@@ -294,6 +296,14 @@ export interface SolveOptions {
   preferences?: Preferences;
   limit?: number;
   nodeBudget?: number;
+  /**
+   * Admit courses with no published meeting time. Defaults to false, and
+   * that default is load-bearing: such a course conflicts with nothing,
+   * occupies no day and leaves no gap, so it scores **zero** — which beats
+   * every real timetable. On a quarter published before its times are set,
+   * the "best schedule" is then the one that schedules nothing at all.
+   */
+  includeUnscheduled?: boolean;
 }
 
 /**
@@ -313,7 +323,18 @@ export function searchSchedules(
   const p = prefs(options.preferences ?? {});
   const limit = options.limit ?? 5;
   const nodeBudget = options.nodeBudget ?? DEFAULT_NODE_BUDGET;
-  const allSections = sectionsByCourse(all);
+
+  let candidates = all;
+  let unscheduledExcluded = 0;
+  if (!options.includeUnscheduled) {
+    candidates = all.filter((c) => c.meetings.length > 0);
+    unscheduledExcluded = all.length - candidates.length;
+  }
+
+  const allSections = sectionsByCourse(candidates);
+  // Required courses are looked up in the full catalog: naming one explicitly
+  // is a stronger signal than the filter.
+  const everySection = sectionsByCourse(all);
 
   let pool = new Map(allSections);
   if (options.among) {
@@ -325,7 +346,7 @@ export function searchSchedules(
   const seen = new Set<string>();
   for (const code of options.required ?? []) {
     const key = normaliseCode(code);
-    const sections = allSections.get(key);
+    const sections = everySection.get(key);
     if (!sections) throw new Error(`no course matching ${code}`);
     if (seen.has(key)) throw new Error(`${key} required twice`);
     seen.add(key);
@@ -460,7 +481,7 @@ export function searchSchedules(
 
   recurse(0);
   // Already in (cost, codes) order by construction.
-  return { options: kept, nodes, provenOptimal: !exhausted };
+  return { options: kept, nodes, provenOptimal: !exhausted, unscheduledExcluded };
 }
 
 export function solveSchedules(

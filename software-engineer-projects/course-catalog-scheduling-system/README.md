@@ -1,7 +1,10 @@
 # Course Catalog & Scheduling
 
-Search a university course catalog and build a schedule that doesn't
-double-book you. Ships with the MPCS catalog as sample data.
+Search the University of Chicago MPCS course catalog and build a schedule that
+doesn't double-book you. Reads the **live catalog** at
+[mpcs-courses.cs.uchicago.edu](https://mpcs-courses.cs.uchicago.edu/), for any
+quarter back to 2015-16, and ships with a snapshot so everything still works
+offline.
 
 ```
 $ course-catalog --schedule "MPCS 53112-1" --code "MPCS 530"
@@ -106,6 +109,44 @@ slow one — and past a hard ceiling it gives up anyway, because the constraints
 may simply be unsatisfiable and proving that can cost the whole tree.
 
 
+## Live, by quarter
+
+The bundled CSV used to be hand-maintained, which is why it went stale: the
+department publishes a new quarter and the file doesn't change.
+
+```bash
+course-catalog --list-quarters              # 48 quarters, 2015-16 to now
+course-catalog --quarter current --build 4  # newest published quarter
+course-catalog --quarter 2026-27/winter --code "MPCS 55"
+python -m course_catalog.snapshot           # refresh the bundled CSV
+```
+
+There's no API, so this parses the listing table. Three things about that table
+each cost me a wrong guess first:
+
+**Multiple meetings are separated by `<br/>` inside one cell.** A course that
+meets twice a week reads `Tuesday 2pm - 3:20pm<br/>Thursday 2pm - 3:20pm`, and
+stripping tags before splitting glues it into `3:20pmThursday`, which parses as
+nothing. The split has to happen on the markup.
+
+**Minutes are omitted when they're zero.** `Monday 6pm - 8pm` sits beside
+`Monday 5:30pm - 8:30pm` on the same page. The time parser used to *reject*
+`6pm` as malformed — there was a test asserting it — so it dropped real
+courses. The real catalog settled that argument.
+
+**A quarter is published before its times are set.** Winter 2026-27 went up
+with all thirty courses and not one meeting time. That state is normal, and it
+breaks the solver in a way worth stating plainly:
+
+> A course with no meeting time conflicts with nothing, occupies no day and
+> leaves no gap — so it scores **zero**, which beats every real timetable. Left
+> in, the "best schedule" for a partly-published quarter is the one that
+> schedules nothing at all.
+
+So unplaceable courses are excluded from the search by default, the count is
+reported, and `--include-unscheduled` opts back in. They remain searchable:
+a course you can't put on a calendar is still a course you can look up.
+
 ## Run it
 
 ```bash
@@ -116,13 +157,14 @@ course-catalog --code "MPCS 511"                 # code prefix
 course-catalog --keyword algorithms              # title or instructor
 course-catalog --day tuesday                     # by day
 course-catalog --schedule "MPCS 51040-1" --free  # what still fits
+course-catalog --quarter 2025-26/spring          # any quarter, live
 
 # build a schedule rather than filter one
 course-catalog --build 3 --no-earlier-than 10:00am --days-off Fri
 course-catalog --build 4 --require "MPCS 55001" --among "MPCS 53001,MPCS 51046,MPCS 52560,MPCS 51400"
 course-catalog --build 3 --prefer-instructor "Chaudhary" --options 5
 
-pytest -q       # 84 tests
+pytest -q       # 145 tests
 ruff check .
 ```
 
@@ -133,6 +175,8 @@ src/course_catalog/
   meeting.py   Day, Meeting, time parsing, overlap   (pure)
   catalog.py   Course, Catalog, search, scheduling   (pure)
   solver.py    preferences, scoring, branch-and-bound  (pure)
+  mpcs.py      quarters, listing parsing, fetching     (parse is pure)
+  snapshot.py  write a fetched catalog back to CSV
   cli.py       argument parsing and output
   data/        the bundled catalog CSV
 ```

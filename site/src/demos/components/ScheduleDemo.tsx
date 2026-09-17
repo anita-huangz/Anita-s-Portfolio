@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 
-import data from "../../data/demos/courses.json";
+import {
+  CATALOG,
+  DEFAULT_QUARTER,
+  QUARTERS,
+  quarterBySlug,
+  scheduledCourses,
+} from "../lib/quarters";
 import {
   type Course,
   type ScheduleOption,
@@ -16,15 +22,10 @@ import {
 } from "../lib/schedule";
 import { Term } from "./Term";
 
-const COURSES = data.courses as Course[];
 const DAYS = [0, 1, 2, 3, 4];
-const SEED_CODE = "MPCS 53112-1";
 
-// The calendar window, derived from the data rather than assumed.
-const EARLIEST = Math.min(...COURSES.flatMap((c) => c.meetings.map((m) => m.start)));
-const LATEST = Math.max(...COURSES.flatMap((c) => c.meetings.map((m) => m.end)));
-
-const BASE_CODES = [...sectionsByCourse(COURSES).keys()].sort();
+/** Fallback grid, for a quarter with no published times at all. */
+const FALLBACK_WINDOW = { earliest: 9 * 60, latest: 21 * 60 };
 
 /** Labels for the score breakdown, so `extra_days` reads as something. */
 const PENALTY_LABELS: Record<string, string> = {
@@ -45,12 +46,32 @@ function drivers(option: ScheduleOption): string {
 }
 
 export function ScheduleDemo() {
-  // Seeded with one course so the calendar shows something on open; an
-  // empty grid reads as "broken" rather than "nothing added yet".
+  const [quarterSlug, setQuarterSlug] = useState(DEFAULT_QUARTER.slug);
+  const quarter = quarterBySlug(quarterSlug);
+  const COURSES = quarter.courses;
+  const placeable = useMemo(() => scheduledCourses(quarter), [quarter]);
+
+  // Seeded with one course so the calendar shows something on open; an empty
+  // grid reads as "broken" rather than "nothing added yet".
   const [enrolled, setEnrolled] = useState<Course[]>(() =>
-    COURSES.filter((c) => c.code === SEED_CODE),
+    scheduledCourses(DEFAULT_QUARTER).slice(0, 1),
   );
   const [query, setQuery] = useState("");
+
+  // The grid window comes from the quarter on screen rather than a constant:
+  // one quarter has 9am classes and another is evenings only.
+  const { earliest: EARLIEST, latest: LATEST } = useMemo(() => {
+    const starts = placeable.flatMap((c) => c.meetings.map((m) => m.start));
+    const ends = placeable.flatMap((c) => c.meetings.map((m) => m.end));
+    return starts.length > 0
+      ? { earliest: Math.min(...starts), latest: Math.max(...ends) }
+      : FALLBACK_WINDOW;
+  }, [placeable]);
+
+  const BASE_CODES = useMemo(
+    () => [...sectionsByCourse(placeable).keys()].sort(),
+    [placeable],
+  );
 
   // Solver controls.
   // null turns the solver off, so Reset falls back to the hand-built view
@@ -63,7 +84,9 @@ export function ScheduleDemo() {
   const [picked, setPicked] = useState(0);
 
   const solved = useMemo(() => {
-    if (size === null) return { options: [], nodes: 0, provenOptimal: true };
+    if (size === null) {
+      return { options: [], nodes: 0, provenOptimal: true, unscheduledExcluded: 0 };
+    }
     try {
       return searchSchedules(COURSES, size, {
         required,
@@ -75,9 +98,15 @@ export function ScheduleDemo() {
         limit: 4,
       });
     } catch (err) {
-      return { options: [], nodes: 0, provenOptimal: true, error: String(err) };
+      return {
+        options: [],
+        nodes: 0,
+        provenOptimal: true,
+        unscheduledExcluded: 0,
+        error: String(err),
+      };
     }
-  }, [size, required, daysOff, strictDaysOff, noEarlierThan]);
+  }, [COURSES, size, required, daysOff, strictDaysOff, noEarlierThan]);
 
   const chosen = solved.options[Math.min(picked, solved.options.length - 1)];
 
@@ -86,7 +115,7 @@ export function ScheduleDemo() {
     if (!q) return COURSES;
     const byCode = searchByCode(COURSES, q);
     return byCode.length > 0 ? byCode : searchByKeyword(COURSES, q);
-  }, [query]);
+  }, [COURSES, query]);
 
   const enrolledCodes = new Set(enrolled.map((c) => c.code));
 
@@ -116,6 +145,15 @@ export function ScheduleDemo() {
     if (conflictsWith(course, shown).length > 0) clashing.add(course.code);
   }
 
+  const switchQuarter = (slug: string) => {
+    // Codes and days are quarter-specific, so carrying a selection across
+    // would silently require courses this quarter does not offer.
+    setQuarterSlug(slug);
+    setRequired([]);
+    setPicked(0);
+    setEnrolled(scheduledCourses(quarterBySlug(slug)).slice(0, 1));
+  };
+
   const toggleRequired = (code: string) => {
     setPicked(0);
     setRequired((cur) =>
@@ -132,6 +170,45 @@ export function ScheduleDemo() {
 
   return (
     <div className="demo">
+      <div className="demo-controls">
+        <div className="control" role="group" aria-label="Quarter">
+          <span className="control-label">Quarter</span>
+          <span className="chip-wrap">
+            {QUARTERS.map((q) => (
+              <button
+                key={q.slug}
+                className="chip"
+                aria-pressed={q.slug === quarterSlug}
+                onClick={() => switchQuarter(q.slug)}
+                title={
+                  q.scheduled === 0
+                    ? `${q.label}: course list published, meeting times not set yet`
+                    : `${q.label}: ${q.scheduled} of ${q.courses.length} courses scheduled`
+                }
+              >
+                {q.label}
+                {q.scheduled === 0 && <span className="chip-warn"> no times</span>}
+              </button>
+            ))}
+          </span>
+        </div>
+      </div>
+
+      <p className="demo-hint" style={{ margin: "-4px 0 12px" }}>
+        {quarter.courses.length} courses in {quarter.label}, fetched from{" "}
+        <a href={CATALOG.source} target="_blank" rel="noreferrer">
+          mpcs-courses.cs.uchicago.edu
+        </a>{" "}
+        on {CATALOG.fetched} and refreshed weekly.{" "}
+        {placeable.length < quarter.courses.length && (
+          <strong>
+            {quarter.courses.length - placeable.length} have no published
+            meeting time yet, so they cannot go on a timetable — the department
+            posts the course list before it sets the times.
+          </strong>
+        )}
+      </p>
+
       <div className="demo-controls">
         <label className="control" style={{ flex: 1 }}>
           <span className="control-label">Search</span>
@@ -161,7 +238,7 @@ export function ScheduleDemo() {
 
       <div className="solver-panel">
         <div className="demo-controls">
-          <label className="control">
+          <div className="control" role="group" aria-label="Number of courses">
             <span className="control-label">Build</span>
             {[2, 3, 4, 5].map((n) => (
               <button
@@ -177,9 +254,9 @@ export function ScheduleDemo() {
               </button>
             ))}
             <span className="demo-hint">courses</span>
-          </label>
+          </div>
 
-          <label className="control">
+          <div className="control" role="group" aria-label="Earliest class time">
             <span className="control-label">Nothing before</span>
             {[
               { label: "any", value: null },
@@ -199,9 +276,9 @@ export function ScheduleDemo() {
                 {opt.label}
               </button>
             ))}
-          </label>
+          </div>
 
-          <label className="control">
+          <div className="control" role="group" aria-label="Days to keep free">
             <span className="control-label">Keep free</span>
             {DAYS.map((day) => (
               <button
@@ -226,11 +303,11 @@ export function ScheduleDemo() {
                 strict
               </button>
             )}
-          </label>
+          </div>
         </div>
 
         <div className="demo-controls">
-          <label className="control" style={{ alignItems: "flex-start" }}>
+          <div className="control" role="group" aria-label="Required courses">
             <span className="control-label">Must include</span>
             <span className="chip-wrap">
               {BASE_CODES.map((code) => (
@@ -244,7 +321,7 @@ export function ScheduleDemo() {
                 </button>
               ))}
             </span>
-          </label>
+          </div>
         </div>
 
         {"error" in solved && solved.error ? (
@@ -256,10 +333,19 @@ export function ScheduleDemo() {
             Pick a size to have the solver build a schedule, or add courses by
             hand from the list below.
           </p>
+        ) : placeable.length === 0 ? (
+          <p className="demo-note">
+            {quarter.label} has no published meeting times yet, so there is
+            nothing to lay out. The courses are listed below and searchable —
+            they just have no times attached. Pick an earlier quarter to build
+            a timetable.
+          </p>
         ) : solved.options.length === 0 ? (
           <p className="demo-note">
             No conflict-free schedule of {size} fits those constraints. Drop a
             requirement or free up a day.
+            {solved.unscheduledExcluded > 0 &&
+              ` ${solved.unscheduledExcluded} course(s) were set aside for having no published time.`}
           </p>
         ) : (
           <>
@@ -302,6 +388,8 @@ export function ScheduleDemo() {
                 {solved.provenOptimal
                   ? " and proved this is the best there is."
                   : ", then ran out of budget — so this is the best found, not provably the best."}
+                {solved.unscheduledExcluded > 0 &&
+                  ` ${solved.unscheduledExcluded} course(s) with no published time were set aside: they conflict with nothing and so score zero, which would outrank every real timetable.`}
               </p>
             )}
           </>

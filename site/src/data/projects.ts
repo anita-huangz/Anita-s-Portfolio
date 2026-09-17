@@ -250,31 +250,34 @@ export const PROJECTS: Project[] = [
     "rank": 3,
     "title": "Course Catalog & Scheduling",
     "category": "software-engineering",
-    "summary": "Searches a university course catalog and tells you which courses still fit around the ones you have already enrolled in.",
-    "detail": "Searches a course catalogue by code prefix, keyword, or day, and then builds a schedule rather than only checking one: given the courses you need and the hours you refuse, a branch-and-bound search returns the best conflict-free options. Sections are alternatives, not additions \u2014 two sections of one course are the same course at two times, so picking which one is most of the value, and no filter over the catalogue can do it. Preferences are scored in one interpretable unit, minutes of annoyance, and the search reports whether its answer is proven optimal or merely the best it had time to find.",
+    "summary": "Reads the live University of Chicago MPCS catalog for any quarter, then builds the best conflict-free timetable from it \u2014 rather than only checking one you already wrote down.",
+    "detail": "Fetches the real course listing from mpcs-courses.cs.uchicago.edu for any quarter back to 2015-16, then answers the question a filter cannot: given the courses you need and the hours you refuse, what are your options? A branch-and-bound search returns the best conflict-free schedules, scoring preferences in one interpretable unit \u2014 minutes of annoyance. Sections are alternatives, not additions: two sections of one course are the same course at two times, so picking which one is most of the value and no filter over the catalogue can do it. The search also reports whether its answer is proven optimal or merely the best it had time to find.",
     "tech": [
       "Python",
+      "httpx",
       "csv",
       "interval logic",
       "pytest"
     ],
     "path": "software-engineer-projects/course-catalog-scheduling-system",
-    "tests": 84,
+    "tests": 145,
     "highlights": [
+      "The bundled CSV was a snapshot, so it went stale the moment the department published a new quarter -- it now reads the live catalog, and a script regenerates the offline snapshot",
+      "A quarter is published before its meeting times are set. Winter 2026-27 went up with all 30 courses and no times -- and a course with no time conflicts with nothing, so it scores zero and beats every real timetable. Left in, the best schedule is the one that schedules nothing",
       "`build_schedule` checked times and nothing else, and two sections of one course deliberately do not overlap -- so it enrolled you in Algorithms twice, under two different instructors",
+      "The time parser rejected `6pm` as malformed, with a test asserting it. The real listing writes `Monday 6pm - 8pm` beside `Monday 5:30pm - 8:30pm`, so it was dropping real courses",
+      "Two weekly meetings are one table cell split by `<br/>`; stripping tags first glues `3:20pm` to `Thursday` and parses as nothing",
       "Gaps are not monotone: inserting a class into an idle afternoon reduces total gap time, so a bound that assumed gaps only grow would prune the gap-filling schedule, which is usually the best one",
-      "Branch-and-bound takes a 164-section search from 137 seconds to 19 exhaustive, or 0.8s inside a node budget; a test cross-checks the bound against brute force, because a pruning bug that loses the optimum still returns a plausible schedule",
-      "Prefix search was actually substring search, so `\"530\"` matched `MPCS 53014-1` via the digits in the middle of the number",
-      "A meeting is a half-open interval, so a class ending at 19:30 and one starting at 19:30 are back to back, not a conflict"
+      "Prefix search was actually substring search, so `\"530\"` matched `MPCS 53014-1` via the digits in the middle of the number"
     ],
     "output": {
-      "caption": "Four courses, Algorithms required, nothing before 10am, Friday and the weekend free",
-      "text": "1. MPCS 55001-1, MPCS 53001-1, MPCS 51046-1, MPCS 52560-1\n  cost 145\n    Tue  14:00-16:50 MPCS 55001-1, 17:30-20:30 MPCS 53001-1\n    Wed  14:30-17:20 MPCS 51046-1, 17:30-20:30 MPCS 52560-1\n    why: extra_days 120, gaps 25\n\nsearched 320 nodes"
+      "caption": "Four courses from the live Autumn 2026-27 listing, nothing before 10am, Friday and the weekend free",
+      "text": "32 course(s) from Autumn 2026-27, live from the department.\n\n1. MPCS 55001-1, MPCS 51042-1, MPCS 51046-1, MPCS 53001-1\n  cost 145\n    Tue  11:00-12:20 MPCS 51042-1, 17:30-20:30 MPCS 55001-1\n    Wed  14:00-17:00 MPCS 51046-1, 17:30-20:30 MPCS 53001-1\n    why: extra_days 120, gaps 25\n\nsearched 320 nodes"
     },
     "io": {
-      "input": "A catalogue CSV, plus either a search (code prefix, keyword, day) or a request: how many courses, which are required, which days to keep free, nothing before a given time.",
-      "output": "Matching courses, or the best conflict-free schedules ranked by cost with the penalty that drove each, the nodes searched, and whether optimality was proven.",
-      "scale": "84 tests. The bundled 30-course catalogue searches in 320 nodes; a node budget caps a large catalogue at well under a second."
+      "input": "A quarter (`2026-27/winter`, or `current`), plus either a search -- code prefix, keyword, day -- or a request: how many courses, which are required, which days to keep free, nothing before a given time.",
+      "output": "Matching courses, or the best conflict-free schedules ranked by cost with the penalty that drove each, how many courses were set aside for having no published time, the nodes searched, and whether optimality was proven.",
+      "scale": "145 tests, all offline: the real listing pages are saved as fixtures and the transport is faked. 48 quarters available live; a 30-course quarter searches in a few hundred nodes."
     },
     "sources": [
       {
