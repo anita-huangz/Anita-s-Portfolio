@@ -1,50 +1,161 @@
-## Goal of the Simulator 
+# Factor Portfolio Simulator
 
-✅ 1. Evaluate Investment Strategy Performance
-- Test how well a **Value + Momentum** strategy works over time.
-- See if selecting the top 3 stocks based on these factors leads to outperformance.
+A point-in-time backtest of cross-sectional equity factor strategies: rank a
+universe on value, momentum, size, and low-volatility signals, hold the top N,
+rebalance on a fixed cadence, and attribute the result against Fama-French.
 
-✅ 2. Simulate Portfolio Mechanics
-- Show how your portfolio would rebalance monthly.
-- Track NAV (Net Asset Value) to visualize growth.
-- Output daily returns so you can compute performance metrics.
+```
+$ factor-sim --tickers AAPL,MSFT,GOOGL,AMZN,META,NVDA,AVGO,ORCL \
+             --factors momentum,low_volatility --top-n 3 --cost-bps 5 --attribution
 
-✅ 3. Lay the Foundation for Strategy Development
-It gives you a framework to:
-- Add/remove factors (e.g., Size, Quality)
-- Change weighting strategies
-- Introduce machine learning-based signals
-- Incorporate risk models or transaction costs
+momentum + low_volatility | top 3 | equal-weighted
+47 rebalances, $1,284.31 in costs
 
-## Goal of the Farma-French 3-factor model 
+  total return       +62.41%
+  annualized return  +13.09%
+  volatility          24.87%
+  Sharpe ratio         0.61
+  max drawdown        31.44%
+  trading days          1004
 
-Ran a regression of your daily excess returns (portfolio return minus risk-free rate) against the Fama-French 3 factors:
-- Mkt-RF: Market excess return
-- SMB: Small Minus Big (size factor)
-- HML: High Minus Low (value factor)
+Fama-French 3-factor attribution:
+  observations       1004
+  alpha (daily)      +0.00012  (p = 0.611)
+  Mkt-RF             +1.2841  (p = 0.000)
+  SMB                -0.3107  (p = 0.001)
+  HML                -0.5522  (p = 0.000)
+  R-squared           0.694
+```
 
-### Scenario 1: Backtesting a Factor-Based Strategy on Top Tech Stocks (2022–2024)
+## Install and run
 
-**📌 What It Is:**
-A historical simulation of a portfolio that:
-- Starts with $100,000
-- Invests in 5 leading tech stocks: AAPL, MSFT, GOOGL, AMZN, and META
-- Runs from January 1, 2022 to December 31, 2024
-- Rebalances monthly based on a combined Value (1/PE) and Momentum (12M return) factor model
-- Uses **equal weighting(probably need to change this)** for the top 3 ranked stocks at each rebalance
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev,data]"
+factor-sim --factors momentum --top-n 3
+pytest -q      # 52 tests, no network
+ruff check .
+```
 
-**📈 Key Findings (Based on Final Output):**
-- The portfolio grew from $100,000 to ~$156,500, indicating a ~56% total return over 3 years
-- Returns varied day-to-day, showing exposure to market volatility (e.g., small dips in late Dec 2024)
-- The combined **Value + Momentum** strategy appeared effective during this tech-dominated time frame
+---
 
-**🔢 Key Numbers from the Output:**
+## The look-ahead bug this version fixes
 
-| **Coefficient** | **Value** | **Interpretation** |
-|------------------|----------:|--------------------|
-| `const`          | 0.0004    | Daily alpha (unexplained return) — **not statistically significant** (p = 0.393) |
-| `Mkt-RF`         | 1.3606    | Very high exposure to the market. taking **more market risk than average** |
-| `SMB`            | -0.2961   | Negative loading on SMB — favor **large-cap stocks** |
-| `HML`            | -0.5921   | Negative exposure to value — tilting toward **growth stocks** |
-| **R-squared**    | 0.687     | ~69% of the portfolio returns are explained by the Fama-French model |
-| **P-values**     | All < 0.001 except `const` | Statistically significant results (**except alpha**) |
+The first version computed factor exposures **once, from the entire sample**, and
+reused that single snapshot at every rebalance:
+
+```python
+factor_data['12M_Return'] = price_data.pct_change(252).iloc[-1]   # the LAST day
+```
+
+`.iloc[-1]` is the final day of the backtest. Every rebalance — including the
+first one in 2021 — ranked stocks using returns measured through 2024. The
+strategy was picking winners it had already seen win.
+
+`examples/lookahead_demo.py` reproduces both loops over identical synthetic
+prices, so the only difference is *when* the factors were measured:
+
+```
+                           point-in-time   full-sample (bug)
+  total_return                    2.85%              95.43%
+  annualized_return               0.95%              25.25%
+  max_drawdown                   21.12%              16.91%
+  sharpe_ratio                     0.14                1.42
+
+  total return overstated by +92.6%
+```
+
+A flat strategy became a 95% winner with a 1.42 Sharpe. This is the single most
+important property of the rewrite: `point_in_time_exposures(prices, as_of)`
+slices `prices.loc[:as_of]` and cannot see past it, and a test asserts that the
+same series produces different exposures at different dates.
+
+```bash
+python examples/lookahead_demo.py    # reproduce the table above
+```
+
+---
+
+## Other corrections
+
+**Metrics were computed on five rows.** `run_simulation` ended with
+`return nav_df.tail()`, and `main.py` passed that straight into
+`performance_metrics`. Every figure in the old README — "portfolio grew from
+$100,000 to ~$156,500, ~56% total return over 3 years" — actually described the
+final week of the backtest. `run_backtest` now returns the complete NAV path.
+
+**Score-proportional weighting broke on negative scores.** The optimizer
+computed `weight = score / sum(scores)`. Factor scores are routinely negative —
+z-scores are centred on zero, and the size factor is negative by construction —
+so a negative denominator inverted every weight and produced short positions in
+a long-only book. Weighting is now by rank.
+
+**Factors were summed across incomparable units.** Inverse P/E is around 0.03; a
+12-month return is around 0.4. Adding them let momentum dominate any combination
+it appeared in, regardless of intent. Each factor is now cross-sectionally
+z-scored before the sum.
+
+**Cash was forced to zero on every rebalance.** `self.cash = 0` after allocating
+meant any unallocated weight or transaction cost silently vanished from — or was
+fabricated into — the portfolio value.
+
+**Market cap was used raw in the size factor.** Caps span three orders of
+magnitude, so one mega-cap dominated the cross-section. It is log-scaled now.
+
+**`factor_based_portfolio.py` was a verbatim duplicate** of the four other
+modules combined, and had already drifted out of sync with them. Deleted.
+
+---
+
+## Layout
+
+```
+src/factor_sim/
+  factors.py       factor definitions, z-scoring, combination
+  optimizer.py     scores -> weights
+  portfolio.py     holdings, rebalancing, transaction costs
+  simulation.py    point-in-time exposures and the backtest loop
+  metrics.py       return, volatility, Sharpe, drawdown
+  attribution.py   Fama-French 3-factor regression
+  data.py          yfinance / yahooquery / Ken French loaders
+  plotting.py      NAV and drawdown charts
+  cli.py           argument parsing
+examples/          the look-ahead demonstration
+tests/             52 tests
+```
+
+Simulation does not plot, plotting does not simulate, and neither touches the
+network. The whole test suite runs offline on synthetic price paths.
+
+---
+
+## Factors
+
+| Name | Signal | Point-in-time? |
+|---|---|---|
+| `momentum` | 252-day trailing return | yes |
+| `low_volatility` | 21-day realised vol, annualised, negated | yes |
+| `value` | inverse trailing P/E | **no** — snapshot |
+| `size` | negative log market cap | **no** — snapshot |
+
+All four are oriented so higher is better, which is what makes the combination a
+plain sum of z-scores.
+
+**`value` and `size` are not point-in-time.** Free sources only expose
+*current* fundamentals, so a historical rebalance would be scored with today's
+P/E. That is the same class of bug fixed above, and it cannot be fixed without
+a historical fundamentals feed. The CLI prints a warning when either is
+requested; `momentum` and `low_volatility` are clean.
+
+---
+
+## Limits
+
+- Daily closes only. No intraday fills, no slippage model beyond flat basis
+  points, no borrow costs, no short side.
+- Rebalance cadence is a fixed number of trading days, not calendar months.
+- The universe is whatever tickers are passed in, so results carry whatever
+  survivorship bias that selection has.
+- Transaction costs are linear in traded notional, which understates the cost of
+  large trades in thin names.
+- Attribution uses the daily Fama-French research factors and reports
+  heteroskedasticity-naive OLS standard errors.

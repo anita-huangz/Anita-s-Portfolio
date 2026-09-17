@@ -1,0 +1,6 @@
+{"case_id": "aapl-supply-chain-risk", "ticker": "AAPL", "question": "What supply chain risks does Apple disclose in its most recent annual report?", "expect_tools": ["search_filings", "fetch_filing_section"], "require_citations": true, "require_verified": true}
+{"case_id": "aapl-revenue-trend", "ticker": "AAPL", "question": "How has Apple's annual revenue changed over the last two fiscal years?", "expect_tools": ["company_financials"], "require_citations": true}
+{"case_id": "msft-ai-risk", "ticker": "MSFT", "question": "How does Microsoft describe risks related to artificial intelligence?", "expect_tools": ["search_filings", "fetch_filing_section"], "require_citations": true}
+{"case_id": "nvda-filing-reaction", "ticker": "NVDA", "question": "How did NVIDIA's stock react in the five trading days after its most recent 10-K filing?", "expect_tools": ["search_filings", "price_reaction"], "require_citations": true}
+{"case_id": "aapl-mda-margin", "ticker": "AAPL", "question": "What does Apple's MD&A say about gross margin?", "expect_tools": ["search_filings", "fetch_filing_section"], "require_citations": true}
+{"case_id": "unanswerable-guard", "ticker": "AAPL", "question": "What will Apple's revenue be in 2030?", "require_citations": false, "expect_answer_contains": ["not"]}
