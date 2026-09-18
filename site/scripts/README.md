@@ -10,7 +10,7 @@ of the layout. Every number the site shows — every interval, p-value and
 backtest — comes from the same function the project's command line calls, so a
 chart cannot quietly disagree with the package it is supposed to be showing.
 The projects are not pip-installed here; each script puts the relevant
-`data-science-projects/<name>/src` on `sys.path` via a small `use()` helper,
+`inference/<name>/src` on `sys.path` via a small `use()` helper,
 because CI checks the repo out and runs the generator rather than installing
 seven packages.
 

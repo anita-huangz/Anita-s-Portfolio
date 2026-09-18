@@ -25,11 +25,11 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "site" / "src" / "data" / "demos"
 
 for project in [
-    "software-engineer-projects/earnings-drift-tracker",
-    "software-engineer-projects/factor-based-portfolio-simulator",
-    "software-engineer-projects/course-catalog-scheduling-system",
-    "software-engineer-projects/card-game-system",
-    "software-engineer-projects/web-crawler-and-search-engine",
+    "systems/earnings-drift-tracker",
+    "systems/factor-based-portfolio-simulator",
+    "systems/course-catalog",
+    "systems/card-game-system",
+    "systems/trie-search",
 ]:
     sys.path.insert(0, str(ROOT / project / "src"))
 

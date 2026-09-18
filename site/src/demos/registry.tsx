@@ -32,11 +32,11 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
     title: "Explore the drift",
     component: EarningsDemo,
   },
-  "web-crawler-and-search-engine": {
+  "trie-search": {
     title: "Search the index",
     component: TrieDemo,
   },
-  "course-catalog-scheduling-system": {
+  "course-catalog": {
     title: "Build a schedule",
     component: ScheduleDemo,
   },
@@ -44,7 +44,7 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
     title: "Play a round",
     component: CardsDemo,
   },
-  "performance-optimization": {
+  "fastcache": {
     title: "Watch the cache evict",
     component: CacheDemo,
   },

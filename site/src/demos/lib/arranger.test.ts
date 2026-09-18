@@ -2,7 +2,7 @@
  * Cross-checks the browser arranger against the Python package that defines it.
  *
  * `piano-golden.json` is written by `scripts/generate_piano_results.py`, which
- * imports `arranger` from `ai-platform-projects/piano-arrangement-lab` — so it
+ * imports `arranger` from `llm-platform/piano-arrangement-lab` — so it
  * records what the reference implementation actually does across 120
  * combinations of progression, difficulty level and style.
  *

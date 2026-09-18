@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore"); os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import numpy as np, pandas as pd
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-PROJECT = ROOT / "data-science-projects/bitcoin-and-asset-trading"
+PROJECT = ROOT / "inference/bitcoin-and-asset-trading"
 sys.path.insert(0, str(PROJECT / "src"))
 
 from btc_forecast import lstm

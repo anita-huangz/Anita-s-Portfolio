@@ -17,7 +17,7 @@ from datetime import date, timedelta
 import numpy as np, pandas as pd, requests
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "data-science-projects/weather-trends-and-forecast/src"))
+sys.path.insert(0, str(ROOT / "inference/weather-trends-and-forecast/src"))
 
 from climate_trend.data import SOURCE_URL, Series
 from climate_trend.trend import (

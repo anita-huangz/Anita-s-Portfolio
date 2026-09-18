@@ -24,7 +24,7 @@ warnings.filterwarnings("ignore")
 
 SEED = 42
 ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "data-science-projects"
+DATA = ROOT / "inference"
 OUT = ROOT / "site" / "src" / "data" / "demos"
 
 

@@ -17,7 +17,7 @@ import sys
 from datetime import date
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "ai-platform-projects/piano-arrangement-lab/src"))
+sys.path.insert(0, str(ROOT / "llm-platform/piano-arrangement-lab/src"))
 
 from arranger.arrange import arrange, arrange_greedy
 from arranger.difficulty import LEVELS
