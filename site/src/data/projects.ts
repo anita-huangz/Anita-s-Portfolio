@@ -8,7 +8,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "sec-filing-intelligence",
     "title": "SEC Filing Intelligence",
-    "category": "ai-platform",
+    "category": "llm-platform",
     "featured": true,
     "summary": "Ask a question about a public company and get an answer with every claim cited to a specific SEC filing \u2014 then independently verified against the evidence that produced it.",
     "detail": "You send a ticker and a question. The agent writes a research plan, then calls up to four tools against SEC EDGAR \u2014 listing filings, pulling a specific section out of a 10-K, fetching reported XBRL figures, measuring the price move after a filing date. It drafts findings with accession-number citations, and a separate verifier pass re-reads the gathered evidence and checks that each citation actually supports its claim before the answer is returned. Every model and tool call is metered, so each response carries its own token count, dollar cost, and latency.",
@@ -25,7 +25,7 @@ export const PROJECTS: Project[] = [
       "React",
       "TypeScript"
     ],
-    "path": "ai-platform-projects/sec-filing-intelligence",
+    "path": "llm-platform/sec-filing-intelligence",
     "tests": 176,
     "highlights": [
       "Multi-provider model access: Anthropic, AWS Bedrock, and a deterministic replay provider behind one interface, switched by config",
@@ -62,7 +62,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "piano-arrangement-lab",
     "title": "Piano Arrangement Lab",
-    "category": "ai-platform",
+    "category": "llm-platform",
     "summary": "A chord chart in, a playable piano arrangement out, at the difficulty you ask for — solved as a shortest path through every way two hands could voice the chords, not looked up.",
     "detail": "A chord symbol names pitch classes and never octaves, so \"Cmaj7\" is several hundred ways two hands could play it, and the right one depends entirely on the chord before it: a lovely voicing that leaves the hand a tenth from the next chord is the wrong voicing. Written out that is a shortest path. Each chord contributes a layer of candidate voicings, each candidate carries a static cost (hand span, muddy low intervals, missing chord tones, register), and each pair across adjacent layers carries a transition cost (part-writing rules broken, hands moved, common tones held). Viterbi finds the cheapest route exactly in O(n·k²) where trying every combination is O(kⁿ). Against brute force on three-chord progressions the two agree exactly; against the greedy baseline that ships alongside it, greedy is 5.3% worse at beginner and 28.9% worse at advanced over eight real progressions. Difficulty is data rather than an adjective — hand span, notes per hand, register, whether inversions and extensions are allowed — which is what makes it checkable: a test asserts no arrangement ever exceeds its own limits across every progression, level and style.",
     "tech": [
@@ -73,7 +73,7 @@ export const PROJECTS: Project[] = [
       "pytest",
       "vitest"
     ],
-    "path": "ai-platform-projects/piano-arrangement-lab",
+    "path": "llm-platform/piano-arrangement-lab",
     "featured": true,
     "rank": 1,
     "images": [
@@ -118,7 +118,7 @@ export const PROJECTS: Project[] = [
     "slug": "earnings-drift-tracker",
     "rank": 6,
     "title": "Earnings Drift Tracker",
-    "category": "software-engineering",
+    "category": "systems",
     "summary": "Measures whether a stock keeps drifting in the direction of an earnings surprise, by pairing each announcement with the return over the days that followed.",
     "detail": "For each quarterly announcement it takes the gap between reported and estimated EPS, finds the last trading session on or before the announcement, and measures the cumulative return 1, 5, and 10 trading days later. Correlating surprise against drift is the question the project exists to ask. The answer is usually 'weakly, if at all' \u2014 which makes the data-handling choices the substance of it: announcements land on holidays and weekends, recent quarters have no 10-day window yet, and a zero consensus estimate makes the surprise percentage undefined rather than zero.",
     "tech": [
@@ -128,7 +128,7 @@ export const PROJECTS: Project[] = [
       "REST APIs",
       "pytest"
     ],
-    "path": "software-engineer-projects/earnings-drift-tracker",
+    "path": "systems/earnings-drift-tracker",
     "tests": 47,
     "highlights": [
       "Announcements landing on a non-trading day fall back to the prior session's close; requiring an exact index match silently dropped a large, non-random slice of events",
@@ -157,7 +157,7 @@ export const PROJECTS: Project[] = [
     "slug": "factor-based-portfolio-simulator",
     "rank": 1,
     "title": "Factor Portfolio Simulator",
-    "category": "software-engineering",
+    "category": "systems",
     "summary": "Backtests a cross-sectional factor strategy the honest way \u2014 scoring each stock only on information that existed on the rebalance date.",
     "detail": "Given daily closes for a universe of stocks, it ranks them at each rebalance on momentum and low-volatility signals computed strictly from prior data, buys the top N equally weighted, and tracks the resulting portfolio value day by day. It then regresses the daily excess returns on the Fama-French three factors to separate genuine alpha from market, size, and value exposure. The correctness question the whole project turns on is temporal: a factor computed even one day into the future turns a flat strategy into a spectacular one.",
     "tech": [
@@ -168,7 +168,7 @@ export const PROJECTS: Project[] = [
       "yfinance",
       "pytest"
     ],
-    "path": "software-engineer-projects/factor-based-portfolio-simulator",
+    "path": "systems/factor-based-portfolio-simulator",
     "tests": 70,
     "highlights": [
       "Fixed a look-ahead bias that overstated total return by 92 percentage points -- factors were computed once from the whole sample and reused at every rebalance",
@@ -199,10 +199,10 @@ export const PROJECTS: Project[] = [
     ]
   },
   {
-    "slug": "performance-optimization",
+    "slug": "fastcache",
     "rank": 4,
     "title": "fastcache \u2014 an O(1) LRU cache",
-    "category": "software-engineering",
+    "category": "systems",
     "summary": "A drop-in memoization decorator with O(1) lookup, insertion, and eviction, benchmarked against the standard library and against the list-based version it replaced.",
     "detail": "An LRU cache decorator with O(1) lookup, insert, and eviction, plus a general `cached` decorator adding TTL expiry and a choice of eviction policy. The benchmark harness measures the hit path against `functools.lru_cache` and the list-based version this replaced, and measures LRU against LFU across five access patterns \u2014 because neither policy wins everywhere, and shipping one with no evidence it was the right one was the gap.",
     "tech": [
@@ -211,7 +211,7 @@ export const PROJECTS: Project[] = [
       "pytest",
       "benchmarking"
     ],
-    "path": "software-engineer-projects/performance-optimization",
+    "path": "systems/fastcache",
     "tests": 67,
     "highlights": [
       "The original called `list.remove` on every cache hit -- a linear scan on the one path a cache exists to make fast. Across sizes 128 to 32,768 it slows 8.7x while this one stays flat at ~0.45us",
@@ -231,10 +231,10 @@ export const PROJECTS: Project[] = [
     }
   },
   {
-    "slug": "web-crawler-and-search-engine",
+    "slug": "trie-search",
     "rank": 2,
     "title": "Trie Search",
-    "category": "software-engineering",
+    "category": "systems",
     "summary": "Crawls a website, indexes every word it finds into a prefix tree, and answers prefix and single-character-wildcard queries against it.",
     "detail": "A breadth-first crawler walks a site to a given link depth, strips each page to its visible text, and folds every word into a trie. The trie answers which words look like the query \u2014 by prefix or single-character wildcard \u2014 and a BM25 scorer answers which pages those words make relevant, which the original set-valued index could not: a page mentioning a word once and a directory mentioning it nineteen times were indistinguishable. Each node has 27 children, one per letter plus a bucket for everything else, which is what turns a wildcard query into a bounded walk down the tree instead of a scan across every key.",
     "tech": [
@@ -244,7 +244,7 @@ export const PROJECTS: Project[] = [
       "data structures",
       "pytest"
     ],
-    "path": "software-engineer-projects/web-crawler-and-search-engine",
+    "path": "systems/trie-search",
     "tests": 84,
     "highlights": [
       "Search was retrieval without ranking: each word mapped to the set of pages holding it, returned alphabetically, with no way to prefer a page matching both words of a two-word query",
@@ -268,7 +268,7 @@ export const PROJECTS: Project[] = [
     "slug": "card-game-system",
     "rank": 5,
     "title": "Card Game",
-    "category": "software-engineering",
+    "category": "systems",
     "summary": "A single-player poker-style draw game: you are dealt seven cards, discard up to five, and the resulting hand is scored \u2014 score nothing and the run ends.",
     "detail": "Deals seven cards, takes your discards, draws replacements, and evaluates the hand against an eight-tier table from a pair up to a straight flush. Scoring reads all seven cards rather than the best five, which is where the edge cases live: a flush needs five of a suit anywhere in the hand, two triples make a full house, a pair inside a run does not break the run, and the ace plays both high and low without wrapping. A Monte Carlo advisor then values all 120 legal discards \u2014 enumerating exactly where that is cheap, sampling above it \u2014 and reports which options are indistinguishable rather than ranking noise.",
     "tech": [
@@ -277,7 +277,7 @@ export const PROJECTS: Project[] = [
       "OOP",
       "pytest"
     ],
-    "path": "software-engineer-projects/card-game-system",
+    "path": "systems/card-game-system",
     "tests": 114,
     "highlights": [
       "Straights and straight flushes were missing entirely, and a straight is more likely than a flush -- hands that should have scored were ending the run",
@@ -297,10 +297,10 @@ export const PROJECTS: Project[] = [
     }
   },
   {
-    "slug": "course-catalog-scheduling-system",
+    "slug": "course-catalog",
     "rank": 3,
     "title": "Course Catalog & Scheduling",
-    "category": "software-engineering",
+    "category": "systems",
     "summary": "Reads the live University of Chicago MPCS catalog for any quarter, then builds the best conflict-free timetable from it \u2014 rather than only checking one you already wrote down.",
     "detail": "Fetches the real course listing from mpcs-courses.cs.uchicago.edu for any quarter back to 2015-16, then answers the question a filter cannot: given the courses you need and the hours you refuse, what are your options? A branch-and-bound search returns the best conflict-free schedules, scoring preferences in one interpretable unit \u2014 minutes of annoyance. Sections are alternatives, not additions: two sections of one course are the same course at two times, so picking which one is most of the value and no filter over the catalogue can do it. The search also reports whether its answer is proven optimal or merely the best it had time to find.",
     "tech": [
@@ -310,7 +310,7 @@ export const PROJECTS: Project[] = [
       "interval logic",
       "pytest"
     ],
-    "path": "software-engineer-projects/course-catalog-scheduling-system",
+    "path": "systems/course-catalog",
     "tests": 145,
     "highlights": [
       "The bundled CSV was a snapshot, so it went stale the moment the department published a new quarter -- it now reads the live catalog, and a script regenerates the offline snapshot",
@@ -341,7 +341,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "bitcoin-and-asset-trading",
     "title": "Bitcoin Price Forecasting",
-    "category": "data-science",
+    "category": "inference",
     "summary": "An LSTM against a one-line baseline, evaluated properly. No forecast here carries usable information about price changes, and the ones that look like they might are destroyed by transaction costs.",
     "detail": "The notebook reported RMSE on the price level from one 80/20 split. RMSE on a level is dominated by the level \u2014 across 21 rolling origins the same forecaster scores $5 in one fold and $2,076 in another \u2014 so R-squared on returns asks the real question, and the LSTM scores -206 where predicting no change scores zero. \"16x worse than naive\" becomes a Diebold-Mariano test with a Newey-West correction: DM = +18.03, p = 7.9e-63. It also quantifies the scaler leak, since MinMaxScaler was fitted on the whole series before splitting, so the training data was normalised using an all-time high that had not happened yet.",
     "tech": [
@@ -352,7 +352,7 @@ export const PROJECTS: Project[] = [
       "TensorFlow",
       "pytest"
     ],
-    "path": "data-science-projects/bitcoin-and-asset-trading",
+    "path": "inference/bitcoin-and-asset-trading",
     "rank": 3,
     "io": {
       "input": "Daily bars, plus the protocol: rolling-origin window size, transaction cost in basis points, and which section to run.",
@@ -385,7 +385,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "fake-news-detection",
     "title": "Fake News Detection",
-    "category": "data-science",
+    "category": "inference",
     "summary": "A null result, established properly: this dataset contains no learnable signal, and the analysis says how much that rules out.",
     "detail": "Every title is `Breaking News {i}` and every body is one sentence with the index substituted, so 4,000 distinct titles collapse to a single skeleton once the digits are stripped \u2014 a TF-IDF model over that is a model of the row number. The labels are random, which is harder to show: a permutation test refits on shuffled labels and the observed 0.5145 AUC sits inside the null's 95% range, p = 0.113. A power analysis then says 4,000 rows would detect AUC >= 0.526 at 80% power, which turns \"we found nothing\" into \"there is nothing bigger than this to find\".",
     "tech": [
@@ -396,7 +396,7 @@ export const PROJECTS: Project[] = [
       "SciPy",
       "pytest"
     ],
-    "path": "data-science-projects/fake-news-detection",
+    "path": "inference/fake-news-detection",
     "rank": 4,
     "io": {
       "input": "The dataset, plus the number of label permutations to run.",
@@ -427,7 +427,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "customer-churn-prediction",
     "title": "Customer Churn Prediction",
-    "category": "data-science",
+    "category": "inference",
     "summary": "Telco churn treated as what it actually is \u2014 right-censored survival data driving a spending decision \u2014 rather than a binary score. Kaplan-Meier, the log-rank test and Cox regression from scratch, checked against statsmodels.",
     "detail": "73.5% of these 7,043 customers had not left when the data was cut, so their lifetime is not \"no churn\" but *at least* their current tenure \u2014 and a classifier reads a one-month customer who stayed and a six-year customer who stayed as the same row. Survival analysis uses them properly: the median lifetime turns out to be undefined (more than half are still subscribed), the restricted mean says 46.8 of the next 60 months, and the Cox model reaches a concordance of 0.870 against the classifier's 0.845 AUC on the same rows. It then turns the score into a decision, because a churn model retains nobody: the optimal cut-off given a $30 offer is 0.25 rather than 0.5, and ranking by probability \u00d7 value returns 33% more than ranking by probability for the same budget \u2014 which needs expected remaining months, something only the survival model has.",
     "tech": [
@@ -438,7 +438,7 @@ export const PROJECTS: Project[] = [
       "statsmodels",
       "pytest"
     ],
-    "path": "data-science-projects/customer-churn-prediction",
+    "path": "inference/customer-churn-prediction",
     "rank": 1,
     "io": {
       "input": "The Telco CSV, plus the campaign economics: cost per offer, acceptance rate, margin, and horizon -- all arguments, because none of them can be read off the dataset.",
@@ -470,7 +470,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "global-security-threats",
     "title": "Cybersecurity Threat Analysis",
-    "category": "data-science",
+    "category": "inference",
     "summary": "Six unsupervised methods, and the question that has to come first: does this dataset have any structure to find? It does not.",
     "detail": "An unsupervised method has no ground truth to be wrong against \u2014 k-means returns k clusters whatever you hand it, and a projection of independent noise still looks like a cloud with edges. So the structure is tested first: all three numeric columns are indistinguishable from uniform on their own range, the categories are equally likely, and the strongest association between any pair of columns is a Cramer's V of 0.062. The clusters then fail three ways \u2014 silhouette is marginally *worse* than on independently shuffled columns, bootstrap stability is ARI 0.484 against the usual 0.75 bar, and the gap statistic picks k = 1.",
     "tech": [
@@ -481,7 +481,7 @@ export const PROJECTS: Project[] = [
       "SciPy",
       "pytest"
     ],
-    "path": "data-science-projects/global-security-threats",
+    "path": "inference/global-security-threats",
     "rank": 6,
     "io": {
       "input": "The incident CSV, plus k and the number of null draws.",
@@ -512,7 +512,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "personalized-recommendations-for-e-commerce",
     "title": "E-commerce Recommendations",
-    "category": "data-science",
+    "category": "inference",
     "summary": "A content-based recommender with ranking metrics and a leave-one-out protocol \u2014 where the obvious content rule turns out to be 14x worse than random, by construction.",
     "detail": "There is no user-item interaction matrix: purchase history is a list of subcategory names and product IDs appear nowhere in the customer table, so collaborative filtering is undefined rather than merely hard. What the data supports is content-based recommendation over the 24 shared subcategories, scored leave-one-out with recall@k, MAP, MRR and NDCG. Every customer's purchases sit in distinct categories, so holding one out leaves a history entirely in other categories and \"more of the same\" ranks the held-out item's category last. Browsing history, meanwhile, names the answer exactly and reaches recall@5 of 1.0000.",
     "tech": [
@@ -521,7 +521,7 @@ export const PROJECTS: Project[] = [
       "pandas",
       "pytest"
     ],
-    "path": "data-science-projects/personalized-recommendations-for-e-commerce",
+    "path": "inference/personalized-recommendations-for-e-commerce",
     "rank": 5,
     "io": {
       "input": "The two tables, plus the cut-off k for the ranking metrics.",
@@ -552,7 +552,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "stock-bond-portfolio-analysis",
     "title": "Stock-Bond Portfolio Optimisation",
-    "category": "data-science",
+    "category": "inference",
     "summary": "Mean-variance allocation across five ETFs, evaluated out of sample and against the benchmark that keeps winning: 1/N.",
     "detail": "The notebook optimised on a training period and reported the resulting portfolio's statistics \u2014 which describe a portfolio chosen with knowledge of the returns it is then scored on. A rolling backtest where the estimation window only ever precedes the holding period, with transaction costs, reproduces DeMiguel, Garlappi and Uppal (2009): equal weighting earns +6.50% a year against maximum Sharpe's +1.80%, and maximum Sharpe comes last on the Sharpe ratio it optimises \u2014 0.32 against 1/N's 0.83 \u2014 because expected returns cannot be estimated well enough to optimise against. In sample it reports 5.61, a 17x collapse. The mechanism is visible directly: it rewrites 15% of the book every quarter chasing a sample mean, against 1/N's 1.8%.",
     "tech": [
@@ -563,7 +563,7 @@ export const PROJECTS: Project[] = [
       "scikit-learn",
       "pytest"
     ],
-    "path": "data-science-projects/stock-bond-portfolio-analysis",
+    "path": "inference/stock-bond-portfolio-analysis",
     "rank": 2,
     "io": {
       "input": "Adjusted daily closes for five ETFs, plus the protocol: estimation window, rebalance cadence, transaction cost in basis points -- all arguments, because all of them change the answer.",
@@ -604,7 +604,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "weather-trends-and-forecast",
     "title": "Weather Trends & Forecast",
-    "category": "data-science",
+    "category": "inference",
     "summary": "Warming rates for six cities over 75 years \u2014 and the part the original scripts got wrong, which is not the slope but the error bar around it.",
     "detail": "Ordinary least squares assumes independent residuals and temperature does not oblige: a warm year follows a warm year. The lag-1 residual correlation is significantly positive in all six cities, so the effective sample is smaller than the row count \u2014 Tokyo's 75 years are worth about 32 \u2014 and the naive standard error is understated by 23% to 53%. Three corrections that share no assumptions agree: Newey-West, a moving-block bootstrap, and Mann-Kendall with Sen's slope. All four methods agree on the slope; only OLS disagrees on the width. Every city is warming, London fastest at +0.244 C/decade.",
     "tech": [
@@ -615,7 +615,7 @@ export const PROJECTS: Project[] = [
       "statsmodels",
       "pytest"
     ],
-    "path": "data-science-projects/weather-trends-and-forecast",
+    "path": "inference/weather-trends-and-forecast",
     "rank": 7,
     "io": {
       "input": "Annual mean temperature by city, plus which city to examine and how many bootstrap draws.",

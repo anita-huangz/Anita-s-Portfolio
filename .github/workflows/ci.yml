@@ -19,22 +19,21 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
         project:
-          - ai-platform-projects/sec-filing-intelligence
-          - ai-platform-projects/piano-arrangement-lab
-          - software-engineer-projects/earnings-drift-tracker
-          - software-engineer-projects/factor-based-portfolio-simulator
-          - software-engineer-projects/card-game-system
-          - software-engineer-projects/course-catalog-scheduling-system
-          - software-engineer-projects/performance-optimization
-          - software-engineer-projects/web-crawler-and-search-engine
-          # The only data-science project that is a tested package.
-          - data-science-projects/customer-churn-prediction
-          - data-science-projects/bitcoin-and-asset-trading
-          - data-science-projects/fake-news-detection
-          - data-science-projects/global-security-threats
-          - data-science-projects/personalized-recommendations-for-e-commerce
-          - data-science-projects/weather-trends-and-forecast
-          - data-science-projects/stock-bond-portfolio-analysis
+          - llm-platform/sec-filing-intelligence
+          - llm-platform/piano-arrangement-lab
+          - systems/earnings-drift-tracker
+          - systems/factor-based-portfolio-simulator
+          - systems/card-game-system
+          - systems/course-catalog
+          - systems/fastcache
+          - systems/trie-search
+          - inference/customer-churn-prediction
+          - inference/bitcoin-and-asset-trading
+          - inference/fake-news-detection
+          - inference/global-security-threats
+          - inference/personalized-recommendations-for-e-commerce
+          - inference/weather-trends-and-forecast
+          - inference/stock-bond-portfolio-analysis
     defaults:
       run:
         working-directory: ${{ matrix.project }}
@@ -83,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ai-platform-projects/sec-filing-intelligence/web
+        working-directory: llm-platform/sec-filing-intelligence/web
     steps:
       - uses: actions/checkout@v4
 
@@ -91,7 +90,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: ai-platform-projects/sec-filing-intelligence/web/package-lock.json
+          cache-dependency-path: llm-platform/sec-filing-intelligence/web/package-lock.json
 
       - name: Install
         run: npm ci
@@ -108,4 +107,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the AI platform image
-        run: docker build -t filing-intel:ci ai-platform-projects/sec-filing-intelligence
+        run: docker build -t filing-intel:ci llm-platform/sec-filing-intelligence

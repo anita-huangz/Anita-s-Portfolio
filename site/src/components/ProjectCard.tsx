@@ -3,9 +3,9 @@ import { CATEGORY_LABELS } from "../data/types";
 import type { Category, Project } from "../data/types";
 
 export const CATEGORY_COLOR: Record<Category, string> = {
-  "ai-platform": "var(--ai)",
-  "software-engineering": "var(--se)",
-  "data-science": "var(--ds)",
+  "llm-platform": "var(--ai)",
+  "systems": "var(--se)",
+  "inference": "var(--ds)",
 };
 
 export function CategoryTag({ category }: { category: Category }) {

@@ -224,7 +224,7 @@ child. The default always raised. The CSV is now packaged and read through
 `importlib.resources`, so it resolves from an installed wheel too.
 
 **`main.py` hardcoded an absolute path** to
-`/Users/anitahuang/anita-huangz.github.io/software-engineer-projects/Course Catalog and Scheduling System/data/courses.csv`
+`/Users/anitahuang/anita-huangz.github.io/systems/Course Catalog and Scheduling System/data/courses.csv`
 — a directory that no longer exists, on one specific machine.
 
 Also fixed:

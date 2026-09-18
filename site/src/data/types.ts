@@ -1,4 +1,4 @@
-export type Category = "ai-platform" | "software-engineering" | "data-science";
+export type Category = "llm-platform" | "systems" | "inference";
 
 export interface Project {
   slug: string;
@@ -40,7 +40,7 @@ export interface Project {
 }
 
 export const CATEGORY_LABELS: Record<Category, string> = {
-  "ai-platform": "AI Platform",
-  "software-engineering": "Software Engineering",
-  "data-science": "Data Science",
+  "llm-platform": "LLM Platform",
+  "systems": "Systems",
+  "inference": "Statistical Inference",
 };

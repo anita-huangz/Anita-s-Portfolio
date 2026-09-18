@@ -1,5 +1,5 @@
 /**
- * The piano arranger, ported from `ai-platform-projects/piano-arrangement-lab`.
+ * The piano arranger, ported from `llm-platform/piano-arrangement-lab`.
  *
  * Ported rather than pre-computed because the point of the demo is that you
  * can type any chords you like. A fixed set of baked arrangements would be a

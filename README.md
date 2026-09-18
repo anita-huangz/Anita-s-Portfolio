@@ -9,16 +9,17 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**1,005 tests** — 920 in Python, 85 cross-checking the site's TypeScript ports
-against fixtures the Python generated. I've noted what each project gets wrong
+**2,060 tests** — 1,424 in Python, and 636 in the browser, most of them
+cross-checking the site's TypeScript ports against fixtures the Python
+generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
 half.
 
 ---
 
-## AI Platform
+## LLM Platform
 
-### ✅ [SEC Filing Intelligence](ai-platform-projects/sec-filing-intelligence) · 176 tests
+### ✅ [SEC Filing Intelligence](llm-platform/sec-filing-intelligence) · 176 tests
 
 Ask a question about a public company and get an answer with every claim cited
 to a specific SEC filing — then independently verified against the evidence that
@@ -64,14 +65,14 @@ Docker · React · TypeScript**
 
 ---
 
-## Software Engineering
+## Systems
 
 Ordered by engineering complexity — interacting subsystems, algorithmic depth,
 and how much the correctness depends on domain reasoning. Not line count: the
 last entry is the smallest project here and also the subtlest, and the one
 above it has the most tests.
 
-### ✅ [Factor Portfolio Simulator](software-engineer-projects/factor-based-portfolio-simulator) · 70 tests
+### ✅ [Factor Portfolio Simulator](systems/factor-based-portfolio-simulator) · 70 tests
 
 Point-in-time backtest of cross-sectional equity factor strategies, with
 Fama-French 3-factor attribution — reported **against a benchmark**, because a
@@ -81,7 +82,7 @@ anyone asks.
 Fixed a **look-ahead bias that overstated total return by 92 percentage
 points** — factors were computed once from the entire sample and reused at
 every rebalance, so the 2021 allocation was picked using 2024 returns.
-[`examples/lookahead_demo.py`](software-engineer-projects/factor-based-portfolio-simulator/examples/lookahead_demo.py)
+[`examples/lookahead_demo.py`](systems/factor-based-portfolio-simulator/examples/lookahead_demo.py)
 reproduces both loops over identical prices:
 
 | | point-in-time | full-sample (bug) |
@@ -99,7 +100,7 @@ by 234 points while carrying 1.38× its market exposure, and says so.
 
 **Python · pandas · NumPy · statsmodels · yfinance**
 
-### ✅ [Trie Search](software-engineer-projects/web-crawler-and-search-engine) · 77 tests
+### ✅ [Trie Search](systems/trie-search) · 77 tests
 
 Crawls a website, indexes every word into a trie, searches by prefix or
 single-character wildcard — and **ranks** the results with BM25.
@@ -121,7 +122,7 @@ raised and `dict(trie)` didn't work. The class claimed a contract it failed.
 
 **Python · httpx · lxml · data structures**
 
-### ✅ [Course Catalog & Scheduling](software-engineer-projects/course-catalog-scheduling-system) · 145 tests
+### ✅ [Course Catalog & Scheduling](systems/course-catalog) · 145 tests
 
 Reads the **live** MPCS catalog at
 [mpcs-courses.cs.uchicago.edu](https://mpcs-courses.cs.uchicago.edu/) for any
@@ -170,7 +171,7 @@ conflict. Prefix search was actually *substring* search, so `"530"` matched
 
 **Python · csv · interval logic**
 
-### ✅ [fastcache](software-engineer-projects/performance-optimization) · 67 tests
+### ✅ [fastcache](systems/fastcache) · 67 tests
 
 An LRU cache decorator benchmarked against `functools`, plus a general `cached`
 decorator with TTL expiry and a choice of eviction policy.
@@ -206,7 +207,7 @@ shows what that costs rather than hiding it.
 
 **Python · threading · benchmarking**
 
-### ✅ [Card Game](software-engineer-projects/card-game-system) · 114 tests
+### ✅ [Card Game](systems/card-game-system) · 114 tests
 
 A single-player poker-style draw game — now with straights, and with an advisor
 that tells you what to throw away.
@@ -233,7 +234,7 @@ scored as three-of-a-kind rather than a full house.
 
 **Python · rich · OOP**
 
-### ✅ [Earnings Drift Tracker](software-engineer-projects/earnings-drift-tracker) · 47 tests
+### ✅ [Earnings Drift Tracker](systems/earnings-drift-tracker) · 47 tests
 
 Measures post-earnings-announcement drift against the size of the analyst
 surprise — **as abnormal return**, not raw return, because a stock that rose 2%
@@ -251,7 +252,7 @@ slice of events.
 
 **Python · pandas · NumPy · REST APIs**
 
-## Data Science
+## Statistical Inference
 
 Ordered by complexity, most involved first: depth of method, how much domain
 reasoning the result rests on, and how easy it is to get quietly wrong. All
@@ -263,7 +264,7 @@ that rigorously — permutation tests, power analyses, tests against a null —
 is most of the work in those projects. Showing that something *isn't* there
 is harder than finding something that is.
 
-### 1. ✅ [Customer Churn Prediction](data-science-projects/customer-churn-prediction) · 59 tests
+### 1. ✅ [Customer Churn Prediction](inference/customer-churn-prediction) · 59 tests
 Telco churn treated as what it actually is: **right-censored survival data
 driving a spending decision**, not a binary score. 73.5% of these customers
 hadn't left when the data was cut, so their lifetime is *at least* their
@@ -303,7 +304,7 @@ Ranking by value needs to know how long each customer *would* have stayed —
 the area under their own survival curve, which a classifier cannot produce.
 **Python · NumPy · pandas · scikit-learn · statsmodels (tests only)**
 
-### 2. ✅ [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis) · 25 tests
+### 2. ✅ [Stock-Bond Portfolio Optimisation](inference/stock-bond-portfolio-analysis) · 25 tests
 Mean-variance allocation across five ETFs, evaluated **out of sample** and
 against the benchmark that keeps winning.
 
@@ -324,7 +325,7 @@ Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
 by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
 **Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
 
-### 3. ✅ [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading) · 40 tests
+### 3. ✅ [Bitcoin Price Forecasting](inference/bitcoin-and-asset-trading) · 40 tests
 The conclusion was right; none of the evidence for it was.
 
 | forecast | RMSE | R²(returns) | directional |
@@ -346,7 +347,7 @@ high the price would eventually go. And AR(5) turns +158% into **+8%** once you
 pay 30 bps to trade 291 times; nothing beats buy-and-hold.
 **Python · NumPy · pandas · SciPy · TensorFlow**
 
-### 4. ✅ [Fake News Detection](data-science-projects/fake-news-detection) · 28 tests
+### 4. ✅ [Fake News Detection](inference/fake-news-detection) · 28 tests
 A null result, established properly.
 
 Every title is `Breaking News {i}`; every body is one sentence with the index
@@ -370,7 +371,7 @@ in ways no formula captures. And the power analysis is what turns "we found
 nothing" into **"there is nothing bigger than 0.526 to find"**.
 **Python · scikit-learn · SciPy**
 
-### 5. ✅ [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce) · 29 tests
+### 5. ✅ [E-commerce Recommendations](inference/personalized-recommendations-for-e-commerce) · 29 tests
 A content-based recommender with **ranking metrics** and a leave-one-out
 protocol.
 
@@ -392,7 +393,7 @@ all 10,000 customers. It's included to be seen doing that — a result that good
 is a bug report.
 **Python · NumPy · pandas**
 
-### 6. ✅ [Cybersecurity Threat Analysis](data-science-projects/global-security-threats) · 23 tests
+### 6. ✅ [Cybersecurity Threat Analysis](inference/global-security-threats) · 23 tests
 Six unsupervised methods, and the question that has to come first: **does this
 dataset have any structure?**
 
@@ -417,7 +418,7 @@ validation: both rank distance from the centre of the same cloud, so they agree
 on noise too.
 **Python · scikit-learn · SciPy**
 
-### 7. ✅ [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast) · 20 tests
+### 7. ✅ [Weather Trends & Forecast](inference/weather-trends-and-forecast) · 20 tests
 The slope was never the problem. **The error bar was.**
 
 OLS assumes independent residuals; temperature doesn't oblige, because a warm
@@ -460,12 +461,16 @@ Every analysis links its source in the site's project panel. The datasets:
 ## Repository layout
 
 ```
-ai-platform-projects/     the AI platform
-software-engineer-projects/   six engineered Python packages
-data-science-projects/    seven tested packages, notebooks kept as the record
-site/                     the portfolio site (React + Vite)
-.github/workflows/        CI and GitHub Pages deployment
+llm-platform/       infrastructure around language models
+systems/            things that run: caches, crawlers, solvers, simulators
+inference/          whether an effect is real, and how you would know
+site/               the portfolio site (React + Vite)
+.github/workflows/  CI and GitHub Pages deployment
 ```
+
+The folders are named for what the work does rather than for a job title.
+`inference/` is statistical inference — establishing whether a result holds —
+not model serving.
 
 Each engineered project is self-contained: its own `pyproject.toml`, its own
 test suite, its own README explaining the design decisions and what was wrong

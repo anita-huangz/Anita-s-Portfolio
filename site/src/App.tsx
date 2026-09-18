@@ -9,9 +9,9 @@ import type { Category, Project } from "./data/types";
 const REPO = "https://github.com/anita-huangz/anita-huangz.github.io";
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
 const CATEGORY_COLOR: Record<Category, string> = {
-  "ai-platform": "var(--ai)",
-  "software-engineering": "var(--se)",
-  "data-science": "var(--ds)",
+  "llm-platform": "var(--ai)",
+  "systems": "var(--se)",
+  "inference": "var(--ds)",
 };
 
 type Theme = "light" | "dark";
