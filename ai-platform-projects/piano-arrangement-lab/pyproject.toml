@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "piano-arranger"
+version = "0.1.0"
+description = "Turns a chord chart into a playable piano arrangement by solving for voicings, with an optional language-model layer for intent."
+requires-python = ">=3.11"
+# No runtime dependencies on purpose. The whole engine is integer arithmetic
+# over pitch classes and a dynamic program over a few thousand states; pulling
+# in a music library would hide exactly the part worth showing, and the MIDI
+# writer is 80 lines of `struct.pack`.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.7"]
+# The language-model layer is optional in the packaging as well as at runtime.
+llm = ["httpx>=0.27"]
+
+[project.scripts]
+arrange = "arranger.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
