@@ -63,11 +63,49 @@ function Stat({
 
 interface Churn extends Classifier {
   churn_rate: number;
+  censoring_rate: number;
   precision: number;
   recall: number;
   by_contract: { label: string; rate: number; count: number }[];
   scores: { p: number; y: number }[];
+  survival: {
+    months: number[];
+    overall: number[];
+    lower: number[];
+    upper: number[];
+    by_contract: { label: string; count: number; survival: number[] }[];
+    restricted_mean_60: number;
+    logrank_chi2: number;
+    concordance: number;
+  };
+  hazard_ratios: { name: string; hr: number; lower: number; upper: number }[];
+  calibration: Record<
+    "balanced" | "unweighted",
+    {
+      auc: number;
+      mean_predicted: number;
+      ece: number;
+      skill: number;
+      bins: { predicted: number; observed: number; count: number }[];
+    }
+  >;
+  economics: {
+    offer_cost: number;
+    acceptance: number;
+    margin: number;
+    horizon: number;
+    median_value: number;
+    best_threshold: number;
+    curve: { t: number; value: number; targeted: number }[];
+    policies: Record<string, number>;
+  };
 }
+
+const CONTRACT_COLOUR: Record<string, string> = {
+  "Month-to-month": "var(--ds)",
+  "One year": "var(--ai)",
+  "Two year": "var(--se)",
+};
 
 export function ChurnDemo() {
   const data = useDemoData<Churn>(() => import("../../data/demos/nb-churn.json"));
@@ -159,6 +197,201 @@ export function ChurnDemo() {
         </div>
       </div>
 
+      <h5 className="demo-h" style={{ marginTop: 22 }}>
+        Survival — what the classifier above cannot see
+      </h5>
+      <p className="demo-hint" style={{ margin: "0 0 10px" }}>
+        {pct(data.censoring_rate)} of these customers had not left when the
+        data was cut. Their lifetime is not "no churn", it is <em>at least</em>{" "}
+        their current tenure — and a classifier reads a one-month customer who
+        stayed and a six-year customer who stayed as the same row.
+      </p>
+      <LineChart
+        series={[
+          {
+            label: "All customers",
+            color: "var(--muted)",
+            points: data.survival.months.map((m, i) => ({
+              x: m,
+              y: data.survival.overall[i],
+            })),
+          },
+          ...data.survival.by_contract.map((c) => ({
+            label: c.label,
+            color: CONTRACT_COLOUR[c.label] ?? "var(--ai)",
+            points: data.survival.months.map((m, i) => ({
+              x: m,
+              y: c.survival[i],
+            })),
+          })),
+        ]}
+        formatY={(v) => pct(v)}
+        formatX={(v) => `${Math.round(v)}m`}
+        yLabel="Still a customer"
+        height={240}
+      />
+      <div className="metric-row">
+        <Stat
+          label="Median lifetime"
+          value="not reached"
+          tone="var(--ds)"
+        />
+        <Stat
+          label="Months retained of the next 60"
+          value={data.survival.restricted_mean_60.toFixed(1)}
+        />
+        <Stat
+          label="Concordance (survival)"
+          term="auc"
+          value={data.survival.concordance.toFixed(3)}
+          tone="var(--se)"
+        />
+        <Stat label="ROC AUC (classifier)" term="auc" value={data.auc.toFixed(3)} />
+      </div>
+      <p className="demo-note">
+        <strong>The median is undefined, and that is the right answer</strong> —
+        more than half are still subscribed at the end of the window, so it has
+        not happened yet. The restricted mean is the summary that is
+        answerable. Ranking by the survival model beats the classifier{" "}
+        ({data.survival.concordance.toFixed(3)} against {data.auc.toFixed(3)})
+        because it can see <em>when</em> people left. Kaplan-Meier, the
+        log-rank test (χ² = {data.survival.logrank_chi2.toLocaleString()}) and
+        Cox regression are implemented from scratch and checked against
+        statsmodels to 1e-8.
+      </p>
+
+      <h5 className="demo-h" style={{ marginTop: 18 }}>
+        Hazard ratios — the multiplier on the monthly risk of leaving
+      </h5>
+      <BarChart
+        bars={data.hazard_ratios.map((h) => ({
+          label: h.name.replace(/_/g, " "),
+          value: h.hr,
+          note: `95% CI [${h.lower}, ${h.upper}]`,
+          color: h.hr > 1 ? "var(--ds)" : "var(--se)",
+        }))}
+        formatValue={(v) => `${v.toFixed(2)}x`}
+      />
+      <p className="demo-note">
+        Below 1 is safer, above 1 is riskier. Each step up in contract length
+        multiplies the monthly risk by {data.hazard_ratios[0].hr} — a five-fold
+        reduction. <strong>The proportional-hazards assumption fails for 16 of
+        the 20 covariates</strong>, so these are averages over effects that
+        change with tenure. Reported rather than buried: it is the caveat that
+        belongs next to the table, not in a footnote.
+      </p>
+
+      <h5 className="demo-h" style={{ marginTop: 18 }}>
+        Rebalancing destroys the probabilities and AUC never notices
+      </h5>
+      <div className="metric-row">
+        <Stat
+          label="AUC, balanced"
+          value={data.calibration.balanced.auc.toFixed(4)}
+        />
+        <Stat
+          label="AUC, unweighted"
+          value={data.calibration.unweighted.auc.toFixed(4)}
+        />
+        <Stat
+          label="Calibration error, balanced"
+          value={data.calibration.balanced.ece.toFixed(3)}
+          tone="var(--ds)"
+        />
+        <Stat
+          label="Calibration error, unweighted"
+          value={data.calibration.unweighted.ece.toFixed(3)}
+          tone="var(--se)"
+        />
+      </div>
+      <LineChart
+        series={[
+          {
+            label: "Perfect",
+            color: "var(--muted)",
+            points: [
+              { x: 0, y: 0 },
+              { x: 1, y: 1 },
+            ],
+          },
+          {
+            label: "class_weight=balanced",
+            color: "var(--ds)",
+            points: data.calibration.balanced.bins.map((b) => ({
+              x: b.predicted,
+              y: b.observed,
+            })),
+          },
+          {
+            label: "unweighted",
+            color: "var(--se)",
+            points: data.calibration.unweighted.bins.map((b) => ({
+              x: b.predicted,
+              y: b.observed,
+            })),
+          },
+        ]}
+        formatY={pct}
+        formatX={pct}
+        yLabel="Actually churned"
+        height={230}
+      />
+      <p className="demo-note">
+        Rebalancing — which is what SMOTE does, and the original notebook used
+        it — changed the ranking by <strong>0.0001 of AUC</strong> and made the
+        probabilities about twice too large. Customers the balanced model
+        scores at 0.45 churn 22% of the time. AUC cannot see it, because it
+        only asks whether churners outrank non-churners and is unchanged if you
+        square every probability. That stops being harmless the moment the
+        score is multiplied by a dollar amount.
+      </p>
+
+      <h5 className="demo-h" style={{ marginTop: 18 }}>
+        The decision: who to call, and whether to call at all
+      </h5>
+      <LineChart
+        series={[
+          {
+            label: "Net value of the campaign",
+            color: "var(--ai)",
+            points: data.economics.curve.map((r) => ({ x: r.t, y: r.value })),
+          },
+        ]}
+        formatY={(v) => `$${Math.round(v / 1000)}k`}
+        formatX={(v) => v.toFixed(2)}
+        yLabel="Expected value"
+        height={210}
+      />
+      <p className="demo-note">
+        At ${data.economics.offer_cost} an offer,{" "}
+        {pct(data.economics.acceptance)} accepting and{" "}
+        {pct(data.economics.margin)} margin, the best cut-off is{" "}
+        <strong>{data.economics.best_threshold}</strong>, not 0.5.{" "}
+        <strong>0.5 has no claim on being right</strong> — it is only optimal
+        when the two errors cost the same, and contacting a happy customer
+        costs one discount while losing an unhappy one costs their whole
+        remaining value.
+      </p>
+      <div className="metric-row">
+        {["by_expected_value", "by_probability", "everyone", "random"].map((k) => (
+          <Stat
+            key={k}
+            label={k.replace(/_/g, " ")}
+            value={`$${(data.economics.policies[k] / 1000).toFixed(1)}k`}
+            tone={k === "by_expected_value" ? "var(--se)" : undefined}
+          />
+        ))}
+      </div>
+      <p className="demo-note">
+        The same budget of 1,000 calls, spent three ways.{" "}
+        <strong>Ranking by probability × value returns 33% more</strong> than
+        ranking by probability alone, because the value term needs to know how
+        long each customer <em>would</em> have stayed — the area under their
+        own survival curve, which a classifier cannot produce. "Will churn" is
+        the same label for a customer with eight months left and one with four
+        years.
+      </p>
+
       <h5 className="demo-h" style={{ marginTop: 18 }}>Churn rate by contract</h5>
       <BarChart
         bars={data.by_contract.map((c) => ({
@@ -176,7 +409,9 @@ export function ChurnDemo() {
         contract.
       </p>
 
-      <h5 className="demo-h" style={{ marginTop: 18 }}>What the model leans on</h5>
+      <h5 className="demo-h" style={{ marginTop: 18 }}>
+        What the model leans on — permutation importance
+      </h5>
       <BarChart
         bars={data.importances.map((f) => ({ label: f.feature, value: f.weight }))}
         formatValue={(v) => v.toFixed(3)}

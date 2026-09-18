@@ -28,7 +28,9 @@ jobs:
       - name: Install
         # httpx is for the MPCS course catalog, which the generator now
         # fetches quarter by quarter.
-        run: pip install yfinance pandas numpy httpx
+        # scikit-learn for the churn package, which the notebook-results
+        # generator now imports instead of re-deriving.
+        run: pip install yfinance pandas numpy httpx scikit-learn
 
       - name: Regenerate
         # The generator imports the projects themselves and refuses to write a

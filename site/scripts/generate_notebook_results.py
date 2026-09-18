@@ -49,70 +49,204 @@ def roc_points(y_true, scores, n: int = 60) -> list[dict]:
 
 
 def churn() -> None:
-    from sklearn.ensemble import RandomForestClassifier
+    """Import the project rather than re-deriving it.
+
+    The previous version built its own model here, which meant the browser
+    demo and the package could drift apart -- and it reproduced the bug the
+    package fixes, dropping the eleven unbilled customers instead of setting
+    their TotalCharges to zero.
+    """
+    import sys
+
+    sys.path.insert(0, str(DATA / "customer-churn-prediction" / "src"))
+
     from sklearn.metrics import confusion_matrix, roc_auc_score
-    from sklearn.model_selection import train_test_split
 
-    df = pd.read_csv(DATA / "customer-churn-prediction/data/telco-customer-churn.csv")
-    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
-    df = df.dropna(subset=["TotalCharges"])
-
-    y = (df["Churn"] == "Yes").astype(int)
-    features = df.drop(columns=["customerID", "Churn"])
-    X = pd.get_dummies(features, drop_first=True)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=SEED, stratify=y
+    from churn.calibration import (
+        brier_skill_score,
+        expected_calibration_error,
+        reliability_curve,
     )
-    model = RandomForestClassifier(
-        n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=-1
-    ).fit(X_train, y_train)
+    from churn.classify import (
+        cross_validated_probabilities,
+        models,
+        permutation_importance_scores,
+    )
+    from churn.data import cox_design_matrix, load
+    from churn.economics import (
+        Campaign,
+        best_threshold,
+        customer_value,
+        expected_months_remaining,
+        expected_value_curve,
+        targeting_comparison,
+    )
+    from churn.survival import concordance_index, fit_cox, kaplan_meier, log_rank_test
 
-    proba = model.predict_proba(X_test)[:, 1]
+    data = load(DATA / "customer-churn-prediction" / "data" / "telco-customer-churn.csv")
+
+    # Out-of-fold probabilities, so every score in the browser comes from a
+    # fold the customer was not in.
+    proba = cross_validated_probabilities(data, models(class_weight=None)["logistic"])
+    balanced = cross_validated_probabilities(data, models()["logistic"])
     predicted = (proba >= 0.5).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_test, predicted).ravel()
+    tn, fp, fn, tp = confusion_matrix(data.event, predicted).ravel()
 
-    importances = (
-        pd.Series(model.feature_importances_, index=X.columns)
-        .sort_values(ascending=False)
-        .head(12)
-    )
+    # --- survival ---
+    overall = kaplan_meier(data.duration, data.event)
+    curves = []
+    for contract in ["Month-to-month", "One year", "Two year"]:
+        mask = (data.frame.Contract == contract).to_numpy()
+        km = kaplan_meier(data.duration[mask], data.event[mask])
+        grid = np.arange(0, 73, dtype=float)
+        curves.append(
+            {
+                "label": contract,
+                "count": int(mask.sum()),
+                "survival": [round(float(v), 4) for v in km.predict(grid)],
+            }
+        )
+    lower, upper = overall.confidence_interval()
+    grid = np.arange(0, 73, dtype=float)
+    band_lo = np.interp(grid, overall.times, lower, left=1.0)
+    band_hi = np.interp(grid, overall.times, upper, left=1.0)
+    logrank = log_rank_test(data.duration, data.event, data.frame.Contract.to_numpy())
 
-    # Churn rate by contract type: the single clearest driver in this dataset.
-    by_contract = (
-        df.assign(churn=y)
-        .groupby("Contract")["churn"]
-        .agg(["mean", "size"])
-        .sort_values("mean", ascending=False)
+    # --- Cox ---
+    X = cox_design_matrix(data)
+    cox = fit_cox(X, data.duration, data.event)
+    summary = cox.summary().head(8)
+
+    # --- economics, driven by each customer's own survival curve ---
+    campaign = Campaign()
+    months = expected_months_remaining(
+        cox.predict_survival(X, grid[1:]), grid[1:], campaign.horizon_months
     )
+    value = customer_value(data.frame.MonthlyCharges.to_numpy(float), months, campaign)
+    ev = expected_value_curve(proba, data.event, value, campaign)
+    best = best_threshold(ev)
+
+    reliability = reliability_curve(balanced, data.event)
+    honest_reliability = reliability_curve(proba, data.event)
 
     write(
         "nb-churn.json",
         {
-            "rows": int(len(df)),
-            "churn_rate": round(float(y.mean()), 4),
-            "auc": round(float(roc_auc_score(y_test, proba)), 4),
-            "accuracy": round(float((predicted == y_test).mean()), 4),
+            "rows": int(len(data)),
+            "churn_rate": round(float(data.churn_rate), 4),
+            "censoring_rate": round(float(data.censoring_rate), 4),
+            "auc": round(float(roc_auc_score(data.event, proba)), 4),
+            "accuracy": round(float((predicted == data.event).mean()), 4),
             "precision": round(float(tp / (tp + fp)), 4),
             "recall": round(float(tp / (tp + fn)), 4),
             "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
-            "roc": roc_points(y_test, proba),
-            # Per-row scores, so the threshold can be moved in the browser
-            # rather than being frozen at whatever 0.5 happened to give.
+            "roc": roc_points(data.event, proba),
             "scores": [
                 {"p": round(float(pr), 4), "y": int(t)}
-                for pr, t in zip(proba, y_test, strict=True)
+                for pr, t in zip(proba, data.event, strict=True)
             ],
+            # Permutation importance on held-out rows, not the tree's built-in
+            # impurity importance -- that is computed on the training data and
+            # inflates high-cardinality columns whether or not they generalise.
             "importances": [
                 {"feature": f, "weight": round(float(w), 5)}
-                for f, w in importances.items()
+                for f, w in permutation_importance_scores(
+                    data, models()["random_forest"]
+                ).head(12).items()
             ],
             "by_contract": [
-                {"label": k, "rate": round(float(v["mean"]), 4), "count": int(v["size"])}
-                for k, v in by_contract.iterrows()
+                {
+                    "label": c["label"],
+                    "rate": round(
+                        float(
+                            data.event[
+                                (data.frame.Contract == c["label"]).to_numpy()
+                            ].mean()
+                        ),
+                        4,
+                    ),
+                    "count": c["count"],
+                }
+                for c in curves
             ],
+            "survival": {
+                "months": [int(t) for t in grid],
+                "overall": [round(float(v), 4) for v in overall.predict(grid)],
+                "lower": [round(float(v), 4) for v in band_lo],
+                "upper": [round(float(v), 4) for v in band_hi],
+                "by_contract": curves,
+                "median": None,  # never reached inside the window
+                "restricted_mean_60": round(float(overall.restricted_mean(60)), 2),
+                "logrank_chi2": round(float(logrank.statistic), 1),
+                "concordance": round(
+                    float(concordance_index(cox.risk_score(X), data.duration, data.event)),
+                    4,
+                ),
+            },
+            "hazard_ratios": [
+                {
+                    "name": name,
+                    "hr": round(float(row.hazard_ratio), 3),
+                    "lower": round(float(row.hr_lower), 3),
+                    "upper": round(float(row.hr_upper), 3),
+                }
+                for name, row in summary.iterrows()
+            ],
+            "calibration": {
+                "balanced": {
+                    "auc": round(float(roc_auc_score(data.event, balanced)), 4),
+                    "mean_predicted": round(float(balanced.mean()), 4),
+                    "ece": round(float(expected_calibration_error(balanced, data.event)), 4),
+                    "skill": round(float(brier_skill_score(balanced, data.event)), 4),
+                    "bins": _bins(reliability),
+                },
+                "unweighted": {
+                    "auc": round(float(roc_auc_score(data.event, proba)), 4),
+                    "mean_predicted": round(float(proba.mean()), 4),
+                    "ece": round(float(expected_calibration_error(proba, data.event)), 4),
+                    "skill": round(float(brier_skill_score(proba, data.event)), 4),
+                    "bins": _bins(honest_reliability),
+                },
+            },
+            "economics": {
+                "offer_cost": campaign.offer_cost,
+                "acceptance": campaign.acceptance,
+                "margin": campaign.margin,
+                "horizon": campaign.horizon_months,
+                "median_value": round(float(np.median(value)), 2),
+                "best_threshold": round(float(best.threshold), 2),
+                "curve": [
+                    {
+                        "t": round(float(r.threshold), 2),
+                        "value": round(float(r.expected_value), 0),
+                        "targeted": r.targeted,
+                    }
+                    for r in ev
+                    if r.threshold <= 1.0
+                ],
+                "policies": {
+                    k: round(float(v), 0)
+                    for k, v in targeting_comparison(
+                        proba, data.event, value, campaign, budget=1000
+                    ).items()
+                },
+                # Per-customer value, so the browser can re-rank on any policy.
+                "value": [round(float(v), 1) for v in value],
+            },
         },
     )
+
+
+def _bins(curve) -> list[dict]:
+    return [
+        {
+            "predicted": round(float(p), 4),
+            "observed": round(float(o), 4),
+            "count": int(n),
+        }
+        for p, o, n in zip(curve.predicted, curve.observed, curve.count, strict=True)
+        if n > 0
+    ]
 
 
 # --------------------------------------------------------------------------- #
