@@ -1,27 +1,48 @@
-"""Stock-bond: the constrained optimisation, solved across risk preferences."""
+"""Stock-bond: the out-of-sample comparison, not the in-sample optimisation.
+
+The previous version swept a risk preference through a constrained optimiser
+and drew an efficient frontier. Both are fitted on the whole history and scored
+on the same history, which is the mistake the `allocation` package exists to
+measure: the frontier is a picture of the estimation error, and the "max Sharpe"
+point on it is the one that overfit hardest.
+
+So the frontier stays -- it is what the notebook produced and people expect to
+see -- but it is now drawn beside the rolling out-of-sample backtest of the same
+rules, with the in-sample number next to the realised one for each. Prices are
+fetched live so the window runs to today; every statistic comes from the package.
+"""
 from __future__ import annotations
-import argparse, json, pathlib, warnings
+import argparse, json, pathlib, sys, warnings
 from datetime import date
 import numpy as np, pandas as pd, yfinance as yf
 from scipy.optimize import minimize
 warnings.filterwarnings("ignore")
 
-OUT = pathlib.Path("site/src/data/demos")
-TICKERS = ["SPY", "IWM", "TLT", "LQD", "SHV"]
-NAMES = {
-    "SPY": "S&P 500", "IWM": "Russell 2000 (small cap)",
-    "TLT": "20+ year Treasuries", "LQD": "Investment-grade credit",
-    "SHV": "Short Treasuries (cash-like)",
-}
-TRADING_DAYS = 252
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "data-science-projects/stock-bond-portfolio-analysis/src"))
 
-parser = argparse.ArgumentParser(description="Solve the allocation across risk preferences.")
-parser.add_argument("--start", default="2012-01-01", help="YYYY-MM-DD")
+from allocation.backtest import (
+    in_sample_result,
+    rolling_backtest,
+    weight_instability,
+)
+from allocation.data import DESCRIPTIONS, TRADING_DAYS, Prices
+from allocation.estimate import expected_returns, ledoit_wolf, sample_covariance
+from allocation.optimise import ALLOCATORS
+
+OUT = ROOT / "site/src/data/demos"
+TICKERS = list(DESCRIPTIONS)
+
+parser = argparse.ArgumentParser(description="Compare allocation rules in and out of sample.")
+parser.add_argument("--start", default="2010-01-01", help="YYYY-MM-DD")
 parser.add_argument("--end", default=str(date.today()), help="YYYY-MM-DD (default: today)")
 parser.add_argument(
     "--tickers", default=",".join(TICKERS),
     help="Comma-separated. The last one is treated as the cash-like leg.",
 )
+parser.add_argument("--lookback", type=int, default=504, help="Estimation window, days")
+parser.add_argument("--rebalance-every", type=int, default=63, help="Days between rebalances")
+parser.add_argument("--cost-bps", type=float, default=10.0, help="One-way trading cost")
 args = parser.parse_args()
 TICKERS = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
 CASH = TICKERS[-1]
@@ -29,88 +50,144 @@ CASH = TICKERS[-1]
 raw = yf.download(TICKERS, start=args.start, end=args.end,
                   progress=False, auto_adjust=True)
 closes = raw["Close"][TICKERS].dropna()
-returns = closes.pct_change().dropna()
+prices = Prices(frame=closes)
+returns = prices.returns
+# The cash-like leg stands in for the risk-free rate, as it does in the package.
+rf = float(returns[CASH].mean() * TRADING_DAYS)
 
-mu = returns.mean() * TRADING_DAYS
-cov = returns.cov() * TRADING_DAYS
-# The last ticker is the cash-like leg, so it stands in for the risk-free rate.
-rf = float(mu[CASH])
+summary = prices.annualised_summary()
+shrunk, intensity = ledoit_wolf(returns)
+sample = sample_covariance(returns)
 
-def stats(w: np.ndarray) -> tuple[float, float, float]:
-    r = float(w @ mu)
-    v = float(np.sqrt(w @ cov @ w))
-    return r, v, (r - rf) / v if v > 0 else 0.0
+# ---------------------------------------------------------------------------
+# What the notebook reported, and what the same rule actually earned.
+# ---------------------------------------------------------------------------
+def excess_sharpe(equity: pd.Series) -> float:
+    """Sharpe against the cash leg rather than against zero.
 
-CONSTRAINTS = ({"type": "eq", "fun": lambda w: w.sum() - 1.0},)
-BOUNDS = tuple((0.0, 1.0) for _ in TICKERS)
-START = np.full(len(TICKERS), 1 / len(TICKERS))
+    The package's own `sharpe` divides return by volatility with no risk-free
+    subtraction, which is the standard convention there and fine for comparing
+    two risky portfolios. It is misleading here: minimum variance puts ~100%
+    into SHV, so its "Sharpe" is really cash's return-to-risk ratio and reads
+    as a spectacular result. Subtracting the cash leg gives the number that
+    answers "was taking any risk worth it", and for a cash portfolio it is
+    approximately zero -- which is the correct answer.
+    """
+    daily = equity.pct_change().dropna()
+    excess = (daily - returns[CASH].reindex(daily.index)).dropna()
+    sd = excess.std(ddof=1)
+    return float(excess.mean() / sd * np.sqrt(TRADING_DAYS)) if sd > 0 else 0.0
 
-def solve(objective) -> np.ndarray:
-    res = minimize(objective, START, method="SLSQP",
-                   bounds=BOUNDS, constraints=CONSTRAINTS)
-    return res.x
 
-# The notebook's sweep: the objective blends minimising variance with
-# maximising Sharpe, and the weight on the Sharpe term is swept. At 0 it is a
-# pure minimum-variance portfolio; as it grows the solution chases return.
-SHARPE_WEIGHTS = [0, 0.0001, 0.0002, 0.0004, 0.0005, 0.001, 0.002, 0.005,
-                  0.01, 0.05, 0.5, 1]
-
-sweep = []
-for sw in SHARPE_WEIGHTS:
-    def objective(w, sw=sw):
-        r, v, s = stats(w)
-        return v**2 - sw * s
-    w = solve(objective)
-    r, v, s = stats(w)
-    sweep.append({
-        "sharpe_weight": sw,
-        "weights": {t: round(float(x), 4) for t, x in zip(TICKERS, w)},
-        "return": round(r, 4), "volatility": round(v, 4), "sharpe": round(s, 3),
+rules = []
+backtests = {}
+for name, allocator in ALLOCATORS.items():
+    live = rolling_backtest(
+        returns, allocator, name,
+        lookback=args.lookback,
+        rebalance_every=args.rebalance_every,
+        cost_bps=args.cost_bps,
+    )
+    backtests[name] = live
+    fitted = in_sample_result(returns, allocator, name)
+    rules.append({
+        "name": name,
+        "in_sample": {
+            "return": round(fitted.annualised_return, 4),
+            "volatility": round(fitted.volatility, 4),
+            "sharpe": round(fitted.sharpe, 3),
+            "excess_sharpe": round(excess_sharpe(fitted.equity), 3),
+            "max_drawdown": round(fitted.max_drawdown, 4),
+        },
+        "out_of_sample": {
+            "return": round(live.annualised_return, 4),
+            "volatility": round(live.volatility, 4),
+            "sharpe": round(live.sharpe, 3),
+            "excess_sharpe": round(excess_sharpe(live.equity), 3),
+            "max_drawdown": round(live.max_drawdown, 4),
+            "total_return": round(live.total_return, 4),
+        },
+        "sharpe_shortfall": round(
+            excess_sharpe(fitted.equity) - excess_sharpe(live.equity), 3
+        ),
+        "average_turnover": round(live.average_turnover, 4),
+        "cost_drag": round(live.cost_drag, 4),
+        "weight_instability": round(weight_instability(live), 4),
+        "rebalances": len(live.weights),
+        "final_weights": {
+            t: round(float(w), 4)
+            for t, w in zip(returns.columns, live.weights.iloc[-1])
+        },
+        "weight_path": [
+            {"date": str(pd.Timestamp(i).date()),
+             **{t: round(float(row[t]), 4) for t in returns.columns}}
+            for i, row in live.weights.iterrows()
+        ],
     })
-    print(f"  sharpe_w={sw:<7} ret={r:+.2%} vol={v:.2%} sharpe={s:.2f}  "
-          f"{ {t: f'{x:.0%}' for t, x in zip(TICKERS, w) if x > 0.01} }")
+    print(f"  {name:<20} in-sample Sharpe {fitted.sharpe:5.2f} -> realised "
+          f"{live.sharpe:5.2f}  (turnover {live.average_turnover:.1%}/rebal, "
+          f"cost drag {live.cost_drag:.2%}/yr)\n{'':22}excess of cash: {excess_sharpe(fitted.equity):5.2f} -> {excess_sharpe(live.equity):5.2f}")
 
-# Efficient frontier: minimum variance at each achievable target return.
-lo, hi = float(mu.min()), float(mu.max())
+# Equity curves on the common out-of-sample window, so the panel compares
+# like with like -- the backtests all start after the first lookback.
+frame = pd.DataFrame({n: b.equity for n, b in backtests.items()}).dropna()
+step = max(1, len(frame) // 400)
+
+# ---------------------------------------------------------------------------
+# The frontier: kept, labelled as in-sample, and with the out-of-sample points
+# plotted on the same axes so the gap is a distance on the chart.
+# ---------------------------------------------------------------------------
+mu = expected_returns(returns)
+cov = shrunk
+bounds = tuple((0.0, 1.0) for _ in TICKERS)
+budget = ({"type": "eq", "fun": lambda w: w.sum() - 1.0},)
+start = np.full(len(TICKERS), 1 / len(TICKERS))
+
 frontier = []
-for target in np.linspace(lo, hi, 40):
-    cons = CONSTRAINTS + ({"type": "eq", "fun": lambda w, t=target: w @ mu - t},)
-    res = minimize(lambda w: w @ cov @ w, START, method="SLSQP",
-                   bounds=BOUNDS, constraints=cons)
+for target in np.linspace(float(mu.min()), float(mu.max()), 40):
+    res = minimize(
+        lambda w: w @ cov @ w, start, method="SLSQP", bounds=bounds,
+        constraints=budget + ({"type": "eq", "fun": lambda w, t=target: w @ mu - t},),
+    )
     if res.success:
-        r, v, s = stats(res.x)
+        r = float(res.x @ mu)
+        v = float(np.sqrt(res.x @ cov @ res.x))
         frontier.append({
-            "return": round(r, 4), "volatility": round(v, 4), "sharpe": round(s, 3),
+            "return": round(r, 4), "volatility": round(v, 4),
+            "sharpe": round((r - rf) / v, 3) if v > 0 else 0.0,
             "weights": {t: round(float(x), 4) for t, x in zip(TICKERS, res.x)},
         })
 
-# NAV paths for the notable allocations, so the trade-off is visible over time.
-def nav(weights: dict[str, float]) -> list[float]:
-    w = np.array([weights[t] for t in TICKERS])
-    port = (returns[TICKERS] @ w)
-    return [round(float(v), 2) for v in 100 * (1 + port).cumprod()]
-
-max_sharpe = max(frontier, key=lambda f: f["sharpe"])
-min_vol = min(frontier, key=lambda f: f["volatility"])
-equal = {t: 1 / len(TICKERS) for t in TICKERS}
-
-step = max(1, len(returns) // 400)
 payload = {
     "generated": str(date.today()),
-    "cash_leg": CASH,
-    "growth_leg": TICKERS[0],
+    "source": "Yahoo Finance daily adjusted closes",
+    "source_url": "https://finance.yahoo.com/",
     "tickers": TICKERS,
-    "names": NAMES,
+    "names": DESCRIPTIONS,
+    "cash_leg": CASH,
     "start": str(closes.index[0].date()),
     "end": str(closes.index[-1].date()),
+    "days": len(returns),
     "risk_free": round(rf, 4),
+    # `sharpe` is the package's return/volatility; `excess_sharpe` subtracts the
+    # cash leg. Show the second when ranking rules -- see the note in the script.
+    "sharpe_is_excess_of_zero": True,
+    "settings": {
+        "lookback": args.lookback,
+        "rebalance_every": args.rebalance_every,
+        "cost_bps": args.cost_bps,
+    },
+    "shrinkage_intensity": round(float(intensity), 4),
+    "condition_number": {
+        "sample": round(float(np.linalg.cond(sample)), 1),
+        "shrunk": round(float(np.linalg.cond(shrunk)), 1),
+    },
     "assets": [
         {
-            "ticker": t, "name": NAMES[t],
-            "return": round(float(mu[t]), 4),
-            "volatility": round(float(np.sqrt(cov.loc[t, t])), 4),
-            "sharpe": round((float(mu[t]) - rf) / float(np.sqrt(cov.loc[t, t])), 3),
+            "ticker": t, "name": DESCRIPTIONS.get(t, t),
+            "return": round(float(summary.loc[t, "annual_return"]), 4),
+            "volatility": round(float(summary.loc[t, "annual_vol"]), 4),
+            "sharpe": round(float(summary.loc[t, "sharpe"]), 3),
         }
         for t in TICKERS
     ],
@@ -118,20 +195,19 @@ payload = {
         a: {b: round(float(returns[a].corr(returns[b])), 3) for b in TICKERS}
         for a in TICKERS
     },
-    "sweep": sweep,
+    "rules": rules,
     "frontier": frontier,
-    "dates": [str(d.date()) for d in returns.index[::step]],
-    "paths": {
-        "Max Sharpe": nav(max_sharpe["weights"])[::step],
-        "Min volatility": nav(min_vol["weights"])[::step],
-        "Equal weight": nav(equal)[::step],
-        f"100% {TICKERS[0]}": nav(
-        {t: 1.0 if t == TICKERS[0] else 0.0 for t in TICKERS}
-    )[::step],
+    "dates": [str(d.date()) for d in frame.index[::step]],
+    "equity": {
+        name: [round(float(v), 4) for v in frame[name].to_numpy()[::step]]
+        for name in frame.columns
     },
-    "notable": {"max_sharpe": max_sharpe, "min_vol": min_vol},
 }
 path = OUT / "nb-stockbond.json"
 path.write_text(json.dumps(payload, separators=(",", ":")) + "\n")
+best_is = max(rules, key=lambda r: r["in_sample"]["sharpe"])
+best_oos = max(rules, key=lambda r: r["out_of_sample"]["excess_sharpe"])
+print(f"  best in-sample: {best_is['name']}  |  best realised: {best_oos['name']}")
+print(f"  shrinkage intensity {intensity:.3f}; condition number "
+      f"{np.linalg.cond(sample):.0f} -> {np.linalg.cond(shrunk):.0f}")
 print(f"  nb-stockbond.json  {path.stat().st_size/1024:.1f} KB")
-print(f"  max Sharpe {max_sharpe['sharpe']:.2f} at vol {max_sharpe['volatility']:.2%}")

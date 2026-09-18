@@ -503,9 +503,12 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "by how much. It matters more than the size of the error for anything you " +
       "would trade on, because only the change is tradeable.",
     here:
-      "49% here, which is a coin flip. A chart can track a price level " +
-      "convincingly while carrying no information about its changes.",
-    aliases: ["directional accuracy"],
+      "Around a coin flip for every forecaster here. A chart can track a price " +
+      "level convincingly while carrying no information about its changes. " +
+      "Days where the forecast implies no move are counted separately as " +
+      "abstentions — no call is not the same as a wrong one, and the naive " +
+      "forecast abstains on every single day.",
+    aliases: ["directional accuracy", "direction"],
   },
   lstm: {
     term: "LSTM",
@@ -559,14 +562,6 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
 
   // ----------------------------------------------------- portfolio optimiser
-  "expected-return": {
-    term: "Expected return",
-    body:
-      "The average yearly return an allocation would have produced, estimated " +
-      "from past data. \"Expected\" is a statistical word, not a promise — it is " +
-      "the centre of a range, and the range is wide.",
-    aliases: ["expected return"],
-  },
   frontier: {
     term: "Efficient frontier",
     body:
@@ -574,16 +569,6 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "the mix that historically returned the most. Anything below the curve is " +
       "strictly worse than something on it, so there is no reason to hold it.",
     aliases: ["efficient frontier"],
-  },
-  "risk-preference": {
-    term: "Risk preference",
-    body:
-      "How much return you are willing to give up for a smoother ride. At one " +
-      "end the optimiser only minimises bumpiness and ends up almost entirely " +
-      "in short-term government bonds; at the other it reaches for return and " +
-      "takes on shares.",
-    here: "Drag it and watch the whole allocation move.",
-    aliases: ["risk preference"],
   },
   etf: {
     term: "ETF",
@@ -620,6 +605,353 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "extended — not a climate model, and year-to-year variation is larger " +
       "than a decade of trend.",
     aliases: ["warming rate"],
+  },
+
+  // -------------------------------------------------------------- inference
+  "permutation-test": {
+    term: "Permutation test",
+    body:
+      "Shuffle the answers at random, re-run the whole analysis, and repeat a " +
+      "few hundred times. That builds a picture of what your method scores on " +
+      "data with no signal in it whatsoever. If the real result sits inside " +
+      "that picture, the real result is what noise looks like.",
+    here:
+      "It needs no assumption about how the data is distributed, which is why " +
+      "it is trustworthy where a textbook formula might not be.",
+    aliases: ["permutation", "permutation null", "shuffle test"],
+  },
+  "p-value": {
+    term: "p-value",
+    body:
+      "The chance of seeing a result at least this strong if nothing real were " +
+      "going on. Small means the result is hard to explain as luck. It is not " +
+      "the probability that the finding is true, and 0.05 is a convention, not " +
+      "a law of nature.",
+    aliases: ["p value", "significance"],
+  },
+  "statistical-power": {
+    term: "Statistical power",
+    body:
+      "How likely a study is to spot an effect that really is there. It depends " +
+      "on how big the effect is and how much data you have. Low power means " +
+      "'we found nothing' is uninformative — you would probably have found " +
+      "nothing either way.",
+    here:
+      "Quoting the smallest effect a design could have detected turns 'no " +
+      "signal' from a shrug into a bounded claim.",
+    aliases: ["power", "minimum detectable effect"],
+  },
+  "learning-curve": {
+    term: "Learning curve",
+    body:
+      "Accuracy plotted against how much training data the model was given. A " +
+      "model held back by sample size climbs as you feed it more. A flat line " +
+      "means more data will not help, so the limit is the data itself.",
+  },
+  "benjamini-hochberg": {
+    term: "Benjamini-Hochberg",
+    body:
+      "A correction for testing many things at once. Test twenty features at " +
+      "the usual 5% cut-off and about one will look significant by pure chance; " +
+      "this raises the bar so that the share of your 'discoveries' that are " +
+      "flukes stays controlled.",
+    aliases: ["multiple testing", "false discovery rate", "fdr"],
+  },
+  "confidence-interval": {
+    term: "Confidence interval",
+    body:
+      "A range that the true value is plausibly in, given the data. Wide means " +
+      "the estimate is uncertain. The single number in the middle is the least " +
+      "interesting part — the width is what tells you how much to trust it.",
+    aliases: ["interval", "ci", "error bar"],
+  },
+  "null-model": {
+    term: "Null model",
+    body:
+      "A deliberately meaningless version of the data, built to see what your " +
+      "method reports when there is nothing to find. Every method returns " +
+      "something; the null is how you learn whether that something means " +
+      "anything.",
+    aliases: ["null", "null distribution"],
+  },
+
+  // -------------------------------------------------------------- clustering
+  silhouette: {
+    term: "Silhouette score",
+    body:
+      "How neatly points sit inside their assigned cluster rather than near a " +
+      "neighbouring one, from -1 to 1. Higher looks better, but it can only " +
+      "compare groupings — it cannot tell you whether any grouping should " +
+      "exist, because it is undefined when everything is one group.",
+    here:
+      "Which is why it is shown against a shuffled null here rather than on " +
+      "its own.",
+  },
+  "gap-statistic": {
+    term: "Gap statistic",
+    body:
+      "Compares how tightly your data clusters against how tightly pure random " +
+      "noise of the same size and shape clusters. Unlike an elbow plot it can " +
+      "return an answer of one — meaning 'there are no groups here' — which is " +
+      "sometimes the correct answer.",
+    aliases: ["gap"],
+  },
+  ari: {
+    term: "Adjusted Rand index",
+    body:
+      "How much two groupings of the same items agree, corrected so that chance " +
+      "agreement scores zero. 1 is identical. Re-cluster a random half of your " +
+      "data repeatedly and a low score means the groups move when the data " +
+      "does — they were fitted to noise.",
+    aliases: ["adjusted rand index", "cluster stability", "stability"],
+  },
+  "cramers-v": {
+    term: "Cramér's V",
+    body:
+      "Correlation for categories rather than numbers, from 0 to 1. It answers " +
+      "'does knowing the industry tell you anything about the attack type?'. " +
+      "Near zero means the two columns are unrelated.",
+    aliases: ["cramers v", "cramér's v", "association"],
+  },
+  "ks-test": {
+    term: "Uniformity test",
+    body:
+      "Checks whether a column is spread evenly across its range instead of " +
+      "clustering anywhere. Real quantities are lumpy — most incidents are " +
+      "small, a few are huge. A perfectly flat column is a strong hint that a " +
+      "random number generator produced it.",
+    aliases: ["uniformity", "kolmogorov-smirnov"],
+  },
+
+  // ------------------------------------------------------------ recommenders
+  "recall-at-k": {
+    term: "Recall@k",
+    body:
+      "Of the things a customer actually bought, what share appeared in the top " +
+      "k recommendations. It answers 'did we surface it at all', so it rises as " +
+      "you show more items.",
+    aliases: ["recall@k", "recall at k"],
+  },
+  "precision-at-k": {
+    term: "Precision@k",
+    body:
+      "Of the k items recommended, what share the customer actually wanted. " +
+      "Shorter lists can score higher, so it trades off against recall.",
+    aliases: ["precision@k", "precision at k"],
+  },
+  ndcg: {
+    term: "NDCG",
+    body:
+      "Like recall, but it cares where in the list the right answer landed — a " +
+      "hit at position one counts for more than a hit at position ten. 1 is a " +
+      "perfect ordering.",
+    aliases: ["ndcg@k", "normalised discounted cumulative gain"],
+  },
+  mrr: {
+    term: "MRR",
+    body:
+      "Mean reciprocal rank: one divided by the position of the first correct " +
+      "item, averaged over customers. Finding it first scores 1, third scores " +
+      "0.33. The metric to use when people only look at the top of the list.",
+    aliases: ["mean reciprocal rank", "reciprocal rank"],
+  },
+  map: {
+    term: "MAP",
+    body:
+      "Mean average precision: precision measured at each position where a " +
+      "correct item appears, averaged. It rewards getting several right answers " +
+      "high up rather than just one.",
+    aliases: ["mean average precision", "map@k"],
+  },
+  "leave-one-out": {
+    term: "Leave-one-out",
+    body:
+      "Hide one of a customer's purchases, recommend from what is left, and see " +
+      "whether the hidden one comes back. Nothing is scored against information " +
+      "the recommender was allowed to see, which is what makes the number mean " +
+      "anything.",
+    aliases: ["loo", "held out"],
+  },
+  oracle: {
+    term: "Oracle",
+    body:
+      "A deliberately cheating method that is allowed to see the answer. It is " +
+      "not a proposal — it is a ruler. If a normal method scores near the " +
+      "oracle, look for a leak; if the oracle scores a perfect 1.0, the column " +
+      "it read already contained the answer.",
+    aliases: ["leak", "data leak", "leakage"],
+  },
+
+  // ---------------------------------------------------------------- trends
+  "newey-west": {
+    term: "Newey-West",
+    body:
+      "A way of widening an error bar to account for measurements that are not " +
+      "independent. Warm years follow warm years, so seventy-five annual " +
+      "readings carry less information than seventy-five unrelated ones, and " +
+      "the ordinary formula would report more confidence than is earned.",
+    aliases: ["hac", "newey west", "heteroskedasticity and autocorrelation consistent"],
+  },
+  "mann-kendall": {
+    term: "Mann-Kendall",
+    body:
+      "A trend test that only looks at whether later values tend to exceed " +
+      "earlier ones, ignoring their size. That makes it immune to one freak " +
+      "year, which would tug a straight-line fit. The standard cross-check in " +
+      "climate work.",
+    aliases: ["sen's slope", "sens slope", "mann kendall"],
+  },
+  "block-bootstrap": {
+    term: "Block bootstrap",
+    body:
+      "Re-runs the analysis on thousands of resampled versions of the data to " +
+      "see how much the answer wobbles. It resamples in contiguous blocks " +
+      "rather than single points, so the year-to-year persistence in the record " +
+      "is preserved rather than shuffled away.",
+    aliases: ["bootstrap", "moving block bootstrap"],
+  },
+  autocorrelation: {
+    term: "Autocorrelation",
+    body:
+      "When each value is related to the one before it. Temperature has plenty: " +
+      "a warm year makes the next year more likely to be warm. It does not bias " +
+      "the trend, but it does mean the usual uncertainty formulas understate " +
+      "how uncertain that trend is.",
+    aliases: ["serial correlation", "lag-1"],
+  },
+  "effective-sample-size": {
+    term: "Effective sample size",
+    body:
+      "How many genuinely independent observations your correlated data is " +
+      "worth. Seventy-five annual temperatures behaving like forty-six " +
+      "independent ones is the honest count to do statistics with.",
+    aliases: ["effective n"],
+  },
+
+  // ------------------------------------------------------------- allocation
+  "in-sample": {
+    term: "In-sample",
+    body:
+      "A result measured on the same data used to choose the strategy. It is " +
+      "always flattering, because the choice was tuned to those exact numbers. " +
+      "Treat it as an upper bound on fantasy, not an estimate of performance.",
+    aliases: ["in sample", "fitted"],
+  },
+  "out-of-sample": {
+    term: "Out-of-sample",
+    body:
+      "A result measured on data the strategy had never seen when its decisions " +
+      "were made — here, weights chosen from a trailing window and then held " +
+      "forward. The only version of a backtest worth reading.",
+    aliases: ["out of sample", "realised"],
+  },
+  "ledoit-wolf": {
+    term: "Ledoit-Wolf shrinkage",
+    body:
+      "Estimating how assets move together from limited history gives a noisy " +
+      "answer, and optimisers chase that noise. Shrinkage pulls the estimate " +
+      "part-way toward a simple, stable one — accepting a little bias to remove " +
+      "a lot of noise.",
+    aliases: ["shrinkage", "covariance shrinkage"],
+  },
+  "minimum-variance": {
+    term: "Minimum variance",
+    body:
+      "The mix with the smallest possible wobble, ignoring returns entirely. It " +
+      "usually lands on whatever is safest, so a spectacular-looking " +
+      "return-to-risk ratio often just means 'it bought cash'.",
+    aliases: ["min variance", "min vol"],
+  },
+  "risk-parity": {
+    term: "Risk parity",
+    body:
+      "Size each holding so that each contributes the same amount of risk, " +
+      "rather than the same amount of money. It needs no forecast of returns, " +
+      "which is exactly why it tends to survive contact with the future.",
+  },
+  "equal-weight": {
+    term: "Equal weight (1/N)",
+    body:
+      "Put the same amount in everything. It estimates nothing, so there is " +
+      "nothing for it to get wrong, and it is a famously hard benchmark for " +
+      "clever optimisers to beat once their estimation error is counted.",
+    aliases: ["1/n", "naive diversification"],
+  },
+  turnover: {
+    term: "Turnover",
+    body:
+      "How much of the portfolio is bought and sold at each rebalance. Every " +
+      "trade costs money, so a rule whose weights lurch around each quarter is " +
+      "paying for the privilege of chasing noise.",
+  },
+  "excess-sharpe": {
+    term: "Sharpe over cash",
+    body:
+      "Return above what cash would have paid, divided by how much it wobbled. " +
+      "Subtracting cash is what makes the comparison fair: a portfolio that is " +
+      "entirely cash has a huge plain return-to-risk ratio and an excess Sharpe " +
+      "of about zero, which is the honest score.",
+    aliases: ["excess sharpe", "sharpe over cash"],
+  },
+  "condition-number": {
+    term: "Condition number",
+    body:
+      "How close a matrix is to being unusable. A large value means small " +
+      "errors in the inputs become large errors in the answer — so an optimiser " +
+      "fed one will produce confident, precise, meaningless weights.",
+  },
+
+  // --------------------------------------------------------------- forecasts
+  "walk-forward": {
+    term: "Walk-forward",
+    body:
+      "Train on the past, test on the next stretch, roll forward, repeat. One " +
+      "train/test split gives one number that might be luck; twenty rolling " +
+      "ones show whether the result holds up across different market regimes.",
+    aliases: ["rolling origin", "walk forward"],
+  },
+  "diebold-mariano": {
+    term: "Diebold-Mariano",
+    body:
+      "A test for whether one forecast is genuinely more accurate than another, " +
+      "or just happened to be on this sample. Comparing two error numbers " +
+      "cannot tell you; this accounts for the fact that both forecasts make " +
+      "their mistakes on the same days.",
+    aliases: ["dm test"],
+  },
+  "wilson-interval": {
+    term: "Wilson interval",
+    body:
+      "An error bar around a percentage. 52% right out of 4,000 days sounds " +
+      "like an edge until you see the range around it. Wilson is used rather " +
+      "than the textbook formula because that one misbehaves near 0% and 100%.",
+    aliases: ["wilson score interval"],
+  },
+  "return-r2": {
+    term: "R² on returns",
+    body:
+      "Whether a forecast predicts the daily *change* better than just guessing " +
+      "'no change'. Predicting tomorrow's price is easy — it is close to " +
+      "today's. Predicting the move is the hard part, and negative here means " +
+      "worse than not trying.",
+    aliases: ["return r2", "r squared on returns"],
+  },
+  "buy-and-hold": {
+    term: "Buy and hold",
+    body:
+      "Buy once, do nothing, pay no further costs. The benchmark any trading " +
+      "strategy has to beat, and in a strongly rising market most of them turn " +
+      "out to be it in disguise with extra fees.",
+    aliases: ["buy & hold"],
+  },
+  "scaler-leak": {
+    term: "Scaler leakage",
+    body:
+      "Squashing prices into a 0-1 range using the highest price in the whole " +
+      "record — including the test period. The model then quietly knows the " +
+      "future high before it forecasts. Doing it correctly, on training data " +
+      "only, often makes results much worse and much more honest.",
+    aliases: ["scaling leak"],
   },
 };
 

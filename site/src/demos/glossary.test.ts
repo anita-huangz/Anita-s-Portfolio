@@ -20,7 +20,17 @@ const SOURCES = import.meta.glob("../**/*.tsx", {
   eager: true,
 }) as Record<string, string>;
 
-/** Every `<Term id="x">` and every `term="x"` prop across the app. */
+/**
+ * Every `<Term id="x">`, every `term="x"` prop, and every id reached through a
+ * lookup table across the app.
+ *
+ * The third case exists because a table whose rows each carry a different term
+ * cannot write the id inline — it maps a row key to an id, as `METHOD_TERM` and
+ * `RULE_TERM` do. Those ids are just as real as the inline ones and rot just as
+ * silently, so any `const *_TERM: Record<string, string>` is scanned too. The
+ * convention is the suffix: name a lookup table `SOMETHING_TERM` and the test
+ * will check it.
+ */
 function usedTermIds(): { id: string; file: string }[] {
   const out: { id: string; file: string }[] = [];
   for (const [file, text] of Object.entries(SOURCES)) {
@@ -29,6 +39,13 @@ function usedTermIds(): { id: string; file: string }[] {
     }
     for (const m of text.matchAll(/\bterm="([^"]+)"/g)) {
       out.push({ id: m[1], file });
+    }
+    for (const table of text.matchAll(
+      /const\s+\w*_TERM\s*:\s*Record<string,\s*string>\s*=\s*\{([^}]*)\}/g,
+    )) {
+      for (const m of table[1].matchAll(/:\s*"([^"]+)"/g)) {
+        out.push({ id: m[1], file });
+      }
     }
   }
   return out;

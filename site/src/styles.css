@@ -307,6 +307,30 @@ footer {
 .demo-split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 @media (max-width: 760px) { .demo-split { grid-template-columns: 1fr; } }
 
+/* Tables carry the comparisons that are genuinely tabular -- one rule per row,
+   one metric per column. They also serve as the accessible view of the charts
+   beside them, so the numbers are never available only as a bar length. */
+.demo-table-wrap { overflow-x: auto; margin: 0 0 4px; }
+.demo-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.demo-table th {
+  text-align: right; font-weight: 600; white-space: nowrap;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); padding: 0 0 7px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.demo-table td {
+  text-align: right; padding: 7px 0 7px 16px;
+  border-bottom: 1px solid var(--line); color: var(--text);
+}
+.demo-table th:first-child,
+.demo-table td:first-child { text-align: left; padding-left: 0; }
+.demo-table tbody tr:last-child td { border-bottom: none; }
+.demo-table tr.highlight td { background: color-mix(in srgb, var(--ds) 8%, transparent); }
+.demo-table .dim { color: var(--muted); }
+
 /* ------------------------------------------------------------- charts */
 
 .chart-svg { width: 100%; height: auto; display: block; }
