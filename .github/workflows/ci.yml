@@ -32,6 +32,7 @@ jobs:
           - data-science-projects/fake-news-detection
           - data-science-projects/global-security-threats
           - data-science-projects/personalized-recommendations-for-e-commerce
+          - data-science-projects/weather-trends-and-forecast
     defaults:
       run:
         working-directory: ${{ matrix.project }}
