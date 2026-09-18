@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "news-signal"
+version = "0.1.0"
+description = "Establishing that a dataset contains no learnable signal, and how much that rules out."
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "pandas>=2.0", "scikit-learn>=1.4", "scipy>=1.11"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.7"]
+
+[project.scripts]
+news-signal = "news_signal.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

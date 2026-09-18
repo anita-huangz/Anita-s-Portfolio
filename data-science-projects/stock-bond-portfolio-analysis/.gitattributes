@@ -1,0 +1,4 @@
+# The repository routes *.csv through Git LFS. This 216 KB file is packaged
+# with the library and read by every test; actions/checkout does not fetch
+# LFS content.
+src/allocation/data/*.csv -filter -diff -merge text

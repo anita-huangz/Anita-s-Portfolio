@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**839 tests** — 754 in Python, 85 cross-checking the site's TypeScript ports
+**1,005 tests** — 920 in Python, 85 cross-checking the site's TypeScript ports
 against fixtures the Python generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
 half.
@@ -254,11 +254,16 @@ slice of events.
 ## Data Science
 
 Ordered by complexity, most involved first: depth of method, how much domain
-reasoning the result rests on, and how easy it is to get quietly wrong. The
-first one is an engineered, tested package; the rest are still exploratory
-notebooks.
+reasoning the result rests on, and how easy it is to get quietly wrong. All
+seven are now engineered, tested packages; the original notebooks are kept
+beside them as the record of what they replaced.
 
-### 1. ✅ [Customer Churn Prediction](data-science-projects/customer-churn-prediction) · 58 tests
+**Four of these seven datasets turn out to be synthetic**, and establishing
+that rigorously — permutation tests, power analyses, tests against a null —
+is most of the work in those projects. Showing that something *isn't* there
+is harder than finding something that is.
+
+### 1. ✅ [Customer Churn Prediction](data-science-projects/customer-churn-prediction) · 59 tests
 Telco churn treated as what it actually is: **right-censored survival data
 driving a spending decision**, not a binary score. 73.5% of these customers
 hadn't left when the data was cut, so their lifetime is *at least* their
@@ -298,58 +303,142 @@ Ranking by value needs to know how long each customer *would* have stayed —
 the area under their own survival curve, which a classifier cannot produce.
 **Python · NumPy · pandas · scikit-learn · statsmodels (tests only)**
 
-### 2. [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis)
-Allocates across five ETFs by solving a constrained optimisation whose objective
-trades variance against Sharpe, swept across twelve risk preferences. At a
-Sharpe weight of zero it is pure minimum-variance and holds **100% short
-Treasuries**; at the top it takes 21% equities for 4.1% expected return. The
-live demo lets you drag that preference and watch the weights, the frontier
-position, and the realised NAV all move.
-**463 lines, SPY/IWM/TLT/LQD/SHV, 2012–2024** · SciPy, statsmodels, yfinance
+### 2. ✅ [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis) · 25 tests
+Mean-variance allocation across five ETFs, evaluated **out of sample** and
+against the benchmark that keeps winning.
 
-### 3. [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading)
-A stacked LSTM with dropout, trained on rolling 90-day windows cut from 127 MB
-of minute-resolution trades resampled to daily bars. **Running the saved model
-against a one-line baseline is the finding:** predicting "tomorrow equals
-today" scores an RMSE of $1,401; the LSTM scores $22,283 — 16× worse — with
-49% directional accuracy, a coin flip. The chart still looks convincing, which
-is the trap. A line that tracks a price *level* can carry no information about
-its *changes*, and only the change is tradeable.
-**TensorFlow, Keras, scikit-learn**
+| strategy | ann return | Sharpe | turnover |
+|---|---:|---:|---:|
+| **equal weight (1/N)** | **+6.50%** | 0.83 | 1.8% |
+| risk parity | +4.98% | 1.13 | 5.7% |
+| maximum Sharpe | +1.80% | **0.32** | 14.9% |
 
-### 4. [Fake News Detection](data-science-projects/fake-news-detection)
-TF-IDF over article text, sentiment polarity, and structural metadata, compared
-across several classifiers under cross-validation. **The reportable result is
-negative, and it is about the data:** every title is `Breaking News N`, every
-body is one templated sentence, no feature correlates above 0.03 with the
-label, and the fake rate sits near 50% for every source — The Onion and Reuters
-alike. The labels look randomly assigned, so no model can beat chance and any
-accuracy quoted on this dataset measures nothing.
-[Dataset](https://www.kaggle.com/datasets/khushikyad001/fake-news-detection) ·
-**4,000 articles** · scikit-learn, XGBoost, TextBlob
+**1/N earns the most, and it's the only rule that estimates nothing** —
+DeMiguel, Garlappi and Uppal (2009), reproduced. **Maximum Sharpe comes last
+on the Sharpe ratio it optimises**, because expected returns can't be estimated
+well enough to optimise against. In sample it reports **5.61**, a 17× collapse
+— and the notebook reported the in-sample number. The mechanism is visible
+directly: it rewrites 15% of the book every quarter chasing a sample mean.
 
-### 5. [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce)
-Joins customer behaviour against a product catalogue across boosting,
-ensembles, text features and seasonality. The data undercuts the premise: the
-three customer segments barely differ in average order value, so the segment
-label carries little signal.
-**10,000 customers × 10,000 products** · scikit-learn, XGBoost
+Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
+by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
+**Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
 
-### 6. [Cybersecurity Threat Analysis](data-science-projects/global-security-threats)
-Six unsupervised methods over a decade of incidents — PCA and t-SNE, K-Means
-and DBSCAN, Isolation Forest and Local Outlier Factor. Unsupervised work is
-harder to judge than it looks: with no ground truth, a clean separation can be
-an artifact of handing the clusterer the same columns the projection used.
-**3,000 incidents, 2015–2024, 150 flagged anomalous** · scikit-learn
+### 3. ✅ [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading) · 40 tests
+The conclusion was right; none of the evidence for it was.
 
-### 7. [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast)
-Pulls hourly ERA5 reanalysis from the Open-Meteo API, extracts long-run
-temperature trends, and projects them forward. Six cities over 75 years:
-London warms fastest at **+0.241 °C/decade**, Sydney slowest at +0.100. The
-demo notes what the projection is — a straight line extended, not a climate
-model — and that year-to-year variation exceeds a decade of trend. One caveat
-stated plainly: the project's legislation-influence feature is synthetic.
-**3 scripts, ~200 lines** · pandas, scikit-learn, requests
+| forecast | RMSE | R²(returns) | directional |
+|---|---:|---:|---|
+| LSTM (honest) | 22,283 | **−206** | 49.0% [46%, 52%] |
+| LSTM (as written) | 13,867 | −58 | 49.7% |
+| naive | **1,401** | 0.0 | makes no call |
+
+**Diebold-Mariano: DM = +18.03, p = 7.9e-63** — "16× worse" becomes a
+hypothesis test with a HAC correction, because forecast errors on consecutive
+days are correlated. RMSE on a *level* is a statement about the level: across
+21 rolling origins the same forecaster scores **$5 in one fold and $2,076 in
+another**. R² on returns is the real question, and predicting "no change"
+scores exactly 0.
+
+`MinMaxScaler` was fitted on the whole series before splitting, so **36.2% of
+the scaled axis was territory training never reached** — the model was told how
+high the price would eventually go. And AR(5) turns +158% into **+8%** once you
+pay 30 bps to trade 291 times; nothing beats buy-and-hold.
+**Python · NumPy · pandas · SciPy · TensorFlow**
+
+### 4. ✅ [Fake News Detection](data-science-projects/fake-news-detection) · 28 tests
+A null result, established properly.
+
+Every title is `Breaking News {i}`; every body is one sentence with the index
+substituted. **Strip the digits and 4,000 distinct titles collapse to one** —
+so the notebook's TF-IDF model was a model of the row number. That check is
+three lines and now runs first.
+
+The labels being random is harder to show:
+
+```
+observed AUC             0.5145
+shuffled-label null      0.4994 ± 0.0122
+95% of shuffles fall in  [0.4759, 0.5227]     p = 0.113
+
+4,000 rows would detect AUC ≥ 0.526 at 80% power.
+```
+
+The permutation null has to be *simulated* — the null distribution of a
+cross-validated AUC depends on sample size, fold count and overfitting capacity
+in ways no formula captures. And the power analysis is what turns "we found
+nothing" into **"there is nothing bigger than 0.526 to find"**.
+**Python · scikit-learn · SciPy**
+
+### 5. ✅ [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce) · 29 tests
+A content-based recommender with **ranking metrics** and a leave-one-out
+protocol.
+
+| recommender | recall@5 | NDCG@5 |
+|---|---:|---:|
+| browsing (ORACLE) | **1.0000** | 0.6369 |
+| different category | 0.2734 | 0.1609 |
+| random | 0.2083 | 0.1234 |
+| same category | 0.0232 | **0.0090** |
+
+There is **no user-item interaction matrix** — purchase history is a list of
+subcategory *names* — so collaborative filtering is undefined here, not merely
+hard. Every customer's purchases sit in **distinct categories**, so holding one
+out leaves a history entirely in other categories and "more of the same" ranks
+the held-out item's category *last*: **14× worse than random**.
+
+The oracle hits recall@5 = 1.0000 because browsing history names the answer for
+all 10,000 customers. It's included to be seen doing that — a result that good
+is a bug report.
+**Python · NumPy · pandas**
+
+### 6. ✅ [Cybersecurity Threat Analysis](data-science-projects/global-security-threats) · 23 tests
+Six unsupervised methods, and the question that has to come first: **does this
+dataset have any structure?**
+
+All three numerics are indistinguishable from uniform (KS p = 0.42, 0.51,
+0.80), the categories are equally likely, and the strongest association between
+any pair of columns is a Cramér's V of 0.062. Every column is an independent
+draw.
+
+The clusters then fail three ways:
+
+- silhouette **0.0796** against **0.0810** on independently shuffled columns —
+  marginally *worse* than noise
+- bootstrap stability **ARI 0.484** against the usual 0.75 bar
+- **the gap statistic picks k = 1**, falling monotonically with k
+
+That last one matters because it's the only criterion here that *can* say
+"none" — silhouette and elbow plots are undefined at k = 1, which is why an
+elbow plot of noise still has an elbow.
+
+The two outlier detectors agree 4× more than chance, and that is **not**
+validation: both rank distance from the centre of the same cloud, so they agree
+on noise too.
+**Python · scikit-learn · SciPy**
+
+### 7. ✅ [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast) · 20 tests
+The slope was never the problem. **The error bar was.**
+
+OLS assumes independent residuals; temperature doesn't oblige, because a warm
+year follows a warm year. The lag-1 residual correlation is significantly
+positive in all six cities:
+
+| city | lag-1 | effective n | OLS SE understated by |
+|---|---:|---:|---:|
+| Tokyo | +0.403 | 32/75 | **53%** |
+| Reykjavik | +0.367 | 35/75 | 47% |
+| London | +0.200 | 50/75 | 23% |
+
+Three corrections that share no assumptions — Newey-West, a moving-block
+bootstrap, and rank-based Mann-Kendall with Sen's slope — **all agree on the
+slope; only OLS disagrees on the width.** Every city is warming, London fastest
+at +0.244 °C/decade, and the year-to-year variation exceeds a decade of trend
+everywhere, which is why nobody notices it from memory.
+
+Gone: a synthetic `generate_dummy_legislation_influence` regressor, and a trend
+fitted through 90 days of daily maxima, which measures the seasons.
+**Python · NumPy · SciPy · statsmodels (tests only)**
 
 ## Data sources
 
@@ -373,7 +462,7 @@ Every analysis links its source in the site's project panel. The datasets:
 ```
 ai-platform-projects/     the AI platform
 software-engineer-projects/   six engineered Python packages
-data-science-projects/    exploratory notebooks
+data-science-projects/    seven tested packages, notebooks kept as the record
 site/                     the portfolio site (React + Vite)
 .github/workflows/        CI and GitHub Pages deployment
 ```

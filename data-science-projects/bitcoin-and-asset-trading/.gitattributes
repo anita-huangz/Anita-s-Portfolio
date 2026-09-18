@@ -1,0 +1,8 @@
+# The repository routes *.csv through Git LFS for the large datasets. These
+# daily bars are 230 KB, are packaged with the library, and every test reads
+# them -- and actions/checkout does not fetch LFS content, so under LFS CI
+# receives a pointer file and nothing loads.
+#
+# The 127 MB minute file in data/ stays in LFS; it is the raw source and no
+# test touches it.
+src/btc_forecast/data/*.csv -filter -diff -merge text

@@ -28,6 +28,12 @@ jobs:
           - software-engineer-projects/web-crawler-and-search-engine
           # The only data-science project that is a tested package.
           - data-science-projects/customer-churn-prediction
+          - data-science-projects/bitcoin-and-asset-trading
+          - data-science-projects/fake-news-detection
+          - data-science-projects/global-security-threats
+          - data-science-projects/personalized-recommendations-for-e-commerce
+          - data-science-projects/weather-trends-and-forecast
+          - data-science-projects/stock-bond-portfolio-analysis
     defaults:
       run:
         working-directory: ${{ matrix.project }}
