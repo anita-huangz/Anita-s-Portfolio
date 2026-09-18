@@ -105,17 +105,10 @@ export function ProjectDetail({ project, onClose, baseUrl }: Props) {
         {project.images && project.images.length > 0 && (
           <>
             <h4>Interface</h4>
-            {project.images.map((img, i) => (
+            {project.images.map((img) => (
               <img
                 key={img.src}
-                // Two images means a light/dark pair of the same interface, so
-                // only the one matching the theme is shown; more than two is a
-                // gallery of different views and all of them are.
-                className={
-                  project.images!.length === 2
-                    ? `shot ${i === 0 ? "light-only" : "dark-only"}`
-                    : "shot"
-                }
+                className="shot"
                 src={`${baseUrl}${img.src}`}
                 alt={img.alt}
                 loading="lazy"

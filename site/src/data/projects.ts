@@ -39,10 +39,6 @@ export const PROJECTS: Project[] = [
       {
         "src": "sec-filing-light.png",
         "alt": "The research UI showing the agent's run timeline, quoted filing passages, and cost telemetry"
-      },
-      {
-        "src": "sec-filing-dark.png",
-        "alt": "The same research interface in dark mode"
       }
     ],
     "io": {
@@ -84,10 +80,6 @@ export const PROJECTS: Project[] = [
       {
         "src": "piano-light.png",
         "alt": "The arranger's keyboard with a B7 voicing lit \u2014 the left hand's B2 in orange, the right hand's F#3, A3, B3 and D#4 in blue \u2014 above the chord-by-chord table of hand positions, stretch and cost"
-      },
-      {
-        "src": "piano-dark.png",
-        "alt": "The same arrangement in dark mode"
       }
     ],
     "io": {

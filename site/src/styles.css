@@ -180,20 +180,6 @@ a { color: inherit; }
      rather than letting it set the card's height. */
   max-height: 320px; object-fit: cover; object-position: top;
 }
-.card.featured .shot-frame { display: block; }
-
-/* A light/dark pair of the same interface: show the one matching the theme.
-   Keyed to both the media query and the `data-theme` attribute, because the
-   site's own toggle sets the attribute and would otherwise be ignored. */
-.dark-only { display: none; }
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) .light-only { display: none; }
-  :root:where(:not([data-theme="light"])) .dark-only { display: block; }
-}
-:root[data-theme="dark"] .light-only { display: none; }
-:root[data-theme="dark"] .dark-only { display: block; }
-:root[data-theme="light"] .light-only { display: block; }
-:root[data-theme="light"] .dark-only { display: none; }
 
 .card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .card h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
