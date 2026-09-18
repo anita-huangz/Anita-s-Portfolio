@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   type CitySeries,
   type Place,
+  type TrendRow,
   WeatherLookupError,
   fetchCitySeries,
   searchPlaces,
@@ -13,7 +14,6 @@ import { Loading } from "./Loading";
 import { Term } from "./Term";
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
-const money = (v: number) => `$${Math.round(v).toLocaleString()}`;
 
 function Stat({
   label,
@@ -45,14 +45,26 @@ interface City {
   lat: number;
   lon: number;
   annual: { year: number; temp: number }[];
-  trend: {
-    slope_per_decade: number;
-    intercept: number;
-    sigma: number;
-    first_year: number;
-    last_year: number;
+  fitted: { year: number; temp: number }[];
+  trends: {
+    ols: TrendRow;
+    newey_west: TrendRow;
+    bootstrap?: TrendRow;
+    mann_kendall: TrendRow;
   };
-  projection: { year: number; temp: number }[];
+  interval_inflation: number | null;
+  autocorrelation: {
+    lag1: number;
+    p: number;
+    durbin_watson: number;
+    effective_n: number;
+    n: number;
+    correlated: boolean;
+    inflation: number;
+  };
+  year_to_year_sd: number;
+  span: { first: number; last: number; years: number };
+  projection: { year: number; temp: number; low: number; high: number }[];
   monthly: { month: number; temp: number }[];
   warming: number;
 }
@@ -60,17 +72,35 @@ interface City {
 interface WeatherFile {
   source: string;
   source_url: string;
+  bootstrap_draws: number;
   cities: Record<string, City>;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+const METHOD_TERM: Record<string, string> = {
+  ols: "confidence-interval",
+  newey_west: "newey-west",
+  bootstrap: "block-bootstrap",
+  mann_kendall: "mann-kendall",
+};
+
+const METHOD_LABEL: Record<string, string> = {
+  ols: "Ordinary least squares",
+  newey_west: "Newey-West (HAC)",
+  bootstrap: "Block bootstrap",
+  mann_kendall: "Mann-Kendall / Sen",
+};
+
+const signed = (v: number, dp = 3) => `${v >= 0 ? "+" : ""}${v.toFixed(dp)}`;
+
 export function WeatherDemo() {
   const data = useDemoData<WeatherFile>(() => import("../../data/demos/nb-weather.json"));
   const [city, setCity] = useState("Chicago");
   const [showProjection, setShowProjection] = useState(true);
   const [showTrend, setShowTrend] = useState(true);
+  const [band, setBand] = useState<"newey_west" | "ols">("newey_west");
   const [startYear, setStartYear] = useState(1950);
 
   // Places looked up live sit alongside the bundled ones for this session.
@@ -85,8 +115,13 @@ export function WeatherDemo() {
   const cities: Record<string, City> = { ...data.cities, ...extra };
   const names = Object.keys(cities);
   const active = cities[city] ?? cities[names[0]];
-  const { slope_per_decade, intercept, first_year, last_year } = active.trend;
-  const slope = slope_per_decade / 10;
+  const { first, last } = active.span;
+  const ols = active.trends.ols;
+  const hac = active.trends.newey_west;
+  const auto = active.autocorrelation;
+  const rows = (["ols", "newey_west", "bootstrap", "mann_kendall"] as const)
+    .map((key) => ({ key: key as string, row: active.trends[key] }))
+    .filter((r): r is { key: string; row: TrendRow } => Boolean(r.row));
 
   const search = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,26 +164,49 @@ export function WeatherDemo() {
     series.push({
       label: "Fitted trend",
       color: "var(--ds)",
-      points: [first_year, last_year].map((y) => ({ x: y, y: slope * y + intercept })),
+      points: active.fitted.map((f) => ({ x: f.year, y: f.temp })),
     });
   }
   if (showProjection) {
-    series.push({
-      label: "Projected",
-      color: "var(--ds)",
-      dashed: true,
-      points: active.projection.map((p) => ({ x: p.year, y: p.temp })),
-    });
+    // The band is the slope interval extended, so switching between OLS and
+    // Newey-West visibly changes how much the projection fans out.
+    const scale = band === "ols" ? ols : hac;
+    const level = active.fitted[active.fitted.length - 1].temp;
+    const edge = (slope: number) =>
+      active.projection.map((p) => ({
+        x: p.year,
+        y: level + (slope * (p.year - last)) / 10,
+      }));
+    series.push(
+      {
+        label: "Projected",
+        color: "var(--ds)",
+        dashed: true,
+        points: active.projection.map((p) => ({ x: p.year, y: p.temp })),
+      },
+      {
+        label: `${band === "ols" ? "OLS" : "Newey-West"} upper`,
+        color: "var(--muted)",
+        dashed: true,
+        points: edge(scale.high),
+      },
+      {
+        label: `${band === "ols" ? "OLS" : "Newey-West"} lower`,
+        color: "var(--muted)",
+        dashed: true,
+        points: edge(scale.low),
+      },
+    );
   }
 
   const ranked = names
-    .map((n) => ({ name: n, rate: cities[n].trend.slope_per_decade }))
+    .map((n) => ({ name: n, rate: cities[n].trends.ols.slope }))
     .sort((a, b) => b.rate - a.rate);
 
   return (
     <div className="demo">
       <div className="demo-controls">
-        <div className="control">
+        <div className="control" role="group" aria-label="Place">
           <span className="control-label">Place</span>
           {names.map((n) => (
             <button key={n} className="chip" aria-pressed={city === n} onClick={() => setCity(n)}>
@@ -172,7 +230,7 @@ export function WeatherDemo() {
         <button className="chip" type="submit" disabled={busy || !query.trim()}>
           {busy ? "Working…" : "Search"}
         </button>
-        <div className="control">
+        <div className="control" role="group" aria-label="Start year">
           <span className="control-label">From year</span>
           {[1950, 1970, 1990].map((y) => (
             <button key={y} type="button" className="chip" aria-pressed={startYear === y}
@@ -186,7 +244,7 @@ export function WeatherDemo() {
       {error && <p className="live-error">{error}</p>}
       {matches && (
         <div className="demo-controls">
-          <div className="control">
+          <div className="control" role="group" aria-label="Search results">
             <span className="control-label">Did you mean</span>
             {matches.map((m) => (
               <button key={`${m.lat},${m.lon}`} className="chip" onClick={() => void load(m)}>
@@ -198,7 +256,7 @@ export function WeatherDemo() {
       )}
 
       <div className="demo-controls">
-        <div className="control">
+        <div className="control" role="group" aria-label="Chart layers">
           <button className="chip" aria-pressed={showTrend} onClick={() => setShowTrend((v) => !v)}>
             Trend line
           </button>
@@ -207,16 +265,24 @@ export function WeatherDemo() {
             25-year projection
           </button>
         </div>
+        <div className="control" role="group" aria-label="Uncertainty band">
+          <span className="control-label">Band from</span>
+          {(["ols", "newey_west"] as const).map((b) => (
+            <button key={b} className="chip" aria-pressed={band === b} onClick={() => setBand(b)}>
+              {b === "ols" ? "Naive interval" : "Autocorrelation-corrected"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="metric-row">
-        <Stat label="Years" value={`${first_year}–${last_year}`} />
+        <Stat label="Years" value={`${first}–${last}`} />
         <Stat label="Warming rate" term="warming-rate"
-              value={`${slope_per_decade >= 0 ? "+" : ""}${slope_per_decade.toFixed(3)} °C/decade`}
-              tone="var(--ds)" />
+              value={`${signed(ols.slope)} °C/decade`} tone="var(--ds)" />
+        <Stat label="Honest 95% interval" term="newey-west"
+              value={`${signed(hac.low)} to ${signed(hac.high)}`} />
         <Stat label="Total change over record"
-              value={`${active.warming >= 0 ? "+" : ""}${active.warming.toFixed(2)} °C`} />
-        <Stat label="Year-to-year spread" value={`±${active.trend.sigma.toFixed(2)} °C`} />
+              value={`${signed(active.warming, 2)} °C`} />
       </div>
 
       <LineChart
@@ -228,15 +294,89 @@ export function WeatherDemo() {
       />
 
       <p className="demo-note" style={{ marginTop: 0 }}>
-        ERA5 <Term id="reanalysis" />, {first_year} to {last_year}, fetched by
-        latitude and longitude
-        and averaged to annual means. Search any city and it is fetched live from the
-        archive — Open-Meteo allows browser requests, so this needs no server of mine.
-        The trend is ordinary least squares, the same fit the project's forecast script
-        uses. Note what the projection is and is not: a straight line extended, not a
-        climate model. Year-to-year variation is ±{active.trend.sigma.toFixed(2)} °C,
-        larger than a decade of the trend, so any single future year could land either
-        side of the dashed line.
+        ERA5 <Term id="reanalysis" />, {first} to {last}, fetched by latitude and
+        longitude and averaged to annual means. Search any city and it is
+        fetched live from the archive — Open-Meteo allows browser requests, so
+        this needs no server of mine, and the same four tests run on it in the
+        browser as ran on the presets in Python.
+      </p>
+      <p className="demo-hint">
+        These run to {last}, so they will not match the project card's figures
+        exactly: the package commits a fixed 1950–2024 extract so its tests can
+        run offline, and one more warm year moves a 75-year slope slightly. The
+        arithmetic is identical — `src/demos/trend.ts` is checked against the
+        Python output for all six cities on every build.
+      </p>
+
+      <h5 className="demo-h" style={{ marginTop: 20 }}>
+        Four ways to put an error bar on the same slope
+      </h5>
+      <div className="demo-table-wrap">
+        <table className="demo-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Slope (°C/decade)</th>
+              <th>Std. error</th>
+              <th>95% interval</th>
+              <th>Width</th>
+              <th>p</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ key, row }) => (
+              <tr key={key} className={key === "ols" ? undefined : "highlight"}>
+                <td>
+                  <Term id={METHOD_TERM[key]}>{METHOD_LABEL[key]}</Term>
+                </td>
+                <td>{signed(row.slope)}</td>
+                <td className="dim">{row.se === null ? "—" : row.se.toFixed(4)}</td>
+                <td>{signed(row.low)} to {signed(row.high)}</td>
+                <td>{row.width.toFixed(3)}</td>
+                <td>{row.p < 0.0001 ? "<0.0001" : row.p.toFixed(4)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="metric-row">
+        <Stat label="Interval widening" term="confidence-interval"
+              value={active.interval_inflation ? `${active.interval_inflation.toFixed(2)}×` : "—"}
+              tone="var(--ds)" />
+        <Stat label="Residual lag-1" term="autocorrelation"
+              value={signed(auto.lag1, 2)}
+              tone={auto.correlated ? "var(--ds)" : undefined} />
+        <Stat label="Effective sample size" term="effective-sample-size"
+              value={`${auto.effective_n.toFixed(0)} of ${auto.n}`} />
+        <Stat label="Year-to-year spread"
+              value={`±${active.year_to_year_sd.toFixed(2)} °C`} />
+      </div>
+
+      <p className="demo-note">
+        <strong>
+          The slope is the same every way you compute it; the uncertainty is
+          not.
+        </strong>{" "}
+        Ordinary least squares assumes each year is an independent draw. It is
+        not — a warm year makes the next year more likely to be warm, and the
+        residual lag-1 correlation here is {signed(auto.lag1, 2)}. Correcting
+        for that widens the interval by{" "}
+        {active.interval_inflation?.toFixed(2) ?? "—"}×, because{" "}
+        {auto.n} annual readings carry about as much information as{" "}
+        {auto.effective_n.toFixed(0)} independent ones.{" "}
+        {hac.significant
+          ? "The warming survives the correction and stays significant — which is the point of applying it rather than hoping."
+          : "Once corrected, the trend no longer clears the significance bar."}{" "}
+        The rank-based Mann-Kendall test agrees without assuming anything about
+        the residuals at all.
+      </p>
+      <p className="demo-hint">
+        Switch the band above between the naive and corrected intervals to see
+        the difference on the chart. And note what the projection is: a straight
+        line extended, not a climate model. Year-to-year variation is ±
+        {active.year_to_year_sd.toFixed(2)} °C, larger than a decade of trend,
+        so any single future year could land either side of the dashed line.
       </p>
 
       <div className="demo-split" style={{ marginTop: 16 }}>
@@ -247,9 +387,10 @@ export function WeatherDemo() {
               label: r.name,
               value: r.rate,
               color: r.name === city ? "var(--ds)" : "var(--edge)",
+              note: `${r.name}: ${signed(r.rate)} °C/decade`,
             }))}
             maxBars={14}
-            formatValue={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(3)}`}
+            formatValue={(v) => signed(v)}
           />
         </div>
         <div>
@@ -266,9 +407,9 @@ export function WeatherDemo() {
         </div>
       </div>
       <p className="demo-note">
-        Add a few places and the pattern shows itself: mid- and high-latitude cities
-        warm fastest, tropical ones slowest. That comparison only exists because the
-        location is a parameter rather than a constant.
+        Add a few places and the pattern shows itself: mid- and high-latitude
+        cities warm fastest, tropical ones slowest. That comparison only exists
+        because the location is a parameter rather than a constant.
       </p>
     </div>
   );
@@ -278,12 +419,26 @@ export function WeatherDemo() {
 // Stock-bond optimisation
 // --------------------------------------------------------------------------- //
 
-interface Allocation {
-  sharpe_weight: number;
-  weights: Record<string, number>;
+interface Performance {
   return: number;
   volatility: number;
   sharpe: number;
+  excess_sharpe: number;
+  max_drawdown: number;
+  total_return?: number;
+}
+
+interface Rule {
+  name: string;
+  in_sample: Performance;
+  out_of_sample: Performance;
+  sharpe_shortfall: number;
+  average_turnover: number;
+  cost_drag: number;
+  weight_instability: number;
+  rebalances: number;
+  final_weights: Record<string, number>;
+  weight_path: Record<string, number | string>[];
 }
 
 interface FrontierPoint {
@@ -294,171 +449,300 @@ interface FrontierPoint {
 }
 
 interface StockBond {
+  generated: string;
+  source: string;
+  source_url: string;
   tickers: string[];
   names: Record<string, string>;
+  cash_leg: string;
   start: string;
   end: string;
+  days: number;
   risk_free: number;
-  assets: { ticker: string; name: string; return: number; volatility: number; sharpe: number }[];
+  settings: { lookback: number; rebalance_every: number; cost_bps: number };
+  shrinkage_intensity: number;
+  condition_number: { sample: number; shrunk: number };
+  assets: {
+    ticker: string; name: string; return: number;
+    volatility: number; sharpe: number;
+  }[];
   correlation: Record<string, Record<string, number>>;
-  sweep: Allocation[];
+  rules: Rule[];
   frontier: FrontierPoint[];
   dates: string[];
-  paths: Record<string, number[]>;
-  notable: { max_sharpe: FrontierPoint; min_vol: FrontierPoint };
+  equity: Record<string, number[]>;
 }
 
-const PATH_COLORS: Record<string, string> = {
-  "Max Sharpe": "var(--se)",
-  "Min volatility": "var(--ai)",
-  "Equal weight": "var(--dv4)",
-  "100% SPY": "var(--ds)",
+const RULE_COLORS: Record<string, string> = {
+  "equal weight (1/N)": "var(--ai)",
+  "minimum variance": "var(--ds)",
+  "maximum Sharpe": "var(--se)",
+  "risk parity": "var(--dv4)",
+};
+
+const RULE_TERM: Record<string, string> = {
+  "equal weight (1/N)": "equal-weight",
+  "minimum variance": "minimum-variance",
+  "maximum Sharpe": "sharpe",
+  "risk parity": "risk-parity",
 };
 
 export function StockBondDemo() {
   const data = useDemoData<StockBond>(() => import("../../data/demos/nb-stockbond.json"));
-  const [step, setStep] = useState(6);
-  const [visible, setVisible] = useState<string[]>(["Max Sharpe", "100% SPY"]);
-  if (!data) return <Loading label="Solving the optimisation…" />;
+  const [view, setView] = useState<"realised" | "fitted">("realised");
+  const [focus, setFocus] = useState<string | null>(null);
+  if (!data) return <Loading label="Loading sixteen years of prices…" />;
 
-  const chosen = data.sweep[Math.min(step, data.sweep.length - 1)];
+  const rules = data.rules;
+  const bestFitted = rules.reduce(
+    (a, b) => (b.in_sample.excess_sharpe > a.in_sample.excess_sharpe ? b : a),
+    rules[0],
+  );
+  const bestRealised = rules.reduce(
+    (a, b) => (b.out_of_sample.excess_sharpe > a.out_of_sample.excess_sharpe ? b : a),
+    rules[0],
+  );
+  const key = view === "realised" ? "out_of_sample" : "in_sample";
 
-  const frontierGroups: ScatterGroup[] = [
+  const curves: Series[] = rules.map((r) => ({
+    label: r.name,
+    color: RULE_COLORS[r.name] ?? "var(--muted)",
+    points: (data.equity[r.name] ?? []).map((v, i) => ({ x: i, y: v })),
+  }));
+
+  const frontierPoints: ScatterGroup[] = [
     {
-      label: "Efficient frontier",
-      color: "var(--ai)",
+      label: "In-sample frontier",
+      color: "var(--edge)",
       points: data.frontier.map((f) => ({
-        x: f.volatility * 100,
-        y: f.return * 100,
-        note: `Sharpe ${f.sharpe.toFixed(2)}`,
+        x: f.volatility,
+        y: f.return,
+        note: `in-sample: ${pct(f.return)} return at ${pct(f.volatility)} risk`,
       })),
     },
     {
-      label: "Individual assets",
+      label: "What each rule actually earned",
       color: "var(--ds)",
-      points: data.assets.map((a) => ({
-        x: a.volatility * 100,
-        y: a.return * 100,
-        note: `${a.ticker} — ${a.name}`,
+      points: rules.map((r) => ({
+        x: r.out_of_sample.volatility,
+        y: r.out_of_sample.return,
+        note: `${r.name}: realised ${pct(r.out_of_sample.return)} at ${pct(r.out_of_sample.volatility)}`,
       })),
-    },
-    {
-      label: "Your allocation",
-      color: "var(--se)",
-      points: [{
-        x: chosen.volatility * 100,
-        y: chosen.return * 100,
-        note: `Sharpe ${chosen.sharpe.toFixed(2)}`,
-      }],
     },
   ];
 
-  const navSeries: Series[] = Object.entries(data.paths)
-    .filter(([name]) => visible.includes(name))
-    .map(([name, path]) => ({
-      label: name,
-      color: PATH_COLORS[name] ?? "var(--muted)",
-      points: path.map((v, i) => ({ x: i, y: v })),
-    }));
-
-  const held = Object.entries(chosen.weights)
-    .filter(([, w]) => w > 0.005)
-    .sort((a, b) => b[1] - a[1]);
-
   return (
     <div className="demo">
-      <div className="range">
-        <span className="control-label">
-          <Term id="risk-preference">Risk preference</Term> — weight on the{" "}
-          <Term id="sharpe">Sharpe</Term> term:{" "}
-          <strong>{chosen.sharpe_weight}</strong>
-          {chosen.sharpe_weight === 0 && " (pure minimum variance)"}
-        </span>
-        <input
-          type="range" min={0} max={data.sweep.length - 1} value={step}
-          aria-label="Risk preference"
-          onChange={(e) => setStep(Number(e.target.value))}
+      <div className="metric-row">
+        <Stat label="Window" value={`${data.start} → ${data.end}`} />
+        <Stat label="Trading days" value={data.days.toLocaleString()} />
+        <Stat
+          label="Best on the fitted numbers"
+          term="in-sample"
+          value={bestFitted.name}
+          tone="var(--se)"
+        />
+        <Stat
+          label="Best once actually run"
+          term="out-of-sample"
+          value={bestRealised.name}
+          tone="var(--ds)"
         />
       </div>
 
-      <p className="demo-hint">
-        Five <Term id="etf">ETFs</Term> — US large caps, small caps, long and
-        short <Term id="treasuries" />, and corporate bonds. The curve is the{" "}
-        <Term id="frontier" />: the best return available at each level of
-        bumpiness.
-      </p>
-
-      <div className="metric-row">
-        <Stat label="Expected return" term="expected-return" value={pct(chosen.return)} tone="var(--se)" />
-        <Stat label="Volatility" term="volatility" value={pct(chosen.volatility)} tone="var(--ds)" />
-        <Stat label="Sharpe" term="sharpe" value={chosen.sharpe.toFixed(2)} />
-        <Stat label="Holdings" value={String(held.length)} />
-      </div>
-
-      <h5 className="demo-h">What the optimiser buys at this preference</h5>
-      <BarChart
-        bars={held.map(([t, w]) => ({
-          label: `${t} — ${data.names[t]}`,
-          value: w,
-          note: data.names[t],
-        }))}
-        formatValue={(v) => `${(v * 100).toFixed(1)}%`}
-      />
-      <p className="demo-note">
-        At a Sharpe weight of 0 the objective is pure variance minimisation, and the
-        answer is entirely {data.names["SHV"].toLowerCase()} — the lowest-volatility
-        asset available. Raise the preference and the solver accepts volatility in
-        exchange for return, moving into equities and long Treasuries. This is the
-        sweep the project runs: not one optimal portfolio, but a family of them
-        indexed by how much return the investor wants per unit of risk.
-      </p>
-
-      <h5 className="demo-h" style={{ marginTop: 20 }}>Risk and return</h5>
-      <ScatterChart
-        groups={frontierGroups}
-        height={300}
-        xLabel="Annualised volatility (%)"
-        yLabel="Annualised return (%)"
-        formatX={(v) => `${v.toFixed(1)}%`}
-        formatY={(v) => `${v.toFixed(1)}%`}
-      />
       <p className="demo-note" style={{ marginTop: 0 }}>
-        The frontier is the best return available at each level of risk. Individual
-        assets sit below and to the right of it — that gap is the whole value of
-        diversifying. Your current allocation is marked in green.
+        <strong>
+          The rule that wins on paper is the one that loses in practice.
+        </strong>{" "}
+        Optimised over the whole history and scored on that same history,{" "}
+        {bestFitted.name} looks best — excess Sharpe{" "}
+        {bestFitted.in_sample.excess_sharpe.toFixed(2)}. Re-run so that each
+        quarter's weights use only the previous{" "}
+        {data.settings.lookback} trading days, and it realises{" "}
+        {bestFitted.out_of_sample.excess_sharpe.toFixed(2)}. The honest winner
+        is {bestRealised.name}, which estimates less and therefore has less to
+        get wrong.
       </p>
 
-      <h5 className="demo-h" style={{ marginTop: 20 }}>What that would have returned</h5>
       <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Compare</span>
-          {Object.keys(data.paths).map((name) => (
-            <button
-              key={name} className="chip" aria-pressed={visible.includes(name)}
-              onClick={() =>
-                setVisible((cur) =>
-                  cur.includes(name) ? cur.filter((n) => n !== name) : [...cur, name],
-                )
-              }
-            >
-              {name}
+        <div className="control" role="group" aria-label="Which numbers to show">
+          <span className="control-label">Show</span>
+          {(["realised", "fitted"] as const).map((v) => (
+            <button key={v} className="chip" aria-pressed={view === v} onClick={() => setView(v)}>
+              {v === "realised" ? "Out-of-sample (real)" : "In-sample (flattering)"}
             </button>
           ))}
         </div>
       </div>
+
+      <div className="demo-table-wrap" style={{ marginTop: 12 }}>
+        <table className="demo-table">
+          <thead>
+            <tr>
+              <th>Allocation rule</th>
+              <th>Return</th>
+              <th><Term id="volatility">Risk</Term></th>
+              <th><Term id="excess-sharpe">Sharpe over cash</Term></th>
+              <th><Term id="drawdown">Worst fall</Term></th>
+              <th><Term id="turnover">Turnover</Term></th>
+              <th>Cost drag</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rules.map((r) => {
+              const p = r[key];
+              return (
+                <tr
+                  key={r.name}
+                  className={r.name === bestRealised.name && view === "realised" ? "highlight" : undefined}
+                  onMouseEnter={() => setFocus(r.name)}
+                  onMouseLeave={() => setFocus(null)}
+                >
+                  <td>
+                    <Term id={RULE_TERM[r.name] ?? "backtest"}>{r.name}</Term>
+                  </td>
+                  <td>{pct(p.return)}</td>
+                  <td>{pct(p.volatility)}</td>
+                  <td
+                    style={{
+                      color:
+                        p.excess_sharpe >= 0.5 ? "var(--se)"
+                        : p.excess_sharpe < 0.2 ? "var(--ds)" : undefined,
+                    }}
+                  >
+                    {p.excess_sharpe.toFixed(2)}
+                  </td>
+                  <td>{pct(p.max_drawdown)}</td>
+                  <td className="dim">
+                    {view === "realised" ? pct(r.average_turnover) : "—"}
+                  </td>
+                  <td className="dim">
+                    {view === "realised" ? `${pct(r.cost_drag)}/yr` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="demo-hint">
+        Sharpe here is measured <em>over cash</em>. The plain return-to-risk
+        ratio flatters anything that hides in Treasuries: minimum variance puts
+        {" "}{pct(bestRealised.final_weights[data.cash_leg] ?? 0)} of the book in{" "}
+        {data.cash_leg} and scores spectacularly on the raw number while earning
+        almost nothing above what cash paid. Subtracting cash is what makes the
+        column comparable.
+      </p>
+
+      <h5 className="demo-h" style={{ marginTop: 20 }}>
+        Growth of £1, out of sample only
+      </h5>
       <LineChart
-        series={navSeries}
+        series={focus ? curves.filter((c) => c.label === focus) : curves}
         height={260}
-        formatY={money}
-        formatX={(i) => data.dates[Math.min(Math.round(i), data.dates.length - 1)]?.slice(0, 7) ?? ""}
-        yLabel="Value of $100"
+        formatX={(v) => data.dates[Math.round(v)] ?? ""}
+        formatY={(v) => v.toFixed(2)}
+        yLabel="Value of 1 invested"
       />
+      <p className="demo-hint">
+        Every point uses weights chosen before that day, rebalanced every{" "}
+        {data.settings.rebalance_every} trading days at{" "}
+        {data.settings.cost_bps} bps one-way. Hover a row above to isolate a
+        rule.
+      </p>
+
+      <div className="demo-split" style={{ marginTop: 20 }}>
+        <div>
+          <h5 className="demo-h">
+            The <Term id="frontier">efficient frontier</Term> is a picture of
+            estimation error
+          </h5>
+          <ScatterChart
+            height={260}
+            groups={frontierPoints}
+            xLabel="Risk (annual volatility)"
+            yLabel="Return"
+            formatX={(v) => pct(v)}
+            formatY={(v) => pct(v)}
+          />
+          <p className="demo-hint">
+            The grey curve is the classic frontier, drawn by optimising against
+            the full history. The red points are where the same rules actually
+            landed when they were only allowed to see the past. The vertical
+            distance between them is not a modelling detail — it is the entire
+            value of the optimisation, and it is negative.
+          </p>
+        </div>
+        <div>
+          <h5 className="demo-h">Why: the weights will not sit still</h5>
+          <BarChart
+            maxBars={rules.length}
+            bars={rules.map((r) => ({
+              label: r.name,
+              value: r.weight_instability,
+              color: RULE_COLORS[r.name] ?? "var(--muted)",
+              note: `${r.name}: average weight moves ${pct(r.weight_instability)} per rebalance`,
+            }))}
+            formatValue={(v) => pct(v)}
+          />
+          <p className="demo-hint">
+            How far the average holding moves from one rebalance to the next.
+            The assets did not change that much in three months — the estimates
+            did. {bestFitted.name} reshuffles{" "}
+            {(bestFitted.weight_instability / Math.max(bestRealised.weight_instability, 1e-9)).toFixed(0)}×
+            more than {bestRealised.name}, and pays{" "}
+            {pct(bestFitted.cost_drag)} a year in trading costs for it.
+          </p>
+          <div className="metric-row" style={{ marginTop: 10 }}>
+            <Stat
+              label="Shrinkage intensity"
+              term="ledoit-wolf"
+              value={data.shrinkage_intensity.toFixed(3)}
+            />
+            <Stat
+              label="Condition number"
+              term="condition-number"
+              value={`${Math.round(data.condition_number.sample).toLocaleString()} → ${Math.round(data.condition_number.shrunk).toLocaleString()}`}
+            />
+          </div>
+        </div>
+      </div>
+
+      <h5 className="demo-h" style={{ marginTop: 20 }}>
+        The five building blocks
+      </h5>
+      <div className="demo-table-wrap">
+        <table className="demo-table">
+          <thead>
+            <tr>
+              <th><Term id="etf">ETF</Term></th>
+              <th>What it holds</th>
+              <th>Return</th>
+              <th>Risk</th>
+              <th>Return ÷ risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.assets.map((a) => (
+              <tr key={a.ticker}>
+                <td className="mono">{a.ticker}</td>
+                <td className="dim">{a.name}</td>
+                <td>{pct(a.return)}</td>
+                <td>{pct(a.volatility)}</td>
+                <td>{a.sharpe.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="demo-note">
-        $100 invested at the start of {data.start.slice(0, 4)}. The max-Sharpe portfolio
-        is not the highest-returning one — 100% SPY beats it outright — because Sharpe
-        rewards return <em>per unit of risk</em>, and a heavily cash-weighted book takes
-        very little. Which of these is "best" depends entirely on a preference the
-        optimiser cannot supply.
+        Prices are daily adjusted closes from Yahoo Finance through{" "}
+        {data.end} — adjusted, because dividends are most of the return on{" "}
+        <Term id="treasuries">Treasuries</Term> and credit and a backtest on raw prices reports {data.cash_leg} as flat
+        when it has been quietly paying out the whole time. This is the
+        DeMiguel, Garlappi and Uppal result reproduced on current data: once
+        estimation error is paid for out of the portfolio rather than assumed
+        away, the clever optimiser does not beat splitting the money evenly.
       </p>
     </div>
   );
@@ -468,189 +752,410 @@ export function StockBondDemo() {
 // Bitcoin LSTM
 // --------------------------------------------------------------------------- //
 
+interface Direction {
+  rate: number | null;
+  low: number | null;
+  high: number | null;
+  correct: number;
+  total: number;
+  abstained: number;
+  abstention_rate: number | null;
+  beats_coin_flip: boolean;
+}
+
+interface WalkRow {
+  name: string;
+  folds: number;
+  mean_rmse: number;
+  rmse_low: number;
+  rmse_high: number;
+  mean_return_r2: number;
+  folds_beating_zero_r2: number;
+  direction: Direction;
+  per_fold: {
+    fold: number;
+    test_start: string;
+    test_end: string;
+    rmse: number;
+    return_r2: number;
+    direction: number | null;
+  }[];
+}
+
+interface SplitRow {
+  rmse: number;
+  mae: number;
+  mape: number;
+  return_r2: number;
+  direction: number | null;
+  direction_low: number | null;
+  direction_high: number | null;
+  abstention_rate: number | null;
+  beats_coin_flip: boolean;
+}
+
+interface Strategy {
+  name: string;
+  total_return: number;
+  annualised: number;
+  volatility: number;
+  sharpe: number;
+  max_drawdown: number;
+  trades: number;
+  time_in_market: number;
+}
+
 interface Bitcoin {
-  lookback: number;
-  model: string;
-  train_days: number;
-  test_days: number;
+  generated: string;
+  source: string;
+  source_url: string;
+  bars: number;
   first_date: string;
   last_date: string;
-  metrics: {
-    rmse: number; mae: number; mape: number;
-    naive_rmse: number; directional_accuracy: number;
+  settings: {
+    train_fraction: number; min_train: number;
+    test_size: number; cost_bps: number;
   };
-  leaky_metrics: { rmse: number; mape: number; directional_accuracy: number };
-  train_max: number;
-  test_max: number;
-  series: { date: string; actual: number; predicted: number; naive: number; leaky: number }[];
+  model: string;
+  lookback: number;
+  walk_forward: WalkRow[];
+  single_split: Record<string, SplitRow | number | string> & {
+    days: number; first: string; last: string;
+  };
+  diebold_mariano: {
+    statistic: number; p: number; mean_loss_difference: number;
+    observations: number; lag: number; significant: boolean; better: string;
+  } | null;
+  scaler_leak: {
+    train_max: number; train_min: number; full_max: number; full_min: number;
+    split_date: string; range_inflation: number; unseen_high_fraction: number;
+  };
+  strategies: Strategy[];
+  series: {
+    date: string; actual: number; naive: number; lstm: number; leaky: number;
+  }[];
 }
+
+const SPLIT_NAMES = ["naive (t-1)", "LSTM (honest scaling)", "LSTM (leaky scaling)"];
 
 export function BitcoinDemo() {
   const data = useDemoData<Bitcoin>(() => import("../../data/demos/nb-bitcoin.json"));
-  const [shown, setShown] = useState<string[]>(["actual", "predicted", "naive"]);
-  const [window, setWindow] = useState<[number, number] | null>(null);
-  if (!data) return <Loading label="Loading model predictions…" />;
+  const [tab, setTab] = useState<"walk" | "split" | "trade">("walk");
+  const [showLeaky, setShowLeaky] = useState(true);
+  if (!data) return <Loading label="Loading fourteen years of daily bars…" />;
 
-  const [from, to] = window ?? [0, data.series.length - 1];
-  const slice = data.series.slice(from, to + 1);
-
-  // Recomputed over the visible window, so the error you read matches the
-  // stretch of chart you are looking at rather than the whole test period.
-  const errOf = (key: "predicted" | "leaky" | "naive") =>
-    Math.sqrt(
-      slice.reduce((sum, r) => sum + (r[key] - r.actual) ** 2, 0) / Math.max(1, slice.length),
-    );
-  const windowed = {
-    lstm: errOf("predicted"),
-    naive: errOf("naive"),
-    leaky: errOf("leaky"),
-  };
-
-  const m = data.metrics;
-  const options: { id: keyof Bitcoin["series"][number]; label: string; color: string; dashed?: boolean }[] = [
-    { id: "actual", label: "Actual price", color: "var(--ai)" },
-    { id: "predicted", label: "LSTM (honest scaling)", color: "var(--ds)" },
-    { id: "leaky", label: "LSTM (leaky scaling)", color: "var(--dv4)", dashed: true },
-    { id: "naive", label: "Naive: tomorrow = today", color: "var(--se)", dashed: true },
-  ];
-
-  const series: Series[] = options
-    .filter((o) => shown.includes(o.id as string))
-    .map((o) => ({
-      label: o.label,
-      color: o.color,
-      dashed: o.dashed,
-      points: slice.map((s, i) => ({ x: from + i, y: s[o.id] as number })),
-    }));
-
-  const ratio = windowed.naive > 0 ? windowed.lstm / windowed.naive : 0;
+  const dm = data.diebold_mariano;
+  const leak = data.scaler_leak;
+  const hold = data.strategies.find((s) => s.name === "buy and hold");
+  const traded = data.strategies.filter((s) => s.name !== "buy and hold");
+  const bestTrade = traded.reduce(
+    (a, b) => (b.total_return > a.total_return ? b : a),
+    traded[0],
+  );
+  const splits = SPLIT_NAMES
+    .map((n) => ({ name: n, row: data.single_split[n] as SplitRow | undefined }))
+    .filter((r): r is { name: string; row: SplitRow } => Boolean(r.row));
 
   return (
     <div className="demo">
-      <p className="demo-hint">
-        An <Term id="lstm" /> against the dumbest possible{" "}
-        <Term id="baseline">naive baseline</Term>. Watch which one wins.
-      </p>
-
       <div className="metric-row">
-        <Stat label="Days shown" value={slice.length.toLocaleString()} />
-        <Stat label="LSTM RMSE" term="rmse" value={money(windowed.lstm)} tone="var(--ds)" />
-        <Stat label="Naive RMSE" term="baseline" value={money(windowed.naive)} tone="var(--se)" />
-        <Stat label="Directional accuracy" term="directional-accuracy" value={`${m.directional_accuracy.toFixed(1)}%`}
-              tone="var(--ds)" />
-      </div>
-
-      <div className="range">
-        <span className="control-label">
-          Window <strong>{slice[0]?.date}</strong> to{" "}
-          <strong>{slice[slice.length - 1]?.date}</strong>
-        </span>
-        <div className="range-sliders">
-          <input
-            type="range" min={0} max={data.series.length - 2} value={from}
-            aria-label="Window start"
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setWindow((cur) => {
-                const [, end] = cur ?? [0, data.series.length - 1];
-                return [Math.min(v, end - 20), end];
-              });
-            }}
+        <Stat label="Daily bars" value={data.bars.toLocaleString()} />
+        <Stat label="Through" value={data.last_date} />
+        <Stat
+          label="Rolling test windows"
+          term="walk-forward"
+          value={`${data.walk_forward[0]?.folds ?? 0} folds`}
+        />
+        {dm && (
+          <Stat
+            label="LSTM vs naive"
+            term="diebold-mariano"
+            value={dm.better === "second" ? "naive wins" : dm.better === "first" ? "LSTM wins" : "tie"}
+            tone={dm.better === "second" ? "var(--ds)" : "var(--se)"}
           />
-          <input
-            type="range" min={1} max={data.series.length - 1} value={to}
-            aria-label="Window end"
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setWindow((cur) => {
-                const [start] = cur ?? [0, data.series.length - 1];
-                return [start, Math.max(v, start + 20)];
-              });
-            }}
-          />
-        </div>
-        {window && (
-          <button className="chip" style={{ marginTop: 6 }} onClick={() => setWindow(null)}>
-            Reset to full test period
-          </button>
         )}
       </div>
 
-      <p className="demo-warn">
-        <strong>
-          A one-line baseline beats this model by {ratio.toFixed(0)}×.
-        </strong>{" "}
-        Predicting "tomorrow's price equals today's" gives an RMSE of{" "}
-        {money(windowed.naive)} over the window shown; the trained LSTM gives{" "}
-        {money(windowed.lstm)}. And its
-        directional accuracy is {m.directional_accuracy.toFixed(1)}% — a coin flip.
-        The chart still looks convincing, which is exactly the trap: a line that
-        tracks the level of a price series can carry no information about its
-        <em> changes</em>, and only the change is tradeable.
-      </p>
+      {dm && (
+        <p className="demo-note" style={{ marginTop: 0 }}>
+          <strong>
+            "Tomorrow equals today" beats the neural network, and not by a
+            coincidence.
+          </strong>{" "}
+          A Diebold-Mariano test on the two forecasts' daily losses gives t ={" "}
+          {dm.statistic.toFixed(1)}, p{" "}
+          {dm.p < 0.001 ? "< 0.001" : `= ${dm.p.toFixed(3)}`} over{" "}
+          {dm.observations.toLocaleString()} days — the gap is far larger than
+          the noise in it. Comparing two RMSE numbers could not have told you
+          that; both forecasts make their mistakes on the same days, and the
+          test accounts for it.
+        </p>
+      )}
 
       <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Show</span>
-          {options.map((o) => (
-            <button
-              key={o.id as string} className="chip"
-              aria-pressed={shown.includes(o.id as string)}
-              onClick={() =>
-                setShown((cur) =>
-                  cur.includes(o.id as string)
-                    ? cur.filter((x) => x !== (o.id as string))
-                    : [...cur, o.id as string],
-                )
-              }
-            >
-              {o.label}
+        <div className="control" role="group" aria-label="Which evaluation to show">
+          <span className="control-label">Evaluate by</span>
+          {([
+            ["walk", "Walk-forward"],
+            ["split", "Single split"],
+            ["trade", "Trading it"],
+          ] as const).map(([v, label]) => (
+            <button key={v} className="chip" aria-pressed={tab === v} onClick={() => setTab(v)}>
+              {label}
             </button>
           ))}
         </div>
       </div>
 
-      <LineChart
-        series={series}
-        height={300}
-        formatY={money}
-        formatX={(i) => data.series[Math.min(Math.round(i), data.series.length - 1)]?.date.slice(0, 7) ?? ""}
-        yLabel="BTC/USD"
-      />
+      {tab === "walk" && (
+        <>
+          <div className="demo-table-wrap" style={{ marginTop: 12 }}>
+            <table className="demo-table">
+              <thead>
+                <tr>
+                  <th>Forecaster</th>
+                  <th><Term id="rmse">RMSE</Term> (mean)</th>
+                  <th><Term id="return-r2">R² on returns</Term></th>
+                  <th>Folds beating R²=0</th>
+                  <th><Term id="directional-accuracy">Direction</Term></th>
+                  <th><Term id="wilson-interval">95% interval</Term></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.walk_forward.map((w) => (
+                  <tr key={w.name}>
+                    <td>{w.name}</td>
+                    <td>${Math.round(w.mean_rmse).toLocaleString()}</td>
+                    <td style={{ color: w.mean_return_r2 > 0 ? "var(--se)" : "var(--ds)" }}>
+                      {w.mean_return_r2.toFixed(4)}
+                    </td>
+                    <td>{w.folds_beating_zero_r2} / {w.folds}</td>
+                    <td>
+                      {w.direction.rate === null
+                        ? <span className="dim">no call</span>
+                        : pct(w.direction.rate)}
+                    </td>
+                    <td className="dim">
+                      {w.direction.low === null || w.direction.high === null
+                        ? `abstained on all ${w.direction.abstained.toLocaleString()} days`
+                        : `${pct(w.direction.low)} – ${pct(w.direction.high)}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="demo-note">
+            <strong>
+              No forecaster predicts the daily move better than assuming there
+              is none.
+            </strong>{" "}
+            R² on returns is zero or negative for every one of them, across{" "}
+            {data.walk_forward[0]?.folds ?? 0} rolling windows spanning different
+            market regimes — negative means worse than not trying. The
+            directional hit rates sit within a percent or two of a coin flip and
+            their intervals straddle 50%.
+          </p>
+          <p className="demo-hint">
+            Each row is a <Term id="baseline">baseline</Term> — a deliberately
+            simple rule that anything more sophisticated has to beat before it
+            has earned its complexity. The naive forecaster shows "no call" because predicting tomorrow =
+            today implies no direction at all. Scoring that as 0% would be
+            wrong — it is not a wrong call — and 50% would be generous, so the{" "}
+            {data.walk_forward[0]?.direction.abstained.toLocaleString()}{" "}
+            abstentions are reported separately instead of being folded into an
+            accuracy figure.
+          </p>
+          <h5 className="demo-h" style={{ marginTop: 18 }}>
+            Error by fold — why one split would have misled you
+          </h5>
+          <LineChart
+            height={220}
+            series={data.walk_forward.map((w, i) => ({
+              label: w.name,
+              color: ["var(--ai)", "var(--ds)", "var(--se)", "var(--dv4)"][i % 4],
+              points: w.per_fold.map((f) => ({ x: f.fold, y: f.rmse })),
+            }))}
+            formatX={(v) => `fold ${v}`}
+            formatY={(v) => `$${Math.round(v).toLocaleString()}`}
+            yLabel="RMSE ($)"
+          />
+          <p className="demo-hint">
+            RMSE ranges from ${Math.round(data.walk_forward[0].rmse_low).toLocaleString()} to $
+            {Math.round(data.walk_forward[0].rmse_high).toLocaleString()} across
+            folds for the same forecaster — a four-hundred-fold spread driven
+            entirely by the price level in each window. Any single train/test
+            split reports one point on this line and calls it the answer.
+          </p>
+        </>
+      )}
 
-      <h5 className="demo-h" style={{ marginTop: 18 }}>Why the scaling matters</h5>
-      <BarChart
-        bars={[
-          { label: "Naive baseline", value: windowed.naive, color: "var(--se)" },
-          { label: "LSTM, leaky scaling", value: windowed.leaky, color: "var(--dv4)" },
-          { label: "LSTM, honest scaling", value: windowed.lstm, color: "var(--ds)" },
-        ]}
-        formatValue={money}
-      />
-      <p className="demo-note">
-        The project saved the model but not its scaler, so the transform has to be
-        rebuilt — and how you rebuild it changes the answer. Fitting MinMax on the
-        whole series before splitting lets the transform see the test range's maximum,
-        which flatters the model ({money(windowed.leaky)} against{" "}
-        {money(windowed.lstm)}). Fitting on the training portion only is correct, and it is
-        also harsher here: training tops out near {money(data.train_max)} while the
-        test period reaches {money(data.test_max)}, so the model is asked to
-        extrapolate well beyond anything it ever saw. Neither version beats the
-        baseline, and neither predicts direction.
-      </p>
+      {tab === "split" && (
+        <>
+          <div className="demo-table-wrap" style={{ marginTop: 12 }}>
+            <table className="demo-table">
+              <thead>
+                <tr>
+                  <th>Forecast</th>
+                  <th>RMSE</th>
+                  <th><Term id="mape">MAPE</Term></th>
+                  <th>R² on returns</th>
+                  <th>Direction</th>
+                </tr>
+              </thead>
+              <tbody>
+                {splits.map(({ name, row }) => (
+                  <tr key={name} className={name.includes("leaky") ? "highlight" : undefined}>
+                    <td>{name}</td>
+                    <td>${Math.round(row.rmse).toLocaleString()}</td>
+                    <td>{row.mape.toFixed(2)}%</td>
+                    <td>{row.return_r2.toFixed(4)}</td>
+                    <td>
+                      {row.direction === null
+                        ? <span className="dim">no call</span>
+                        : pct(row.direction)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="demo-note">
+            <strong>
+              The leaky row is the one a notebook would have published.
+            </strong>{" "}
+            <Term id="scaler-leak">Scaler leakage</Term>:{" "}
+            Scaling prices into 0–1 using the maximum of the <em>whole</em>{" "}
+            series lets the model see a high that had not happened yet. Done
+            correctly, on training data only, the scale tops out at $
+            {Math.round(leak.train_max).toLocaleString()} while the series later
+            reaches ${Math.round(leak.full_max).toLocaleString()} —{" "}
+            {pct(leak.unseen_high_fraction)} of the axis is territory the model
+            never saw in training, and it cannot forecast into it.
+          </p>
 
-      <div className="metric-row">
-        <Stat label="Lookback window" term="lookback" value={`${data.lookback} days`} />
-        <Stat label="Train / test days" term="train-test" value={`${data.train_days.toLocaleString()} / ${data.test_days.toLocaleString()}`} />
-        <Stat label="MAPE" term="mape" value={`${m.mape.toFixed(1)}%`} />
-      </div>
+          <div className="demo-controls">
+            <div className="control" role="group" aria-label="Series to plot">
+              <button className="chip" aria-pressed={showLeaky} onClick={() => setShowLeaky((v) => !v)}>
+                Show the leaky forecast
+              </button>
+            </div>
+          </div>
+          <LineChart
+            height={260}
+            series={[
+              {
+                label: "Actual",
+                color: "var(--text)",
+                points: data.series.map((p, i) => ({ x: i, y: p.actual })),
+              },
+              {
+                label: "Naive (t-1)",
+                color: "var(--muted)",
+                dashed: true,
+                points: data.series.map((p, i) => ({ x: i, y: p.naive })),
+              },
+              {
+                label: "LSTM, honest scaling",
+                color: "var(--ds)",
+                points: data.series.map((p, i) => ({ x: i, y: p.lstm })),
+              },
+              ...(showLeaky
+                ? [{
+                    label: "LSTM, leaky scaling",
+                    color: "var(--se)",
+                    points: data.series.map((p, i) => ({ x: i, y: p.leaky })),
+                  }]
+                : []),
+            ]}
+            formatX={(v) => data.series[Math.round(v)]?.date ?? ""}
+            formatY={(v) => `$${Math.round(v / 1000)}k`}
+            yLabel="BTC close (USD)"
+          />
+          <p className="demo-hint">
+            An <Term id="lstm">LSTM</Term> — {data.model} — with a{" "}
+            {data.lookback}-day <Term id="lookback">lookback</Term>, on a single{" "}
+            <Term id="train-test">train/test split</Term> at{" "}
+            {pct(data.settings.train_fraction)}. The honest line flattens
+            out below the actual price because the training scale caps it there.
+            The leaky line tracks beautifully — and is worthless.
+          </p>
+        </>
+      )}
+
+      {tab === "trade" && (
+        <>
+          <div className="demo-table-wrap" style={{ marginTop: 12 }}>
+            <table className="demo-table">
+              <thead>
+                <tr>
+                  <th>Strategy</th>
+                  <th><Term id="total-return">Total return</Term></th>
+                  <th><Term id="sharpe">Sharpe</Term></th>
+                  <th><Term id="drawdown">Worst fall</Term></th>
+                  <th>Trades</th>
+                  <th>Time invested</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.strategies.map((s) => (
+                  <tr
+                    key={s.name}
+                    className={s.name === "buy and hold" ? "highlight" : undefined}
+                  >
+                    <td>
+                      {s.name === "buy and hold"
+                        ? <Term id="buy-and-hold">buy and hold</Term>
+                        : s.name}
+                    </td>
+                    <td style={{ color: s.total_return > 0 ? "var(--se)" : "var(--ds)" }}>
+                      {pct(s.total_return)}
+                    </td>
+                    <td>{s.sharpe.toFixed(2)}</td>
+                    <td>{pct(s.max_drawdown)}</td>
+                    <td>{s.trades.toLocaleString()}</td>
+                    <td className="dim">{pct(s.time_in_market)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="demo-note">
+            <strong>
+              The only strategy that makes money is buy-and-hold wearing a
+              disguise.
+            </strong>{" "}
+            {bestTrade && hold && (
+              <>
+                The best signal, {bestTrade.name}, returns{" "}
+                {pct(bestTrade.total_return)} with {bestTrade.trades} trade
+                {bestTrade.trades === 1 ? "" : "s"} — it went long and stayed
+                long, which is buy-and-hold ({pct(hold.total_return)}) minus a
+                commission.
+              </>
+            )}{" "}
+            The forecasters that actually trade lose money to costs at{" "}
+            {data.settings.cost_bps} bps a side. Two rows show zero trades:
+            those forecasters never imply an up-move, so they never take a
+            position — the naive one by construction, and the honestly-scaled
+            LSTM because its training range caps it below the current price.
+          </p>
+          <p className="demo-hint">
+            This is the test that matters and the one a price-prediction
+            notebook usually skips. A model can track a chart convincingly, post
+            a low MAPE, and still have nothing tradeable in it, because the
+            level is easy and the change is not.
+          </p>
+        </>
+      )}
+
       <p className="demo-note">
-        {data.model}. The lookback is {data.lookback} days, read from the saved model's
-        own input shape — the project's README says 60. The real lesson is about
-        framing: forecasting a price <em>level</em> is close to unfalsifiable, because
-        yesterday's price is already an excellent predictor of today's. Forecasting
-        returns instead gives a target where a model can actually be wrong, and where
-        the naive baseline is 0%.
+        Data: {data.source}, {data.first_date} to {data.last_date}.{" "}
+        <a href={data.source_url} target="_blank" rel="noreferrer">
+          Source
+        </a>
+        . Everything above is computed by the project's{" "}
+        <code>btc_forecast</code> package, the same code the command line runs.
       </p>
     </div>
   );

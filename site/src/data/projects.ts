@@ -523,7 +523,7 @@ export const PROJECTS: Project[] = [
       {
         "label": "Yahoo Finance (via yfinance)",
         "url": "https://finance.yahoo.com/",
-        "note": "Daily prices for SPY, IWM, TLT, LQD and SHV, 2012-2024."
+        "note": "Daily adjusted closes for SPY, IWM, TLT, LQD and SHV. The generator fetches to the current day, so the demo\u0027s window widens on every run."
       },
       {
         "label": "Kenneth French Data Library",

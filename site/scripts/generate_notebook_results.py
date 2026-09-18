@@ -1,10 +1,10 @@
-"""Extract chartable results from the data-science projects.
+"""Extract chartable results by importing the data-science projects.
 
-The notebooks are analyses, not libraries: there is no importable function to
-call, so this re-runs their core computation against the same CSVs and writes
-structured JSON the site can plot. Each section is deliberately a faithful,
-small version of what the notebook does -- enough to produce an honest chart,
-not a reimplementation of the whole analysis.
+Each project is now an installed package with the analysis in it, so this
+calls into them rather than re-deriving anything. That matters: a generator
+that reimplements the modelling drifts from the package, and the chart then
+keeps showing an answer the project no longer gives. An earlier version of
+this file did exactly that.
 
 Everything is seeded. A chart that changes between runs is not a result.
 
@@ -14,11 +14,11 @@ Everything is seeded. A chart that changes between runs is not a result.
 from __future__ import annotations
 
 import json
+import sys
 import warnings
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 warnings.filterwarnings("ignore")
 
@@ -26,6 +26,18 @@ SEED = 42
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data-science-projects"
 OUT = ROOT / "site" / "src" / "data" / "demos"
+
+
+def use(project: str) -> None:
+    """Put a project's `src` on the import path.
+
+    The projects are not installed into this environment -- CI checks out the
+    repo and runs the generator, it does not pip-install seven packages -- so
+    the path is extended explicitly.
+    """
+    path = str(DATA / project / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 
 def write(name: str, payload: object) -> None:
@@ -56,11 +68,7 @@ def churn() -> None:
     package fixes, dropping the eleven unbilled customers instead of setting
     their TotalCharges to zero.
     """
-    import sys
-
-    sys.path.insert(0, str(DATA / "customer-churn-prediction" / "src"))
-
-    from sklearn.metrics import confusion_matrix, roc_auc_score
+    use("customer-churn-prediction")
 
     from churn.calibration import (
         brier_skill_score,
@@ -82,6 +90,7 @@ def churn() -> None:
         targeting_comparison,
     )
     from churn.survival import concordance_index, fit_cox, kaplan_meier, log_rank_test
+    from sklearn.metrics import confusion_matrix, roc_auc_score
 
     data = load(DATA / "customer-churn-prediction" / "data" / "telco-customer-churn.csv")
 
@@ -132,7 +141,7 @@ def churn() -> None:
     write(
         "nb-churn.json",
         {
-            "rows": int(len(data)),
+            "rows": len(data),
             "churn_rate": round(float(data.churn_rate), 4),
             "censoring_rate": round(float(data.censoring_rate), 4),
             "auc": round(float(roc_auc_score(data.event, proba)), 4),
@@ -255,121 +264,101 @@ def _bins(curve) -> list[dict]:
 
 
 def fake_news() -> None:
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.metrics import confusion_matrix, roc_auc_score
-    from sklearn.model_selection import train_test_split
+    """The null result, as the package establishes it.
 
-    df = pd.read_csv(DATA / "fake-news-detection/data/fake_news_dataset.csv")
-    label_col = next(
-        (c for c in df.columns if c.lower() in {"label", "is_fake", "fake", "target"}),
-        None,
-    )
-    if label_col is None:
-        print("  fake news: no label column; skipped")
-        return
+    The previous version trained a classifier and reported its AUC and feature
+    importances -- the framing the project now rejects, because the text
+    column is the row index and the labels are random.
+    """
+    use("fake-news-detection")
 
-    labels = df[label_col]
-    # pandas 3 gives text columns a `str` dtype rather than `object`, so
-    # checking for `object` silently misclassified them as numeric.
-    y = (
-        labels.astype(int)
-        if pd.api.types.is_numeric_dtype(labels)
-        else labels.astype(str).str.strip().str.lower().isin({"fake", "1", "true"}).astype(int)
+    from news_signal.data import TEXT_COLUMNS, load, template_report
+    from news_signal.signal import (
+        cross_validated_auc,
+        feature_tests,
+        gradient_boosting,
+        learning_curve,
+        minimum_detectable_auc,
+        permutation_test,
     )
 
-    # Metadata features only -- the notebook's point is how much signal sits in
-    # article metadata before any text modelling.
-    numeric = ["sentiment_score", "word_count", "char_count", "readability_score"]
-    flags = ["has_images", "has_videos"]
-    usable = [c for c in numeric + flags if c in df.columns]
-    X = df[usable].apply(pd.to_numeric, errors="coerce").fillna(0)
-    for col in ["category", "source", "state"]:
-        if col in df.columns:
-            X = pd.concat([X, pd.get_dummies(df[col], prefix=col, drop_first=True)], axis=1)
+    data = load(DATA / "fake-news-detection" / "data" / "fake_news_dataset.csv")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=SEED, stratify=y
-    )
-    model = RandomForestClassifier(
-        n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=-1
-    ).fit(X_train, y_train)
-
-    proba = model.predict_proba(X_test)[:, 1]
-    predicted = (proba >= 0.5).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_test, predicted).ravel()
-    importances = (
-        pd.Series(model.feature_importances_, index=X.columns)
-        .sort_values(ascending=False)
-        .head(12)
-    )
-
-    # Real articles from the test split, with the model's score next to the
-    # truth. An aggregate metric answers "how good"; only an example answers
-    # "what am I actually looking at".
-    test_rows = df.loc[X_test.index]
-    sample = []
-    rng = np.random.default_rng(SEED)
-    order = rng.permutation(len(test_rows))
-    for i in order[:60]:
-        row = test_rows.iloc[int(i)]
-        score = float(proba[int(i)])
-        sample.append(
+    templates = []
+    for column in TEXT_COLUMNS:
+        if column not in data.frame:
+            continue
+        report = template_report(data.frame, column)
+        templates.append(
             {
-                "title": str(row.get("title", ""))[:180],
-                "author": str(row.get("author", "")),
-                "source": str(row.get("source", "")),
-                "category": str(row.get("category", "")),
-                "date": str(row.get("date_published", ""))[:10],
-                "excerpt": " ".join(str(row.get("text", "")).split())[:320],
-                "words": int(row.get("word_count", 0) or 0),
-                "readability": round(float(row.get("readability_score", 0) or 0), 1),
-                "sentiment": round(float(row.get("sentiment_score", 0) or 0), 3),
-                "actual": "fake" if int(y_test.iloc[int(i)]) == 1 else "real",
-                "predicted": "fake" if score >= 0.5 else "real",
-                "score": round(score, 4),
+                "column": column,
+                "distinct": report.distinct,
+                "skeletons": report.distinct_after_removing_digits,
+                "templated": bool(report.is_templated),
+                "example": report.example[:90],
             }
         )
 
-    # Diagnosis. An AUC at chance has two possible causes: the features are
-    # uninformative, or the labels are. Distinguishing them matters, and the
-    # evidence below points squarely at the second.
-    feature_corr = [
-        {"feature": c, "corr": round(float(df[c].corr(y)), 4)}
-        for c in numeric + flags
-        if c in df.columns
-    ]
-    rate_by = {}
-    for col in ["source", "category", "author"]:
-        if col in df.columns:
-            rate_by[col] = [
-                {"label": str(k), "rate": round(float(v), 4), "n": int((df[col] == k).sum())}
-                for k, v in y.groupby(df[col]).mean().sort_values(ascending=False).items()
-            ]
+    permutation = permutation_test(data, permutations=200)
+    effect = minimum_detectable_auc(len(data), int(data.label.sum()))
+    curve = learning_curve(data)
+    features = feature_tests(data)
+
+    # Histogram of the null, so the browser can draw the distribution rather
+    # than quote its mean.
+    counts, edges = np.histogram(permutation.null_scores, bins=24)
+    low, high = permutation.null_interval()
 
     write(
         "nb-fakenews.json",
         {
-            "rows": int(len(df)),
-            "sample": sample,
-            "feature_corr": feature_corr,
-            "rate_by": rate_by,
-            "distinct_titles": int(df["title"].nunique()) if "title" in df else None,
-            "distinct_texts": int(df["text"].nunique()) if "text" in df else None,
-            "fake_rate": round(float(y.mean()), 4),
-            "auc": round(float(roc_auc_score(y_test, proba)), 4),
-            "accuracy": round(float((predicted == y_test).mean()), 4),
-            "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
-            "roc": roc_points(y_test, proba),
-            # Per-row scores, so the threshold can be moved in the browser
-            # rather than being frozen at whatever 0.5 happened to give.
-            "scores": [
-                {"p": round(float(pr), 4), "y": int(t)}
-                for pr, t in zip(proba, y_test, strict=True)
+            "rows": len(data),
+            "fake_rate": round(float(data.fake_rate), 4),
+            "templates": templates,
+            "observed_auc": round(float(permutation.observed), 4),
+            "boosted_auc": round(
+                float(cross_validated_auc(data, gradient_boosting())), 4
+            ),
+            "permutation": {
+                "draws": permutation.permutations,
+                "null_mean": round(float(permutation.null_mean), 4),
+                "null_std": round(float(permutation.null_std), 4),
+                "low": round(float(low), 4),
+                "high": round(float(high), 4),
+                "z": round(float(permutation.z_score), 3),
+                "p": round(float(permutation.p_value), 4),
+                "distinguishable": bool(permutation.distinguishable),
+                "histogram": [
+                    {
+                        "x": round(float((edges[i] + edges[i + 1]) / 2), 4),
+                        "n": int(counts[i]),
+                    }
+                    for i in range(len(counts))
+                ],
+            },
+            "power": {
+                "minimum_auc": round(float(effect.minimum_auc), 4),
+                "power": effect.power,
+                "summary": effect.summary,
+            },
+            "learning_curve": [
+                {"n": int(n), "auc": round(float(a), 4)}
+                for n, a in zip(curve.sizes, curve.scores, strict=True)
             ],
-            "importances": [
-                {"feature": f, "weight": round(float(w), 5)}
-                for f, w in importances.items()
+            "learning_slope": round(float(curve.slope), 4),
+            "features": [
+                {
+                    "feature": name,
+                    "r": round(float(row["r"]), 4),
+                    "p": round(float(row["p"]), 4),
+                    "threshold": round(float(row["bh_threshold"]), 4),
+                    "reject": bool(row["reject"]),
+                }
+                for name, row in features.frame.iterrows()
             ],
+            "expected_false_positives": round(
+                float(features.expected_false_positives), 2
+            ),
         },
     )
 
@@ -380,61 +369,141 @@ def fake_news() -> None:
 
 
 def threats() -> None:
-    from sklearn.cluster import KMeans
+    """Structure tests first, then clusters judged against a null.
+
+    The previous version drew a PCA scatter coloured by k-means cluster and by
+    outlier flag -- a picture of exactly the kind the project now argues you
+    cannot read without a null beside it. So the null is drawn beside it.
+    """
+    use("global-security-threats")
+
     from sklearn.decomposition import PCA
-    from sklearn.ensemble import IsolationForest
-    from sklearn.preprocessing import StandardScaler
-
-    df = pd.read_csv(
-        DATA / "global-security-threats/data/Global_Cybersecurity_Threats_2015-2024.csv"
+    from threat_structure.anomalies import detector_agreement, tail_checks
+    from threat_structure.clustering import (
+        compare_with_null,
+        fit_kmeans,
+        gap_statistic,
+        stability,
     )
-    numeric = [
-        "Financial Loss (in Million $)",
-        "Number of Affected Users",
-        "Incident Resolution Time (in Hours)",
-        "Year",
-    ]
-    X = StandardScaler().fit_transform(df[numeric].fillna(df[numeric].median()))
+    from threat_structure.data import Incidents, load, shuffle_within_columns
+    from threat_structure.structure import associations, balance, uniformity
 
-    coords = PCA(n_components=2, random_state=SEED).fit_transform(X)
-    clusters = KMeans(n_clusters=4, random_state=SEED, n_init=10).fit_predict(X)
-    outlier = IsolationForest(contamination=0.05, random_state=SEED).fit_predict(X) == -1
-
-    by_type = df["Attack Type"].value_counts()
-    loss_by_industry = (
-        df.groupby("Target Industry")["Financial Loss (in Million $)"]
-        .mean()
-        .sort_values(ascending=False)
+    path = (
+        DATA / "global-security-threats" / "data"
+        / "Global_Cybersecurity_Threats_2015-2024.csv"
     )
-    by_year = df.groupby("Year").size()
+    data = load(path)
+    matrix = data.encoded()
+
+    # Two projections side by side: the real data, and the same data with every
+    # column independently shuffled. They look alike, which is the argument.
+    shuffled = Incidents(frame=shuffle_within_columns(data.frame, seed=0))
+    real_xy = PCA(n_components=2, random_state=SEED).fit_transform(matrix)
+    null_xy = PCA(n_components=2, random_state=SEED).fit_transform(shuffled.encoded())
+    labels = fit_kmeans(matrix, 4)
+    null_labels = fit_kmeans(shuffled.encoded(), 4)
+
+    null = compare_with_null(data, k=4, draws=40)
+    firm = stability(data, k=4, draws=25)
+    gap = gap_statistic(data, max_k=6, references=10)
+    agreement = detector_agreement(data)
+
+    uniform = uniformity(data)
+    balanced = balance(data)
+    linked = associations(data)
+    pair, strength = linked.strongest_categorical
+
+    # A thousand points per panel is plenty to see that the two clouds are the
+    # same shape, and keeps the payload small enough to render as SVG.
+    shown = np.random.default_rng(SEED).choice(len(matrix), 1000, replace=False)
+
+    def points(xy, cluster) -> list[dict]:
+        return [
+            {
+                "x": round(float(xy[i, 0]), 3),
+                "y": round(float(xy[i, 1]), 3),
+                "c": int(cluster[i]),
+            }
+            for i in shown
+        ]
 
     write(
         "nb-threats.json",
         {
-            "rows": int(len(df)),
-            "years": [int(df["Year"].min()), int(df["Year"].max())],
-            "points": [
+            "rows": len(data),
+            "shown": len(shown),
+            "columns": int(matrix.shape[1]),
+            "projection": {
+                "real": points(real_xy, labels),
+                "shuffled": points(null_xy, null_labels),
+            },
+            "uniformity": [
                 {
-                    "x": round(float(coords[i, 0]), 3),
-                    "y": round(float(coords[i, 1]), 3),
-                    "c": int(clusters[i]),
-                    "o": bool(outlier[i]),
-                    "t": df["Attack Type"].iloc[i],
-                    "i": df["Target Industry"].iloc[i],
-                    "yr": int(df["Year"].iloc[i]),
-                    "loss": round(float(df["Financial Loss (in Million $)"].iloc[i]), 2),
+                    "column": name,
+                    "d": round(float(row["D"]), 4),
+                    "p": round(float(row["p"]), 4),
                 }
-                for i in range(len(df))
+                for name, row in uniform.frame.iterrows()
             ],
-            "by_type": [{"label": k, "count": int(v)} for k, v in by_type.items()],
-            "loss_by_industry": [
-                {"label": k, "value": round(float(v), 2)}
-                for k, v in loss_by_industry.items()
+            "all_uniform": uniform.all_uniform,
+            "balance": [
+                {
+                    "column": name,
+                    "categories": int(row["categories"]),
+                    "chi2": round(float(row["chi2"]), 2),
+                    "p": round(float(row["p"]), 4),
+                }
+                for name, row in balanced.frame.iterrows()
             ],
-            "by_year": [{"year": int(k), "count": int(v)} for k, v in by_year.items()],
-            "industries": sorted(df["Target Industry"].dropna().unique().tolist()),
-            "attack_types": sorted(df["Attack Type"].dropna().unique().tolist()),
-            "outlier_count": int(outlier.sum()),
+            "balance_expected_false_positives": round(
+                balanced.expected_false_positives, 2
+            ),
+            "balance_consistent_with_chance": balanced.consistent_with_chance,
+            "strongest_association": {"pair": pair, "v": round(strength, 4)},
+            "strongest_correlation": round(linked.strongest_numeric, 4),
+            "independent": linked.independent,
+            "silhouette": {
+                "observed": round(null.observed, 4),
+                "null_mean": round(null.null_mean, 4),
+                "null_std": round(null.null_std, 4),
+                "z": round(null.z_score, 3),
+                "p": round(null.p_value, 4),
+                "draws": len(null.null_scores),
+                "better_than_noise": null.better_than_noise,
+            },
+            "stability": {
+                "mean_ari": round(firm.mean_ari, 4),
+                "low": round(firm.interval[0], 4),
+                "high": round(firm.interval[1], 4),
+                "stable": firm.stable,
+            },
+            "gap": [
+                {
+                    "k": int(k),
+                    "gap": round(float(row["gap"]), 4),
+                    "s_k": round(float(row["s_k"]), 4),
+                }
+                for k, row in gap.frame.iterrows()
+            ],
+            "best_k": gap.best_k,
+            "says_no_clusters": gap.says_no_clusters,
+            "agreement": {
+                "flagged_a": agreement.flagged_a,
+                "flagged_b": agreement.flagged_b,
+                "overlap": agreement.overlap,
+                "expected": round(agreement.expected_overlap, 1),
+                "jaccard": round(agreement.jaccard, 3),
+                "excess": round(agreement.excess, 2),
+                "agree": agreement.agree,
+            },
+            "tails": [
+                {
+                    "column": check.column,
+                    "percentile": round(check.flagged_mean_percentile, 3),
+                    "just_a_tail": check.is_just_a_tail,
+                }
+                for check in tail_checks(data)
+            ],
         },
     )
 
@@ -445,59 +514,90 @@ def threats() -> None:
 
 
 def recommendations() -> None:
-    customers = pd.read_csv(
-        DATA / "personalized-recommendations-for-e-commerce/data/customer_data_collection.csv"
-    )
-    products = pd.read_csv(
-        DATA / "personalized-recommendations-for-e-commerce/data/product_recommendation_data.csv"
+    """Ranking metrics from the package, not a descriptive bar chart.
+
+    The previous version plotted customer segments and average spend, which
+    are facts about the file rather than an evaluation of anything. Every
+    cut-off the browser might offer is scored here so the slider is free.
+    """
+    use("personalized-recommendations-for-e-commerce")
+
+    from rec_eval.data import browsing_leak, load_catalogue, load_customers
+    from rec_eval.evaluate import leave_one_out
+    from rec_eval.recommenders import (
+        browsing_oracle,
+        category_share_of_similar_lists,
+        different_category,
+        expected_category_share,
+        popularity,
+        probability_column_correlations,
+        random_ranking,
+        same_category,
+        similar_products,
     )
 
-    segment = customers["Customer_Segment"].value_counts()
-    by_category = (
-        products.groupby("Category")
-        .agg(count=("Product_ID", "size"), rating=("Product_Rating", "mean"),
-             price=("Price", "mean"))
-        .sort_values("count", ascending=False)
-    )
-    spend_by_segment = customers.groupby("Customer_Segment")["Avg_Order_Value"].mean()
+    base = DATA / "personalized-recommendations-for-e-commerce" / "data"
+    catalogue = load_catalogue(base / "product_recommendation_data.csv")
+    customers = load_customers(base / "customer_data_collection.csv")
 
-    # Per-segment category interest, so the demo can ask whether the segments
-    # actually behave differently -- the premise a recommender rests on.
-    interest = {}
-    if "Browsing_History" in customers.columns:
-        for segment_name, group in customers.groupby("Customer_Segment"):
-            counts: dict[str, int] = {}
-            for entry in group["Browsing_History"].dropna().astype(str):
-                for item in entry.strip("[]").replace("'", "").split(","):
-                    key = item.strip()
-                    if key:
-                        counts[key] = counts.get(key, 0) + 1
-            total = sum(counts.values()) or 1
-            interest[str(segment_name)] = [
-                {"label": k, "share": round(v / total, 4)}
-                for k, v in sorted(counts.items(), key=lambda kv: -kv[1])[:8]
-            ]
+    recommenders = {
+        "random": random_ranking(),
+        "popularity": popularity(catalogue),
+        "same category": same_category(catalogue),
+        "different category": different_category(catalogue),
+        "similar-product graph": similar_products(catalogue),
+        "browsing (oracle)": browsing_oracle(catalogue),
+    }
+
+    cutoffs = (1, 3, 5, 10)
+    by_k = {}
+    evaluated = excluded = 0
+    for k in cutoffs:
+        result = leave_one_out(customers, catalogue, recommenders, k=k)
+        evaluated, excluded = result.evaluated, result.excluded
+        by_k[str(k)] = [
+            {
+                "name": score.name,
+                "recall": round(score.recall, 4),
+                "precision": round(score.precision, 4),
+                "map": round(score.map_score, 4),
+                "mrr": round(score.mrr, 4),
+                "ndcg": round(score.ndcg, 4),
+            }
+            for score in result.scores
+        ]
+
+    leak = browsing_leak(customers, catalogue)
+    correlations = probability_column_correlations(catalogue)
 
     write(
         "nb-recommend.json",
         {
-            "customers": int(len(customers)),
-            "products": int(len(products)),
-            "segments": [{"label": k, "count": int(v)} for k, v in segment.items()],
-            "by_category": [
-                {
-                    "label": k,
-                    "count": int(v["count"]),
-                    "rating": round(float(v["rating"]), 2),
-                    "price": round(float(v["price"]), 2),
-                }
-                for k, v in by_category.iterrows()
+            "customers": len(customers),
+            "products": len(catalogue),
+            "subcategories": len(catalogue.subcategories),
+            "cutoffs": list(cutoffs),
+            "evaluated": evaluated,
+            "excluded": excluded,
+            "by_k": by_k,
+            "browsing_leak": round(leak.rate, 4),
+            "browsing_deterministic": leak.is_deterministic,
+            "similar_category_share": round(
+                category_share_of_similar_lists(catalogue), 4
+            ),
+            "similar_category_chance": round(expected_category_share(catalogue), 4),
+            # `dropna` because the CSV has two trailing empty columns, which
+            # pandas names "Unnamed: 13/14" and which correlate with nothing
+            # because they contain nothing. They are a file artefact, not a
+            # feature, and a NaN is not valid JSON in any case.
+            "probability_correlations": [
+                {"feature": str(name), "r": round(float(value), 4)}
+                for name, value in correlations.dropna().head(6).items()
             ],
-            "spend_by_segment": [
-                {"label": k, "value": round(float(v), 2)}
-                for k, v in spend_by_segment.items()
+            "popularity": [
+                {"label": str(label), "count": int(count)}
+                for label, count in catalogue.popularity().head(12).items()
             ],
-            "interest_by_segment": interest,
         },
     )
 

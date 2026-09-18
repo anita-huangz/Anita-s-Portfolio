@@ -422,187 +422,263 @@ export function ChurnDemo() {
 
 // --------------------------------------------------------------------------- //
 
-interface Article {
-  title: string;
-  author: string;
-  source: string;
-  category: string;
-  date: string;
-  excerpt: string;
-  words: number;
-  readability: number;
-  sentiment: number;
-  actual: string;
-  predicted: string;
-  score: number;
-}
-
-interface FakeNews extends Classifier {
+interface FakeNews {
+  rows: number;
   fake_rate: number;
-  sample: Article[];
-  feature_corr: { feature: string; corr: number }[];
-  rate_by: Record<string, { label: string; rate: number; n: number }[]>;
-  distinct_titles: number | null;
+  templates: {
+    column: string;
+    distinct: number;
+    skeletons: number;
+    templated: boolean;
+    example: string;
+  }[];
+  observed_auc: number;
+  boosted_auc: number;
+  permutation: {
+    draws: number;
+    null_mean: number;
+    null_std: number;
+    low: number;
+    high: number;
+    z: number;
+    p: number;
+    distinguishable: boolean;
+    histogram: { x: number; n: number }[];
+  };
+  power: { minimum_auc: number; power: number; summary: string };
+  learning_curve: { n: number; auc: number }[];
+  learning_slope: number;
+  features: {
+    feature: string;
+    r: number;
+    p: number;
+    threshold: number;
+    reject: boolean;
+  }[];
+  expected_false_positives: number;
 }
-
-type ArticleFilter = "all" | "wrong" | "fake" | "real";
 
 export function FakeNewsDemo() {
   const data = useDemoData<FakeNews>(() => import("../../data/demos/nb-fakenews.json"));
-  const [filter, setFilter] = useState<ArticleFilter>("all");
-  const [index, setIndex] = useState(0);
-  const [groupBy, setGroupBy] = useState("source");
-  if (!data) return <Loading label="Loading classifier results…" />;
+  const [target, setTarget] = useState(0.55);
+  if (!data) return <Loading label="Loading fake-news results…" />;
 
-  const shown = data.sample.filter((a) =>
-    filter === "all" ? true
-    : filter === "wrong" ? a.actual !== a.predicted
-    : a.actual === filter,
+  const perm = data.permutation;
+  const insideNull =
+    data.observed_auc >= perm.low && data.observed_auc <= perm.high;
+
+  // How many articles it would take to detect an effect of the size the reader
+  // dials in. The detectable AUC scales as 1/sqrt(n) under the Hanley-McNeil
+  // variance the package uses, so the required n scales as the square.
+  const detectable = data.power.minimum_auc;
+  const rowsNeeded = Math.ceil(
+    data.rows * ((detectable - 0.5) / Math.max(target - 0.5, 1e-6)) ** 2,
   );
-  const article = shown[Math.min(index, shown.length - 1)];
 
-  const maxCorr = Math.max(...data.feature_corr.map((f) => Math.abs(f.corr)));
-  const rates = data.rate_by[groupBy] ?? [];
-  const spread = rates.length ? rates[0].rate - rates[rates.length - 1].rate : 0;
+  const templated = data.templates.filter((t) => t.templated);
+  const rejected = data.features.filter((f) => f.reject);
+  const binWidth =
+    perm.histogram.length > 1 ? perm.histogram[1].x - perm.histogram[0].x : 0.01;
 
   return (
     <div className="demo">
       <div className="metric-row">
         <Stat label="Articles" value={data.rows.toLocaleString()} />
         <Stat label="Labelled fake" value={pct(data.fake_rate)} />
-        <Stat label="ROC AUC" term="auc" value={data.auc.toFixed(3)} tone="var(--ds)" />
-        <Stat label="Accuracy" term="accuracy" value={pct(data.accuracy)} />
+        <Stat
+          label="AUC achieved"
+          term="auc"
+          value={data.observed_auc.toFixed(4)}
+          tone={insideNull ? "var(--ds)" : "var(--se)"}
+        />
+        <Stat
+          label="Permutation p"
+          term="p-value"
+          value={perm.p.toFixed(4)}
+          tone={perm.distinguishable ? "var(--se)" : "var(--ds)"}
+        />
       </div>
 
-      <p className="demo-warn">
-        <strong>No model can beat chance here, and the reason is the dataset.</strong>{" "}
-        An AUC of {data.auc.toFixed(2)} is at or below the 0.50 a coin flip scores.
-        That has two possible causes — uninformative features, or uninformative
-        labels — and the evidence below points at the labels. Read a few articles
-        and the problem is visible without any statistics.
+      <p className="demo-note" style={{ marginTop: 0 }}>
+        <strong>There is no signal here, and that is the finding.</strong> The
+        classifier reaches AUC {data.observed_auc.toFixed(4)}. Shuffling the
+        labels {perm.draws} times and refitting from scratch gives{" "}
+        {perm.null_mean.toFixed(4)} ± {perm.null_std.toFixed(4)} — a model
+        trained on <em>deliberately meaningless</em> labels scores the same. The
+        real result sits {perm.z.toFixed(2)} standard deviations out, p ={" "}
+        {perm.p.toFixed(4)}. Gradient boosting does not rescue it
+        ({data.boosted_auc.toFixed(4)}).
       </p>
 
-      <h5 className="demo-h">Read the articles being classified</h5>
-      <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Show</span>
-          {([
-            ["all", "All"],
-            ["wrong", "Misclassified"],
-            ["fake", "Labelled fake"],
-            ["real", "Labelled real"],
-          ] as [ArticleFilter, string][]).map(([id, label]) => (
-            <button
-              key={id} className="chip" aria-pressed={filter === id}
-              onClick={() => { setFilter(id); setIndex(0); }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="control">
-          <button className="chip" onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                  disabled={index === 0}>
-            ‹ Prev
-          </button>
-          <span className="demo-hint">
-            {shown.length ? index + 1 : 0} of {shown.length}
-          </span>
-          <button className="chip"
-                  onClick={() => setIndex((i) => Math.min(shown.length - 1, i + 1))}
-                  disabled={index >= shown.length - 1}>
-            Next ›
-          </button>
-        </div>
-      </div>
-
-      {article ? (
-        <article className="article-card">
-          <header>
-            <h4>{article.title}</h4>
-            <div className="article-meta">
-              <span>{article.source}</span>
-              <span>{article.category}</span>
-              <span>{article.author}</span>
-              <span>{article.date}</span>
-            </div>
-          </header>
-          <p className="article-body">{article.excerpt}</p>
-          <div className="article-verdicts">
-            <span className={`verdict ${article.actual}`}>
-              labelled <strong>{article.actual}</strong>
-            </span>
-            <span className={`verdict ${article.predicted}`}>
-              model said <strong>{article.predicted}</strong> ({article.score.toFixed(2)})
-            </span>
-            <span className={article.actual === article.predicted ? "tag-hit" : "tag-evict"}>
-              {article.actual === article.predicted ? "correct" : "wrong"}
-            </span>
-            <span className="muted mono">
-              {article.words} words · readability {article.readability} · sentiment{" "}
-              {article.sentiment}
-            </span>
-          </div>
-        </article>
-      ) : (
-        <p className="empty">Nothing matches that filter.</p>
-      )}
-
-      <p className="demo-note">
-        Every title is "Breaking News N" and every body is the same sentence with the
-        article number substituted in. There is nothing here to read, because the
-        corpus is generated rather than collected — {data.distinct_titles?.toLocaleString()}{" "}
-        distinct titles for {data.rows.toLocaleString()} rows, all of the same
-        template. A classifier cannot find a pattern that was never written in.
-      </p>
-
-      <h5 className="demo-h" style={{ marginTop: 20 }}>
-        The labels look randomly assigned
+      <h5 className="demo-h">
+        Observed against the <Term id="permutation-test">permutation null</Term>
       </h5>
-      <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Fake rate by</span>
-          {Object.keys(data.rate_by).map((k) => (
-            <button key={k} className="chip" aria-pressed={groupBy === k}
-                    onClick={() => setGroupBy(k)}>
-              {k}
-            </button>
-          ))}
-        </div>
-      </div>
       <BarChart
-        bars={rates.map((r) => ({
-          label: r.label,
-          value: r.rate,
-          note: `${r.n} articles`,
-          color: "var(--ds)",
+        maxBars={perm.histogram.length}
+        bars={perm.histogram.map((b) => ({
+          label: b.x.toFixed(3),
+          value: b.n,
+          color:
+            Math.abs(b.x - data.observed_auc) <= binWidth
+              ? "var(--ds)"
+              : "var(--muted)",
+          note: `${b.n} of ${perm.draws} shuffles scored near AUC ${b.x.toFixed(3)}`,
         }))}
-        maxBars={14}
-        formatValue={pct}
+        formatValue={(v) => `${v}`}
       />
-      <p className="demo-note">
-        If the labels meant anything, satire and wire services would sit at opposite
-        ends. Instead every {groupBy} lands within {pct(spread)} of a coin flip — The
-        Onion and Reuters are both about half fake. The strongest correlation between
-        any feature and the label is {maxCorr.toFixed(3)}, which is noise.
+      <p className="demo-hint">
+        Each bar is one bin of the {perm.draws} shuffled refits; the highlighted
+        bars bracket the real result. It is inside the crowd, not beyond it. The
+        middle 95% of the null runs from {perm.low.toFixed(4)} to{" "}
+        {perm.high.toFixed(4)}, and {data.observed_auc.toFixed(4)} is within it.
+      </p>
+
+      <div className="range" style={{ marginTop: 18 }}>
+        <span className="control-label">
+          Suppose the true AUC were <strong>{target.toFixed(2)}</strong> — could
+          this study have found it?
+        </span>
+        <input
+          type="range" min={0.51} max={0.8} step={0.01} value={target}
+          aria-label="Hypothetical true AUC"
+          onChange={(e) => setTarget(Number(e.target.value))}
+        />
+      </div>
+      <div className="metric-row">
+        <Stat
+          label={`Detectable at n = ${data.rows.toLocaleString()}`}
+          term="statistical-power"
+          value={`AUC ≥ ${detectable.toFixed(3)}`}
+        />
+        <Stat
+          label={`Articles needed for AUC ${target.toFixed(2)}`}
+          value={
+            target >= detectable
+              ? `${data.rows.toLocaleString()} is enough`
+              : `~${rowsNeeded.toLocaleString()}`
+          }
+          tone={target >= detectable ? "var(--se)" : "var(--ds)"}
+        />
+        <Stat label="Power" value={pct(data.power.power)} />
+      </div>
+      <p className="demo-hint">
+        {data.power.summary}. "No signal found" and "not enough data to find
+        one" are different claims, and only a power calculation separates them.
+        An effect smaller than AUC {detectable.toFixed(3)} could be real and
+        still invisible here — so the conclusion is bounded, not absolute.
       </p>
 
       <div className="demo-split" style={{ marginTop: 18 }}>
         <div>
-          <h5 className="demo-h">ROC curve</h5>
-          <RocChart roc={data.roc} label="Metadata features" />
+          <h5 className="demo-h">
+            <Term id="learning-curve">Learning curve</Term> — more data does not help
+          </h5>
+          <LineChart
+            height={220}
+            series={[
+              {
+                label: "Cross-validated AUC",
+                color: "var(--ds)",
+                points: data.learning_curve.map((p) => ({ x: p.n, y: p.auc })),
+              },
+              {
+                label: "Coin flip",
+                color: "var(--muted)",
+                dashed: true,
+                points: [
+                  { x: data.learning_curve[0].n, y: 0.5 },
+                  {
+                    x: data.learning_curve[data.learning_curve.length - 1].n,
+                    y: 0.5,
+                  },
+                ],
+              },
+            ]}
+            formatX={(v) => v.toLocaleString()}
+            formatY={(v) => v.toFixed(3)}
+            yLabel="AUC"
+          />
+          <p className="demo-hint">
+            {data.learning_slope >= 0 ? "+" : ""}
+            {data.learning_slope.toFixed(4)} AUC per extra thousand articles. A
+            model starved of data climbs as you feed it; this one is flat, which
+            points at the data rather than the sample size.
+          </p>
         </div>
         <div>
-          <h5 className="demo-h">Where it is wrong</h5>
-          <ConfusionMatrix {...data.confusion} positiveLabel="fake" negativeLabel="real" />
+          <h5 className="demo-h">Every feature, tested individually</h5>
+          <BarChart
+            maxBars={data.features.length}
+            bars={data.features.map((f) => ({
+              label: f.feature,
+              value: f.r,
+              color: f.reject ? "var(--ds)" : "var(--muted)",
+              note: `r = ${f.r.toFixed(4)}, p = ${f.p.toFixed(3)} against a threshold of ${f.threshold.toFixed(4)}`,
+            }))}
+            formatValue={(v) => v.toFixed(4)}
+          />
+          <p className="demo-hint">
+            Correlation with the label for all {data.features.length} features,
+            each judged against a{" "}
+            <Term id="benjamini-hochberg">Benjamini-Hochberg</Term> threshold.{" "}
+            {rejected.length === 0
+              ? "None survive"
+              : `${rejected.length} survive`}
+            . Testing this many at 5% would throw up{" "}
+            {data.expected_false_positives.toFixed(2)} false positives by chance,
+            so one "significant" feature here would mean nothing on its own.
+          </p>
         </div>
       </div>
 
+      <h5 className="demo-h" style={{ marginTop: 22 }}>
+        Why — the text is generated
+      </h5>
+      <div className="demo-table-wrap">
+        <table className="demo-table">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th>Distinct values</th>
+              <th>Distinct templates</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.templates.map((t) => (
+              <tr key={t.column} className={t.templated ? "highlight" : undefined}>
+                <td>{t.column}</td>
+                <td>{t.distinct.toLocaleString()}</td>
+                <td style={t.templated ? { color: "var(--ds)" } : undefined}>
+                  {t.skeletons.toLocaleString()}
+                </td>
+                <td className="mono">{t.example}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="demo-note">
-        The useful conclusion is about the data, not the model. Any accuracy reported
-        on this dataset — including the {pct(data.accuracy)} above — is measuring
-        nothing, and a write-up that quoted it without checking would have been
-        confidently wrong. Real signal needs a corpus of real articles.
+        {templated.length > 0 ? (
+          <>
+            <strong>
+              {templated.map((t) => t.column).join(" and ")} collapse
+              {templated.length === 1 ? "s" : ""} to{" "}
+              {templated.map((t) => t.skeletons).join(" and ")} template
+              {templated.length === 1 && templated[0].skeletons === 1 ? "" : "s"}
+            </strong>{" "}
+            once the digits are stripped out — {data.rows.toLocaleString()}{" "}
+            "distinct" values are one sentence with a counter in it.
+          </>
+        ) : (
+          <>The text columns show no obvious templating.</>
+        )}{" "}
+        There is no language here to learn from, and the labels were assigned
+        independently of it. So the output of this project is not a classifier;
+        it is a demonstration that the dataset cannot support one, backed by a
+        permutation test, a power bound and a learning curve. Each of those is
+        also run against a planted synthetic effect in the package's tests, so
+        the method is shown to find signal when signal is there.
       </p>
     </div>
   );
@@ -612,190 +688,281 @@ export function FakeNewsDemo() {
 
 interface Threats {
   rows: number;
-  years: number[];
-  points: {
-    x: number; y: number; c: number; o: boolean;
-    t: string; i: string; yr: number; loss: number;
-  }[];
-  industries: string[];
-  attack_types: string[];
-  by_type: { label: string; count: number }[];
-  loss_by_industry: { label: string; value: number }[];
-  by_year: { year: number; count: number }[];
-  outlier_count: number;
+  shown: number;
+  columns: number;
+  projection: {
+    real: { x: number; y: number; c: number }[];
+    shuffled: { x: number; y: number; c: number }[];
+  };
+  uniformity: { column: string; d: number; p: number }[];
+  all_uniform: boolean;
+  balance: { column: string; categories: number; chi2: number; p: number }[];
+  balance_expected_false_positives: number;
+  balance_consistent_with_chance: boolean;
+  strongest_association: { pair: string; v: number };
+  strongest_correlation: number;
+  independent: boolean;
+  silhouette: {
+    observed: number;
+    null_mean: number;
+    null_std: number;
+    z: number;
+    p: number;
+    draws: number;
+    better_than_noise: boolean;
+  };
+  stability: { mean_ari: number; low: number; high: number; stable: boolean };
+  gap: { k: number; gap: number; s_k: number }[];
+  best_k: number;
+  says_no_clusters: boolean;
+  agreement: {
+    flagged_a: number;
+    flagged_b: number;
+    overlap: number;
+    expected: number;
+    jaccard: number;
+    excess: number;
+    agree: boolean;
+  };
+  tails: { column: string; percentile: number; just_a_tail: boolean }[];
 }
 
 const CLUSTER_COLORS = ["var(--ai)", "var(--ds)", "var(--se)", "var(--dv4)"];
 
 export function ThreatsDemo() {
   const data = useDemoData<Threats>(() => import("../../data/demos/nb-threats.json"));
-  const [mode, setMode] = useState<"cluster" | "anomaly">("cluster");
-  const [attack, setAttack] = useState<string | null>(null);
-  const [industry, setIndustry] = useState<string | null>(null);
-  const [minYear, setMinYear] = useState<number | null>(null);
-  if (!data) return <Loading label="Loading 3,000 incidents…" />;
+  const [side, setSide] = useState<"both" | "real" | "shuffled">("both");
+  if (!data) return <Loading label="Loading threat results…" />;
 
-  const [firstYear, lastYear] = [data.years[0], data.years[1]];
-  const from = minYear ?? firstYear;
+  const sil = data.silhouette;
+  const gap = data.gap;
 
-  const visible = data.points.filter(
-    (p) =>
-      (!attack || p.t === attack) &&
-      (!industry || p.i === industry) &&
-      p.yr >= from,
-  );
-
-  const label = (p: Threats["points"][number]) =>
-    `${p.t} · ${p.i} · ${p.yr} · $${p.loss}M`;
-
-  const groups: ScatterGroup[] =
-    mode === "cluster"
-      ? CLUSTER_COLORS.map((color, i) => ({
-          label: `Cluster ${i + 1}`,
-          color,
-          points: visible
-            .filter((p) => p.c === i)
-            .map((p) => ({ x: p.x, y: p.y, note: label(p) })),
-        }))
-      : [
-          {
-            label: "Typical",
-            color: "var(--muted)",
-            points: visible.filter((p) => !p.o).map((p) => ({ x: p.x, y: p.y, note: label(p) })),
-          },
-          {
-            label: "Flagged anomalous",
-            color: "var(--ds)",
-            points: visible.filter((p) => p.o).map((p) => ({ x: p.x, y: p.y, note: label(p) })),
-          },
-        ];
-
-  const avgLoss = visible.length
-    ? visible.reduce((sum, p) => sum + p.loss, 0) / visible.length
-    : 0;
+  /** k-means output on one of the two panels, coloured by assigned cluster. */
+  const groups = (
+    points: { x: number; y: number; c: number }[],
+    prefix: string,
+  ): ScatterGroup[] =>
+    [0, 1, 2, 3].map((c) => ({
+      label: `${prefix} cluster ${c + 1}`,
+      color: CLUSTER_COLORS[c],
+      points: points.filter((p) => p.c === c),
+    }));
 
   return (
     <div className="demo">
-      <p className="demo-hint" style={{ margin: "0 0 10px" }}>
-        Two unsupervised methods over the same incidents:{" "}
-        <Term id="clustering">clustering</Term> groups them by similarity, and{" "}
-        <Term id="anomaly" /> flags the ones that look unlike the rest. Both axes
-        are <Term id="pca">principal components</Term>.
-      </p>
-      <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Colour by</span>
-          <button className="chip" aria-pressed={mode === "cluster"}
-                  onClick={() => setMode("cluster")}>
-            K-Means cluster
-          </button>
-          <button className="chip" aria-pressed={mode === "anomaly"}
-                  onClick={() => setMode("anomaly")}>
-            Isolation Forest anomaly
-          </button>
-        </div>
-        {(attack || industry || minYear) && (
-          <button
-            className="chip"
-            onClick={() => { setAttack(null); setIndustry(null); setMinYear(null); }}
-          >
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Attack</span>
-          {data.attack_types.map((t) => (
-            <button key={t} className="chip" aria-pressed={attack === t}
-                    onClick={() => setAttack(attack === t ? null : t)}>
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Industry</span>
-          {data.industries.map((t) => (
-            <button key={t} className="chip" aria-pressed={industry === t}
-                    onClick={() => setIndustry(industry === t ? null : t)}>
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="range">
-        <span className="control-label">
-          From <strong>{from}</strong> to {lastYear}
-        </span>
-        <input
-          type="range" min={firstYear} max={lastYear} value={from}
-          aria-label="Earliest year"
-          onChange={(e) => setMinYear(Number(e.target.value))}
-        />
-      </div>
-
       <div className="metric-row">
-        <Stat label="Incidents shown" value={visible.length.toLocaleString()} />
-        <Stat label="of total" value={data.rows.toLocaleString()} />
-        <Stat label="Average loss" value={`$${avgLoss.toFixed(1)}M`} />
+        <Stat label="Incidents" value={data.rows.toLocaleString()} />
+        <Stat label="Encoded columns" value={String(data.columns)} />
         <Stat
-          term="anomaly"
-          label="Flagged anomalous"
-          value={String(visible.filter((p) => p.o).length)}
-          tone="var(--ds)"
+          label="Silhouette"
+          term="silhouette"
+          value={sil.observed.toFixed(4)}
+          tone={sil.better_than_noise ? "var(--se)" : "var(--ds)"}
+        />
+        <Stat
+          label="Same on shuffled data"
+          term="null-model"
+          value={`${sil.null_mean.toFixed(4)} ± ${sil.null_std.toFixed(4)}`}
+        />
+        <Stat
+          label="Clusters supported"
+          term="gap-statistic"
+          value={data.says_no_clusters ? "none (k = 1)" : `k = ${data.best_k}`}
+          tone={data.says_no_clusters ? "var(--ds)" : "var(--se)"}
         />
       </div>
-
-      <ScatterChart
-        groups={groups}
-        height={340}
-        xLabel="First principal component"
-        yLabel="Second principal component"
-        formatX={(v) => v.toFixed(1)}
-        formatY={(v) => v.toFixed(1)}
-      />
 
       <p className="demo-note" style={{ marginTop: 0 }}>
-        Four numeric fields — financial loss, users affected, resolution time, year —
-        standardised and projected onto two principal components. Filter by attack
-        type or industry and the points stay spread across every cluster: the
-        grouping tracks how costly and how long an incident was, not what kind of
-        attack it was. The clusters separate cleanly on these axes, which is close
-        to tautological, since K-Means was handed the same four columns PCA was.
+        <strong>Both pictures below are the same picture.</strong> The left is
+        the real data; the right is the same table with every column
+        independently shuffled, which destroys any relationship between columns
+        while keeping each column's distribution intact. k-means draws four
+        tidy regions on each, because k-means always draws four tidy regions.
+        The real silhouette is {sil.observed.toFixed(4)} against{" "}
+        {sil.null_mean.toFixed(4)} on noise (p = {sil.p.toFixed(3)}, {sil.draws}{" "}
+        draws) — it is, if anything, slightly worse.
       </p>
 
-      <div className="demo-split" style={{ marginTop: 16 }}>
-        <div>
-          <h5 className="demo-h">Average loss by target industry ($M)</h5>
-          <BarChart
-            bars={data.loss_by_industry.map((d) => ({
-              label: d.label, value: d.value,
-              color: industry && d.label !== industry ? "var(--edge)" : "var(--ai)",
-            }))}
-            formatValue={(v) => `$${v.toFixed(1)}M`}
-          />
-        </div>
-        <div>
-          <h5 className="demo-h">Incidents by attack type</h5>
-          <BarChart
-            bars={data.by_type.map((d) => ({
-              label: d.label, value: d.count,
-              color: attack && d.label !== attack ? "var(--edge)" : "var(--se)",
-            }))}
-            formatValue={(v) => String(Math.round(v))}
-          />
+      <div className="demo-controls">
+        <div className="control" role="group" aria-label="Which projection to show">
+          <span className="control-label">Show</span>
+          {(["both", "real", "shuffled"] as const).map((m) => (
+            <button
+              key={m} className="chip" aria-pressed={side === m}
+              onClick={() => setSide(m)}
+            >
+              {m === "both" ? "Side by side" : m === "real" ? "Real data" : "Shuffled"}
+            </button>
+          ))}
         </div>
       </div>
+
+      <div className={side === "both" ? "demo-split" : undefined}>
+        {side !== "shuffled" && (
+          <div>
+            <h5 className="demo-h">
+              Real data — <Term id="pca">PCA</Term> projection, k-means colours
+            </h5>
+            <ScatterChart
+              height={280}
+              groups={groups(data.projection.real, "Real")}
+              xLabel="Component 1"
+              yLabel="Component 2"
+              formatX={(v) => v.toFixed(1)}
+              formatY={(v) => v.toFixed(1)}
+            />
+          </div>
+        )}
+        {side !== "real" && (
+          <div>
+            <h5 className="demo-h">Columns shuffled — structure destroyed</h5>
+            <ScatterChart
+              height={280}
+              groups={groups(data.projection.shuffled, "Shuffled")}
+              xLabel="Component 1"
+              yLabel="Component 2"
+              formatX={(v) => v.toFixed(1)}
+              formatY={(v) => v.toFixed(1)}
+            />
+          </div>
+        )}
+      </div>
+      <p className="demo-hint">
+        {data.shown.toLocaleString()} of {data.rows.toLocaleString()} incidents
+        drawn, sampled once so both panels are comparable.
+      </p>
+
+      <div className="demo-split" style={{ marginTop: 20 }}>
+        <div>
+          <h5 className="demo-h">
+            <Term id="gap-statistic">Gap statistic</Term> — how many groups exist
+          </h5>
+          <LineChart
+            height={220}
+            series={[
+              {
+                label: "Gap",
+                color: "var(--ds)",
+                points: gap.map((g) => ({ x: g.k, y: g.gap })),
+              },
+            ]}
+            formatX={(v) => `k=${v}`}
+            formatY={(v) => v.toFixed(2)}
+            yLabel="Gap over uniform reference"
+          />
+          <p className="demo-hint">
+            The gap never rises, so Tibshirani's rule returns{" "}
+            <strong>k = {data.best_k}</strong> — no clusters. This is the reason
+            to use it over an elbow or silhouette plot, both of which are
+            undefined at k = 1 and so structurally unable to report "there are
+            no groups".
+          </p>
+        </div>
+        <div>
+          <h5 className="demo-h">
+            <Term id="ari">Stability</Term> — do the groups survive resampling?
+          </h5>
+          <div className="metric-row" style={{ marginTop: 0 }}>
+            <Stat
+              label="Mean ARI across bootstraps"
+              value={data.stability.mean_ari.toFixed(3)}
+              tone={data.stability.stable ? "var(--se)" : "var(--ds)"}
+            />
+            <Stat
+              label="95% range"
+              term="confidence-interval"
+              value={`${data.stability.low.toFixed(2)} – ${data.stability.high.toFixed(2)}`}
+            />
+          </div>
+          <p className="demo-hint">
+            Re-cluster a resampled copy of the data and compare the labels to
+            the original. 1.0 would mean the same groups every time. At{" "}
+            {data.stability.mean_ari.toFixed(3)}, with a range running from{" "}
+            {data.stability.low.toFixed(2)} to {data.stability.high.toFixed(2)},
+            the boundaries move whenever the data does — they are fitted to
+            noise, not to structure.
+          </p>
+          <h5 className="demo-h" style={{ marginTop: 16 }}>
+            Two outlier detectors, compared
+          </h5>
+          <div className="metric-row" style={{ marginTop: 0 }}>
+            <Stat
+              label="Both flagged"
+              value={`${data.agreement.overlap} rows`}
+            />
+            <Stat
+              label="Expected by chance"
+              value={data.agreement.expected.toFixed(1)}
+            />
+            <Stat
+              label="Excess over chance"
+              value={`${data.agreement.excess.toFixed(1)}×`}
+              tone={data.agreement.agree ? "var(--se)" : "var(--ds)"}
+            />
+          </div>
+          <p className="demo-hint">
+            Isolation Forest and Local Outlier Factor overlap{" "}
+            {data.agreement.excess.toFixed(1)}× more than two unrelated
+            detectors would. That rules out one of them being broken — it does
+            not mean the flagged rows are anomalous. Both rank distance from the
+            centre of the same cloud, so they agree on pure noise too.
+          </p>
+        </div>
+      </div>
+
+      <h5 className="demo-h" style={{ marginTop: 22 }}>
+        Before clustering anything — is there structure to find?
+      </h5>
+      <div className="demo-table-wrap">
+        <table className="demo-table">
+          <thead>
+            <tr>
+              <th>Numeric column</th>
+              <th><Term id="ks-test">Uniformity</Term> D</th>
+              <th>p</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.uniformity.map((u) => (
+              <tr key={u.column}>
+                <td>{u.column}</td>
+                <td>{u.d.toFixed(4)}</td>
+                <td>{u.p.toFixed(3)}</td>
+                <td className="dim">
+                  {u.p > 0.05 ? "flat — cannot rule out a generator" : "not flat"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="demo-note">
-        Average loss lands between roughly $50M and $53M across all seven industries,
-        and incident counts are near-uniform across the six attack types. That
-        flatness is itself the finding: this dataset does not separate industries by
-        risk the way you would expect real incident data to.
+        <strong>
+          {data.all_uniform
+            ? "Every numeric column is statistically flat across its range"
+            : "Some columns are not flat"}
+          , and the categorical ones are balanced
+        </strong>{" "}
+        ({data.balance.length} tested, {data.balance_expected_false_positives.toFixed(2)}{" "}
+        rejections expected by chance alone, which is what was found). The
+        strongest link between any two categorical columns is{" "}
+        <Term id="cramers-v">Cramér's V</Term> ={" "}
+        {data.strongest_association.v.toFixed(3)} (
+        {data.strongest_association.pair}), and the strongest numeric
+        correlation is {data.strongest_correlation.toFixed(4)}. Every column is
+        independent of every other.
+      </p>
+      <p className="demo-note">
+        That is the finding: this file was generated by drawing each column
+        independently at random, so there is no structure for{" "}
+        <Term id="clustering">clustering</Term> or{" "}
+        <Term id="anomaly">anomaly detection</Term> to recover, and the tidy four-region scatter that a
+        notebook would have shipped is an artefact of the algorithm. The point
+        of the analysis is the null comparison that makes this visible — and
+        the package's tests plant a real three-cluster structure to confirm the
+        same machinery detects it (silhouette 0.807 against a null of 0.095)
+        when it is there.
       </p>
     </div>
   );
@@ -803,115 +970,253 @@ export function ThreatsDemo() {
 
 // --------------------------------------------------------------------------- //
 
+interface RankingScore {
+  name: string;
+  recall: number;
+  precision: number;
+  map: number;
+  mrr: number;
+  ndcg: number;
+}
+
 interface Recommend {
   customers: number;
   products: number;
-  segments: { label: string; count: number }[];
-  by_category: { label: string; count: number; rating: number; price: number }[];
-  spend_by_segment: { label: string; value: number }[];
-  interest_by_segment: Record<string, { label: string; share: number }[]>;
+  subcategories: number;
+  cutoffs: number[];
+  evaluated: number;
+  excluded: number;
+  by_k: Record<string, RankingScore[]>;
+  browsing_leak: number;
+  browsing_deterministic: boolean;
+  similar_category_share: number;
+  similar_category_chance: number;
+  probability_correlations: { feature: string; r: number }[];
+  popularity: { label: string; count: number }[];
 }
+
+type Metric = "recall" | "precision" | "map" | "mrr" | "ndcg";
+
+const METRIC_LABEL: Record<Metric, string> = {
+  recall: "Recall@k",
+  precision: "Precision@k",
+  map: "MAP",
+  mrr: "MRR",
+  ndcg: "NDCG",
+};
+
+const METRIC_TERM: Record<Metric, string> = {
+  recall: "recall-at-k",
+  precision: "precision-at-k",
+  map: "map",
+  mrr: "mrr",
+  ndcg: "ndcg",
+};
 
 export function RecommendDemo() {
   const data = useDemoData<Recommend>(() => import("../../data/demos/nb-recommend.json"));
-  const [metric, setMetric] = useState<"count" | "rating" | "price">("count");
-  const [segment, setSegment] = useState<string | null>(null);
-  if (!data) return <Loading label="Loading catalogue…" />;
+  const [k, setK] = useState(5);
+  const [metric, setMetric] = useState<Metric>("recall");
+  if (!data) return <Loading label="Loading recommendation results…" />;
 
-  const format =
-    metric === "price"
-      ? (v: number) => `$${v.toFixed(2)}`
-      : metric === "rating"
-        ? (v: number) => v.toFixed(2)
-        : (v: number) => String(Math.round(v));
-
-  const segments = Object.keys(data.interest_by_segment);
-  const interest = segment ? data.interest_by_segment[segment] : null;
-
-  // How far apart the segments actually are on spend. The recommender's
-  // premise is that the segment label tells you something.
-  const spends = data.spend_by_segment.map((s) => s.value);
-  const spread = Math.max(...spends) - Math.min(...spends);
-  const spreadPct = spread / (Math.min(...spends) || 1);
+  const scores = data.by_k[String(k)] ?? [];
+  const oracle = scores.find((s) => s.name.includes("oracle"));
+  const honest = scores.filter((s) => !s.name.includes("oracle"));
+  const best = honest.reduce(
+    (a, b) => (b[metric] > a[metric] ? b : a),
+    honest[0],
+  );
+  const random = honest.find((s) => s.name === "random");
 
   return (
     <div className="demo">
       <div className="metric-row">
         <Stat label="Customers" value={data.customers.toLocaleString()} />
         <Stat label="Products" value={data.products.toLocaleString()} />
-        <Stat label="Categories" value={String(data.by_category.length)} />
         <Stat
-          label="Spend spread across segments"
-          value={`${(spreadPct * 100).toFixed(1)}%`}
-          tone={spreadPct < 0.1 ? "var(--ds)" : undefined}
+          label="Evaluated"
+          term="leave-one-out"
+          value={data.evaluated.toLocaleString()}
+        />
+        <Stat
+          label="Excluded — only one purchase"
+          value={data.excluded.toLocaleString()}
+          tone="var(--ds)"
         />
       </div>
 
-      <p className="demo-warn">
-        The three segments differ by only {(spreadPct * 100).toFixed(1)}% in average
-        order value. That is the first thing to check before building on a
-        segmentation, and here it does not hold up: the label barely predicts what a
-        customer spends, so a recommender leaning on it is leaning on very little.
-        Browsing and purchase history have to carry the work.
+      <p className="demo-note" style={{ marginTop: 0 }}>
+        Every recommender below is scored the same way: hide one of a customer's
+        purchases, rank the catalogue from what remains, and check whether the
+        hidden item comes back in the top k. {data.excluded.toLocaleString()} of{" "}
+        {data.customers.toLocaleString()} customers have only one purchase, so
+        there is nothing to hold out and they are dropped — counting them would
+        have quietly overstated the sample.
       </p>
 
       <div className="demo-controls">
-        <div className="control">
-          <span className="control-label">Segment</span>
-          {segments.map((name) => (
-            <button key={name} className="chip" aria-pressed={segment === name}
-                    onClick={() => setSegment(segment === name ? null : name)}>
-              {name}
+        <div className="control" role="group" aria-label="Cut-off k">
+          <span className="control-label">Recommend the top</span>
+          {data.cutoffs.map((c) => (
+            <button
+              key={c} className="chip" aria-pressed={k === c}
+              onClick={() => setK(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <div className="control" role="group" aria-label="Metric to rank by">
+          <span className="control-label">Rank by</span>
+          {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
+            <button
+              key={m} className="chip" aria-pressed={metric === m}
+              onClick={() => setMetric(m)}
+            >
+              {METRIC_LABEL[m]}
             </button>
           ))}
         </div>
       </div>
 
-      {interest ? (
-        <>
-          <h5 className="demo-h">What {segment} customers browse</h5>
-          <BarChart
-            bars={interest.map((i) => ({ label: i.label, value: i.share }))}
-            formatValue={(v) => `${(v * 100).toFixed(1)}%`}
-          />
-          <p className="demo-note">
-            Compare this against another segment — the browsing mix is nearly
-            identical, which is the same conclusion the spend figures reach from a
-            different direction.
-          </p>
-        </>
-      ) : (
-        <>
-          <h5 className="demo-h">Average order value by segment</h5>
-          <BarChart
-            bars={data.spend_by_segment.map((s) => ({
-              label: s.label, value: s.value, color: "var(--se)",
-            }))}
-            formatValue={(v) => `$${v.toFixed(0)}`}
-          />
-        </>
+      <h5 className="demo-h" style={{ marginTop: 16 }}>
+        <Term id={METRIC_TERM[metric]}>{METRIC_LABEL[metric]}</Term> at k = {k}
+      </h5>
+      <BarChart
+        maxBars={scores.length}
+        bars={scores.map((s) => ({
+          label: s.name,
+          value: s[metric],
+          color: s.name.includes("oracle")
+            ? "var(--ds)"
+            : s === best
+              ? "var(--se)"
+              : "var(--muted)",
+          note: `${s.name}: recall ${pct(s.recall)}, MAP ${s.map.toFixed(3)}, NDCG ${s.ndcg.toFixed(3)}`,
+        }))}
+        formatValue={(v) => v.toFixed(4)}
+      />
+
+      <div className="demo-table-wrap" style={{ marginTop: 14 }}>
+        <table className="demo-table">
+          <thead>
+            <tr>
+              <th>Recommender</th>
+              <th><Term id="recall-at-k">Recall</Term></th>
+              <th><Term id="precision-at-k">Precision</Term></th>
+              <th><Term id="map">MAP</Term></th>
+              <th><Term id="mrr">MRR</Term></th>
+              <th><Term id="ndcg">NDCG</Term></th>
+            </tr>
+          </thead>
+          <tbody>
+            {scores.map((s) => (
+              <tr
+                key={s.name}
+                className={s.name.includes("oracle") ? "highlight" : undefined}
+              >
+                <td>{s.name}</td>
+                <td>{pct(s.recall)}</td>
+                <td>{pct(s.precision)}</td>
+                <td>{s.map.toFixed(4)}</td>
+                <td>{s.mrr.toFixed(4)}</td>
+                <td>{s.ndcg.toFixed(4)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="demo-note">
+        <strong>
+          Nothing beats picking at random by a margin worth having.
+        </strong>{" "}
+        At k = {k}, random ranking scores {random ? pct(random.recall) : "—"} recall
+        and the best non-cheating method reaches {pct(best.recall)}. "Same
+        category" — the recommendation anyone would write first — does{" "}
+        <em>worse</em> than random, because these customers do not repeat within
+        a category. Switch the cut-off and the metric above: the ordering barely
+        changes, which is what no signal looks like from every angle.
+      </p>
+
+      {oracle && (
+        <p className="demo-note">
+          <strong>The {pct(oracle.recall)} row is a ruler, not a result.</strong>{" "}
+          The <Term id="oracle">oracle</Term> is allowed to read the customer's
+          browsing history, and it scores a perfect{" "}
+          {oracle.recall.toFixed(2)} recall — because in{" "}
+          {pct(data.browsing_leak)} of rows the browsing column{" "}
+          {data.browsing_deterministic ? "exactly contains" : "overlaps"} the
+          purchase. Any model given that column would look brilliant and would
+          have learned nothing. Finding the leak is the reason to build an
+          oracle at all.
+        </p>
       )}
 
-      <div className="demo-controls" style={{ marginTop: 18 }}>
-        <div className="control">
-          <span className="control-label">Catalogue by</span>
-          {(["count", "rating", "price"] as const).map((m) => (
-            <button key={m} className="chip" aria-pressed={metric === m}
-                    onClick={() => setMetric(m)}>
-              {m === "count" ? "Products" : m === "rating" ? "Avg rating" : "Avg price"}
-            </button>
-          ))}
+      <div className="demo-split" style={{ marginTop: 18 }}>
+        <div>
+          <h5 className="demo-h">The "similar products" column is circular</h5>
+          <div className="metric-row" style={{ marginTop: 0 }}>
+            <Stat
+              label="Same-category share of similar lists"
+              value={pct(data.similar_category_share)}
+              tone="var(--ds)"
+            />
+            <Stat
+              label="If drawn at random"
+              value={pct(data.similar_category_chance)}
+            />
+          </div>
+          <p className="demo-hint">
+            Every "similar product" shares its category, where chance would give{" "}
+            {pct(data.similar_category_chance)}. The column was generated from
+            the category, so a recommender built on it is reading the category
+            back out — and that is why it scores below random once the customer
+            is not buying within a category.
+          </p>
+        </div>
+        <div>
+          <h5 className="demo-h">
+            What the recommendation probability correlates with
+          </h5>
+          <BarChart
+            maxBars={data.probability_correlations.length}
+            bars={data.probability_correlations.map((c) => ({
+              label: c.feature,
+              value: c.r,
+              color: "var(--muted)",
+            }))}
+            formatValue={(v) => v.toFixed(4)}
+          />
+          <p className="demo-hint">
+            The notebook's regression target correlates with nothing in the
+            table — the largest is{" "}
+            {Math.max(
+              ...data.probability_correlations.map((c) => Math.abs(c.r)),
+            ).toFixed(4)}
+            . A model predicting it is fitting noise, and any R² reported for
+            that is a measure of how much noise a flexible model can absorb.
+          </p>
         </div>
       </div>
 
+      <h5 className="demo-h" style={{ marginTop: 20 }}>
+        Catalogue composition — the popularity baseline
+      </h5>
       <BarChart
-        bars={data.by_category.map((c) => ({
-          label: c.label,
-          value: c[metric],
-          note: `${c.count} products, avg rating ${c.rating}`,
+        maxBars={12}
+        bars={data.popularity.map((p) => ({
+          label: p.label,
+          value: p.count,
+          color: "var(--ai)",
         }))}
-        formatValue={format}
+        formatValue={(v) => v.toLocaleString()}
       />
+      <p className="demo-hint">
+        {data.subcategories} subcategories across {data.products.toLocaleString()}{" "}
+        products, near-evenly split — so even "recommend the most common thing"
+        has almost nothing to exploit.
+      </p>
     </div>
   );
 }

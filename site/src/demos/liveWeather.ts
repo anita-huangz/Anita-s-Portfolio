@@ -7,6 +7,14 @@
  * limit.
  */
 
+import {
+  mannKendall,
+  neweyWest,
+  ordinaryLeastSquares,
+  residualAutocorrelation,
+  type TrendEstimate,
+} from "./trend";
+
 const GEOCODE = "https://geocoding-api.open-meteo.com/v1/search";
 const ARCHIVE = "https://archive-api.open-meteo.com/v1/era5";
 
@@ -21,20 +29,58 @@ export interface Place {
   lon: number;
 }
 
+/** A trend, in the shape the baked JSON uses, so the demo reads one type. */
+export interface TrendRow {
+  method: string;
+  slope: number;
+  se: number | null;
+  p: number;
+  low: number;
+  high: number;
+  width: number;
+  significant: boolean;
+}
+
 export interface CitySeries {
   lat: number;
   lon: number;
   annual: { year: number; temp: number }[];
-  trend: {
-    slope_per_decade: number;
-    intercept: number;
-    sigma: number;
-    first_year: number;
-    last_year: number;
+  fitted: { year: number; temp: number }[];
+  trends: {
+    ols: TrendRow;
+    newey_west: TrendRow;
+    /** Absent for live cities: 2,000 refits is not something to do in a tab. */
+    bootstrap?: TrendRow;
+    mann_kendall: TrendRow;
   };
-  projection: { year: number; temp: number }[];
+  interval_inflation: number | null;
+  autocorrelation: {
+    lag1: number;
+    p: number;
+    durbin_watson: number;
+    effective_n: number;
+    n: number;
+    correlated: boolean;
+    inflation: number;
+  };
+  year_to_year_sd: number;
+  span: { first: number; last: number; years: number };
+  projection: { year: number; temp: number; low: number; high: number }[];
   monthly: { month: number; temp: number }[];
   warming: number;
+}
+
+function asRow(t: TrendEstimate): TrendRow {
+  return {
+    method: t.method,
+    slope: t.slope,
+    se: t.standardError,
+    p: t.pValue,
+    low: t.low,
+    high: t.high,
+    width: t.width,
+    significant: t.significant,
+  };
 }
 
 export class WeatherLookupError extends Error {}
@@ -57,20 +103,6 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
     lat: Number(r.latitude),
     lon: Number(r.longitude),
   }));
-}
-
-/** Least squares slope and intercept. Mirrors the project's numpy polyfit. */
-function linearFit(xs: number[], ys: number[]): [number, number] {
-  const n = xs.length;
-  const mx = xs.reduce((a, b) => a + b, 0) / n;
-  const my = ys.reduce((a, b) => a + b, 0) / n;
-  let num = 0, den = 0;
-  for (let i = 0; i < n; i++) {
-    num += (xs[i] - mx) * (ys[i] - my);
-    den += (xs[i] - mx) ** 2;
-  }
-  const slope = den === 0 ? 0 : num / den;
-  return [slope, my - slope * mx];
 }
 
 export async function fetchCitySeries(
@@ -128,33 +160,75 @@ export async function fetchCitySeries(
 
   const years = annual.map((a) => a.year);
   const values = annual.map((a) => a.temp);
-  const [slope, intercept] = linearFit(years, values);
 
-  const resid = values.map((v, i) => v - (slope * years[i] + intercept));
-  // ddof=2: two parameters were fitted, matching the Python.
-  const sigma = Math.sqrt(
-    resid.reduce((a, b) => a + b * b, 0) / Math.max(1, resid.length - 2),
+  // The same inference the bundled cities get, so a searched city is not
+  // quietly analysed to a lower standard than a preset one.
+  const ols = ordinaryLeastSquares(years, values);
+  const hac = neweyWest(years, values);
+  const mk = mannKendall(years, values);
+  const auto = residualAutocorrelation(years, values);
+
+  const first = years[0];
+  const last = years[years.length - 1];
+  const centre = years.reduce((a, b) => a + b, 0) / years.length;
+  const level = values.reduce((a, b) => a + b, 0) / values.length;
+  // Off the OLS line, with a band from the Newey-West slope interval — the
+  // uncertainty that applies to extrapolating a trend, rather than the
+  // year-to-year scatter around it.
+  const at = (slopePerDecade: number, year: number) =>
+    Number((level + (slopePerDecade * (year - centre)) / 10).toFixed(3));
+
+  const diffs = values.slice(1).map((v, i) => v - values[i]);
+  const dMean = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+  const yearToYear = Math.sqrt(
+    diffs.reduce((a, b) => a + (b - dMean) ** 2, 0) / Math.max(1, diffs.length - 1),
   );
 
-  const last = years[years.length - 1];
   return {
     lat: place.lat,
     lon: place.lon,
     annual,
-    trend: {
-      slope_per_decade: Number((slope * 10).toFixed(4)),
-      intercept,
-      sigma: Number(sigma.toFixed(4)),
-      first_year: years[0],
-      last_year: last,
+    fitted: years.map((y) => ({ year: y, temp: at(ols.slope, y) })),
+    trends: {
+      ols: asRow(ols),
+      newey_west: asRow(hac),
+      mann_kendall: asRow(mk),
     },
+    interval_inflation: ols.width > 0 ? Number((hac.width / ols.width).toFixed(2)) : null,
+    autocorrelation: {
+      lag1: Number(auto.lag1.toFixed(4)),
+      // Lag-1 against its standard error under the null, 1/sqrt(n).
+      p: Number((2 * (1 - normalCdfApprox(Math.abs(auto.lag1) * Math.sqrt(auto.n)))).toFixed(5)),
+      durbin_watson: Number(auto.durbinWatson.toFixed(3)),
+      effective_n: Number(auto.effectiveSampleSize.toFixed(1)),
+      n: auto.n,
+      correlated: auto.correlated,
+      inflation: Number(auto.inflation.toFixed(2)),
+    },
+    year_to_year_sd: Number(yearToYear.toFixed(3)),
+    span: { first, last, years: years.length },
     projection: Array.from({ length: projectionYears }, (_, i) => {
       const year = last + 1 + i;
-      return { year, temp: Number((slope * year + intercept).toFixed(3)) };
+      return {
+        year,
+        temp: at(ols.slope, year),
+        low: at(hac.low, year),
+        high: at(hac.high, year),
+      };
     }),
     monthly: [...byMonth.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([month, vals]) => ({ month, temp: Number(mean(vals).toFixed(2)) })),
-    warming: Number((slope * (last - years[0])).toFixed(3)),
+    warming: Number(((ols.slope * (last - first)) / 10).toFixed(3)),
   };
+}
+
+/** Standard normal CDF, for the lag-1 p-value above. */
+function normalCdfApprox(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327 * Math.exp((-z * z) / 2);
+  const p =
+    d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 +
+      t * (-1.821255978 + t * 1.330274429))));
+  return z >= 0 ? 1 - p : p;
 }
