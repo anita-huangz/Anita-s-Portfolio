@@ -13,7 +13,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 churn                      # the whole analysis
 churn --section survival   # or one part of it
 churn --offer-cost 50 --acceptance 0.2   # stress-test the economics
-pytest -q                  # 58 tests
+pytest -q                  # 59 tests
 ```
 
 ---
@@ -182,7 +182,7 @@ src/churn/
   calibration.py  reliability, Brier, ECE                       (pure)
   economics.py    expected value, thresholds, targeting         (pure)
   cli.py          the report
-tests/            58 tests, statsmodels used only to check the maths
+tests/            59 tests, statsmodels used only to check the maths
 notebooks/        the original, kept as the record of what this replaced
 ```
 

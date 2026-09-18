@@ -291,23 +291,22 @@ export const PROJECTS: Project[] = [
     "slug": "bitcoin-and-asset-trading",
     "title": "Bitcoin Price Forecasting",
     "category": "data-science",
-    "summary": "Forecasts Bitcoin prices with a stacked LSTM trained on rolling 60-day windows, built from minute-resolution trade data resampled to daily bars.",
-    "detail": "Takes a 127 MB file of minute-by-minute BTC/USD trades, resamples it to daily OHLCV, scales it, and cuts it into overlapping fixed-length sequences so a recurrent network can learn from the ordering rather than treating each day independently. The model is an LSTM stack with dropout between layers and dense layers on top. The hard part of a pipeline like this is not the architecture \u2014 it is the sequence construction: scale before the split and the test set leaks into training, window carelessly and the model reads its own answer.",
+    "summary": "An LSTM against a one-line baseline, evaluated properly. No forecast here carries usable information about price changes, and the ones that look like they might are destroyed by transaction costs.",
+    "detail": "The notebook reported RMSE on the price level from one 80/20 split. RMSE on a level is dominated by the level \u2014 across 21 rolling origins the same forecaster scores $5 in one fold and $2,076 in another \u2014 so R-squared on returns asks the real question, and the LSTM scores -206 where predicting no change scores zero. \"16x worse than naive\" becomes a Diebold-Mariano test with a Newey-West correction: DM = +18.03, p = 7.9e-63. It also quantifies the scaler leak, since MinMaxScaler was fitted on the whole series before splitting, so the training data was normalised using an all-time high that had not happened yet.",
     "tech": [
       "Python",
-      "TensorFlow",
-      "Keras",
-      "LSTM",
       "NumPy",
       "pandas",
-      "scikit-learn"
+      "SciPy",
+      "TensorFlow",
+      "pytest"
     ],
     "path": "data-science-projects/bitcoin-and-asset-trading",
     "rank": 3,
     "io": {
-      "input": "Minute-resolution BTC/USD trade history, a lookback window, and a forecast horizon.",
-      "output": "A trained model plus predicted-versus-actual price paths on a held-out period.",
-      "scale": "127 MB of raw trades resampled to daily bars; 60-day lookback sequences."
+      "input": "Daily bars, plus the protocol: rolling-origin window size, transaction cost in basis points, and which section to run.",
+      "output": "RMSE, return R-squared and directional accuracy with Wilson intervals for each forecast; Diebold-Mariano tests between them; per-fold spread across 21 origins; and net return at 0, 10 and 30 bps against buy-and-hold.",
+      "scale": "4,825 daily bars reduced once from a 127 MB minute file and committed as 230 KB. 40 tests, none needing TensorFlow."
     },
     "sources": [
       {
@@ -315,29 +314,43 @@ export const PROJECTS: Project[] = [
         "url": "https://www.kaggle.com/datasets/mczielinski/bitcoin-historical-data",
         "note": "Minute-resolution BTC/USD trades, resampled to daily bars."
       }
-    ]
+    ],
+    "tests": 40,
+    "highlights": [
+      "MinMaxScaler was fitted on the whole series before the split, so 36.2% of the scaled axis was territory training never reached and the model looks 1.61x better than it is",
+      "RMSE on a price level is a statement about the price level: across 21 rolling origins the same forecaster scores $5 in one fold and $2,076 in another",
+      "R-squared on returns is the metric that exposes a level-tracking model -- predicting no change scores exactly zero and the LSTM scores -206",
+      "49.0% directional accuracy has a 95% interval of [46%, 52%], which is a coin flip however the point estimate reads",
+      "The naive forecast abstains rather than failing -- it predicts no change -- so scoring it as 0% directional would report the random walk at zero accuracy",
+      "AR(5) turns +158% into +8% once you pay 30 bps to trade 291 times, and nothing beats buy-and-hold's +398%",
+      "The drift signal is long on 100% of days, so its 53% directional accuracy is not timing anything",
+      "total_return divided by equity.iloc[0], which is already 1 + r_0, discarding the first day's return"
+    ],
+    "output": {
+      "caption": "The saved LSTM against tomorrow-equals-today",
+      "text": "  forecast                RMSE   R2(returns)       directional\n  LSTM (honest)         22,283       -206.38   49.0% [46%,52%]\n  LSTM (as written)     13,867        -58.53   49.7% [47%,53%]\n  naive                  1,401          0.00      makes no call\n\n  Diebold-Mariano: DM = +18.03, p = 7.9e-63\n  -> the better forecast is the naive one."
+    }
   },
   {
     "slug": "fake-news-detection",
     "title": "Fake News Detection",
     "category": "data-science",
-    "summary": "Classifies news articles as fake or real, comparing several models across text features and article metadata \u2014 and finding that the metadata alone carries no usable signal.",
-    "detail": "Builds features three ways: TF-IDF over the article text, sentiment polarity, and structural metadata such as word count, readability and whether the piece carries images or video. Several classifiers are compared under cross-validation. The result worth reporting is negative: a model trained on metadata alone scores an ROC AUC of 0.46, at or below a coin flip, so none of those structural signals distinguish a fake article in this dataset. Its accuracy of 46.5% looks respectable until you notice the classes are split almost evenly.",
+    "summary": "A null result, established properly: this dataset contains no learnable signal, and the analysis says how much that rules out.",
+    "detail": "Every title is `Breaking News {i}` and every body is one sentence with the index substituted, so 4,000 distinct titles collapse to a single skeleton once the digits are stripped \u2014 a TF-IDF model over that is a model of the row number. The labels are random, which is harder to show: a permutation test refits on shuffled labels and the observed 0.5145 AUC sits inside the null's 95% range, p = 0.113. A power analysis then says 4,000 rows would detect AUC >= 0.526 at 80% power, which turns \"we found nothing\" into \"there is nothing bigger than this to find\".",
     "tech": [
       "Python",
-      "scikit-learn",
-      "XGBoost",
-      "TF-IDF",
-      "TextBlob",
+      "NumPy",
       "pandas",
-      "seaborn"
+      "scikit-learn",
+      "SciPy",
+      "pytest"
     ],
     "path": "data-science-projects/fake-news-detection",
     "rank": 4,
     "io": {
-      "input": "4,000 labelled articles with title, body, author, source and structural metadata.",
-      "output": "Per-model accuracy, ROC AUC and confusion matrices, plus feature importances.",
-      "scale": "4,000 articles, 50.6% labelled fake. 39 code cells."
+      "input": "The dataset, plus the number of label permutations to run.",
+      "output": "Template detection per text column, cross-validated AUC for two model families, the permutation null with its p-value and floor, the minimum detectable effect at 80% power, a learning curve, and per-feature tests with a Benjamini-Hochberg correction.",
+      "scale": "4,000 rows, 24 columns. 28 tests, most of them paired against planted data."
     },
     "sources": [
       {
@@ -345,7 +358,20 @@ export const PROJECTS: Project[] = [
         "url": "https://www.kaggle.com/datasets/khushikyad001/fake-news-detection",
         "note": "4,000 rows. Synthetic: titles are 'Breaking News N' and labels appear randomly assigned."
       }
-    ]
+    ],
+    "tests": 28,
+    "highlights": [
+      "4,000 distinct titles collapse to one skeleton once the digits are stripped: the text column is the row index in prose",
+      "The permutation test is the load-bearing evidence, and the null distribution of a cross-validated AUC has to be simulated rather than looked up -- its spread depends on sample size, fold count and the model's capacity to overfit",
+      "A power analysis turns \"we found nothing\" into \"there is nothing bigger than 0.526 to find\", which is the stronger claim and the one a reader needs",
+      "A permutation p-value of (hits + 1) / (draws + 1) means 10 draws cannot produce a significant result however large the effect -- the package refuses fewer than 19",
+      "Every test runs against synthetic data with a planted effect, because a null result is only credible if the method would have found something",
+      "The label's correlation with row order is +0.008, so the file is shuffled -- had it been sorted, a text model would have scored well by reading the number"
+    ],
+    "output": {
+      "caption": "The permutation test, and what the sample rules out",
+      "text": "  title[0]: 'Breaking News 1'   4,000 distinct -> 1 skeleton\n\n  observed AUC             0.5145\n  shuffled-label null      0.4994 +/- 0.0122\n  95% of shuffles fall in  [0.4759, 0.5227]\n  z = +1.24,  p = 0.113\n  -> the real labels are NOT distinguishable from random ones.\n\n  4,000 rows would detect AUC >= 0.526 at 80% power."
+    }
   },
   {
     "slug": "customer-churn-prediction",
@@ -394,24 +420,22 @@ export const PROJECTS: Project[] = [
     "slug": "global-security-threats",
     "title": "Cybersecurity Threat Analysis",
     "category": "data-science",
-    "summary": "Finds structure in a decade of global cyber incidents using six unsupervised methods \u2014 clustering, dimensionality reduction and anomaly detection \u2014 with no labels to check against.",
-    "detail": "Three thousand incidents from 2015 to 2024, each with financial loss, users affected, resolution time, attack type, target industry and defence mechanism. The numeric fields are standardised and projected with PCA and t-SNE, grouped with K-Means and DBSCAN, and screened for outliers with Isolation Forest and Local Outlier Factor. Unsupervised work is harder to judge than it looks: there is no ground truth, so a clean-looking separation can be an artifact of feeding the clusterer the same columns the projection used. The demo says where that applies.",
+    "summary": "Six unsupervised methods, and the question that has to come first: does this dataset have any structure to find? It does not.",
+    "detail": "An unsupervised method has no ground truth to be wrong against \u2014 k-means returns k clusters whatever you hand it, and a projection of independent noise still looks like a cloud with edges. So the structure is tested first: all three numeric columns are indistinguishable from uniform on their own range, the categories are equally likely, and the strongest association between any pair of columns is a Cramer's V of 0.062. The clusters then fail three ways \u2014 silhouette is marginally *worse* than on independently shuffled columns, bootstrap stability is ARI 0.484 against the usual 0.75 bar, and the gap statistic picks k = 1.",
     "tech": [
       "Python",
+      "NumPy",
+      "pandas",
       "scikit-learn",
-      "PCA",
-      "t-SNE",
-      "K-Means",
-      "DBSCAN",
-      "Isolation Forest",
-      "seaborn"
+      "SciPy",
+      "pytest"
     ],
     "path": "data-science-projects/global-security-threats",
     "rank": 6,
     "io": {
-      "input": "3,000 incident records with loss, users affected, resolution time and categorical attributes.",
-      "output": "Cluster assignments, a 2-D projection, and a flagged set of anomalous incidents.",
-      "scale": "3,000 incidents, 2015\u20132024, 6 attack types, 150 flagged anomalous."
+      "input": "The incident CSV, plus k and the number of null draws.",
+      "output": "Kolmogorov-Smirnov and chi-square tests per column, pairwise associations, silhouette against a shuffled-column null, bootstrap cluster stability, the gap statistic across k, and detector agreement against its chance baseline.",
+      "scale": "3,000 incidents, 10 columns, 39 encoded features. 23 tests, each paired against planted structure."
     },
     "sources": [
       {
@@ -419,27 +443,39 @@ export const PROJECTS: Project[] = [
         "url": "https://www.kaggle.com/datasets/atharvasoundankar/global-cybersecurity-threats-2015-2024",
         "note": "3,000 incidents across 7 industries and 6 attack types."
       }
-    ]
+    ],
+    "tests": 23,
+    "highlights": [
+      "All three numerics are indistinguishable from uniform (KS p = 0.42, 0.51, 0.80) where real loss figures are heavy-tailed, and the strongest association between any pair of columns is a Cramer's V of 0.062",
+      "Silhouette on the real data is 0.0796 against 0.0810 on independently shuffled columns -- marginally worse than noise, and the shuffle keeps every marginal exactly while destroying only the joint structure",
+      "The gap statistic picks k = 1 and falls monotonically with k. It is the only criterion here that *can* say \"no clusters\": silhouette and elbow plots are undefined at k = 1, so an elbow plot of noise still has an elbow",
+      "The two outlier detectors agree four times more than chance -- which is not validation, because both rank distance from the centre of the same cloud and so agree on noise too",
+      "One categorical column of seven clears p<0.05, against 0.35 expected by chance; reporting that as imbalance is the mistake the check exists to prevent",
+      "A permutation p-value of (hits + 1) / (draws + 1) means 10 draws cannot reach significance however large the effect -- found when a planted three-cluster structure reported \"not better than noise\""
+    ],
+    "output": {
+      "caption": "The clusters, judged against a null",
+      "text": "  silhouette on the real data            0.0796\n  silhouette on independently shuffled   0.0810 +/- 0.0015\n  z = -0.90,  p = 0.810   -> better than noise: False\n\n  bootstrap stability (ARI)   0.484 [0.144, 0.919]  reproducible: no\n\n  gap statistic: k=1 -0.2779, k=2 -0.3140, k=3 -0.3376, k=4 -0.3581\n  -> chooses k = 1; there are no clusters."
+    }
   },
   {
     "slug": "personalized-recommendations-for-e-commerce",
     "title": "E-commerce Recommendations",
     "category": "data-science",
-    "summary": "Recommends products by joining customer behaviour against a product catalogue, spanning boosting, ensembles, text features and seasonality in one pipeline.",
-    "detail": "Two 10,000-row tables \u2014 customers with browsing history, purchase history, segment and average order value, and products with category, brand, price, rating and review sentiment. The pipeline encodes both sides, derives features from the text and seasonal fields, and compares gradient-boosted and ensemble models under cross-validation. The first thing the data shows is awkward for the premise: the three customer segments are near-evenly sized and barely differ in average order value, so the segment label carries little signal and the recommender has to lean on behaviour instead.",
+    "summary": "A content-based recommender with ranking metrics and a leave-one-out protocol \u2014 where the obvious content rule turns out to be 14x worse than random, by construction.",
+    "detail": "There is no user-item interaction matrix: purchase history is a list of subcategory names and product IDs appear nowhere in the customer table, so collaborative filtering is undefined rather than merely hard. What the data supports is content-based recommendation over the 24 shared subcategories, scored leave-one-out with recall@k, MAP, MRR and NDCG. Every customer's purchases sit in distinct categories, so holding one out leaves a history entirely in other categories and \"more of the same\" ranks the held-out item's category last. Browsing history, meanwhile, names the answer exactly and reaches recall@5 of 1.0000.",
     "tech": [
       "Python",
-      "scikit-learn",
-      "XGBoost",
+      "NumPy",
       "pandas",
-      "recommender systems"
+      "pytest"
     ],
     "path": "data-science-projects/personalized-recommendations-for-e-commerce",
     "rank": 5,
     "io": {
-      "input": "A customer's browsing and purchase history, segment, season, and the product catalogue.",
-      "output": "Ranked product recommendations, with model comparison across the candidate approaches.",
-      "scale": "10,000 customers \u00d7 10,000 products, 3 segments."
+      "input": "The two tables, plus the cut-off k for the ranking metrics.",
+      "output": "recall@k, precision@k, MAP, MRR and NDCG for six recommenders including random, popularity and a deliberate oracle, with the count of customers excluded.",
+      "scale": "10,000 customers and 10,000 products over 24 subcategories. 29 tests; every metric checked against a hand-computed value."
     },
     "sources": [
       {
@@ -447,29 +483,41 @@ export const PROJECTS: Project[] = [
         "url": "https://www.kaggle.com/datasets/suvroo/personalized-recommendations-for-e-commerce",
         "note": "Two 10,000-row tables: customer behaviour and product catalogue."
       }
-    ]
+    ],
+    "tests": 29,
+    "highlights": [
+      "No user-item interaction matrix exists, so collaborative filtering is undefined here -- and the notebook's regression target, Probability_of_Recommendation, correlates with nothing else in the table (max |r| = 0.017)",
+      "Every customer's purchases sit in distinct categories, so the obvious content rule ranks the held-out item's category last: NDCG 0.0090 against random's 0.1234",
+      "Browsing history covers a purchased category for all 10,000 customers, so a recommender given it reaches recall@5 = 1.0000 -- the answer arriving through a different column",
+      "A recommender receives a Context with visible and browsing as separate fields, so reading the leaky column is a visible choice rather than an accident of scope",
+      "Popularity ties with random, because 24 near-uniform subcategories have no popular head -- so \"we beat popularity\" would mean nothing here",
+      "A third of customers have one purchase and cannot be evaluated at all; they are excluded and counted rather than the sample quietly shrinking"
+    ],
+    "output": {
+      "caption": "Leave-one-out ranking over 6,631 evaluable customers",
+      "text": "  recommender             recall@5     prec@5     MAP@5     MRR   NDCG@5\n  random                    0.2083     0.0417    0.0959  0.1582   0.1234\n  popularity                0.2000     0.0400    0.0916  0.1541   0.1182\n  same category             0.0232     0.0046    0.0046  0.0746   0.0090\n  different category        0.2734     0.0547    0.1244  0.1918   0.1609\n  browsing (ORACLE)         1.0000     0.2000    0.5164  0.5164   0.6369"
+    }
   },
   {
     "slug": "stock-bond-portfolio-analysis",
     "title": "Stock-Bond Portfolio Optimisation",
     "category": "data-science",
-    "summary": "Allocates across five ETFs by solving a constrained optimisation whose objective trades factor-risk exposure against Sharpe, with the weights informed by a regression and conditioned on the volatility regime.",
-    "detail": "Pulls twelve years of daily prices for SPY, IWM, TLT, LQD and SHV, decomposes each asset's returns against a set of risk factors, and runs a SciPy constrained optimisation over portfolio weights. The objective is not textbook mean-variance: it blends factor-risk alignment with a Sharpe term whose weight is swept across twelve values, so you can see how the allocation shifts as the investor's priority moves from risk-matching to return-seeking. Factor weights are adjusted from the regression output, and VIX is carried alongside as a volatility-regime signal.",
+    "summary": "Mean-variance allocation across five ETFs, evaluated out of sample and against the benchmark that keeps winning: 1/N.",
+    "detail": "The notebook optimised on a training period and reported the resulting portfolio's statistics \u2014 which describe a portfolio chosen with knowledge of the returns it is then scored on. A rolling backtest where the estimation window only ever precedes the holding period, with transaction costs, reproduces DeMiguel, Garlappi and Uppal (2009): equal weighting earns +6.50% a year against maximum Sharpe's +1.80%, and maximum Sharpe comes last on the Sharpe ratio it optimises \u2014 0.32 against 1/N's 0.83 \u2014 because expected returns cannot be estimated well enough to optimise against. In sample it reports 5.61, a 17x collapse. The mechanism is visible directly: it rewrites 15% of the book every quarter chasing a sample mean, against 1/N's 1.8%.",
     "tech": [
       "Python",
-      "pandas",
       "NumPy",
+      "pandas",
       "SciPy",
-      "statsmodels",
-      "yfinance",
-      "portfolio theory"
+      "scikit-learn",
+      "pytest"
     ],
     "path": "data-science-projects/stock-bond-portfolio-analysis",
     "rank": 2,
     "io": {
-      "input": "Five ETF tickers, a date range, and a client risk profile expressed as target factor weights.",
-      "output": "Optimal portfolio weights per Sharpe preference, the factor exposures they imply, and realised performance over the period.",
-      "scale": "463 lines, the largest analysis here. 5 assets, 2012\u20132024 daily."
+      "input": "Adjusted daily closes for five ETFs, plus the protocol: estimation window, rebalance cadence, transaction cost in basis points -- all arguments, because all of them change the answer.",
+      "output": "Annualised return, volatility, Sharpe, max drawdown, turnover and cost drag for each allocation rule, out of sample and in sample side by side, plus weight instability per rebalance.",
+      "scale": "4,201 trading days, 2010-2026. 25 tests; Ledoit-Wolf shrinkage cross-checked against scikit-learn."
     },
     "sources": [
       {
@@ -487,28 +535,41 @@ export const PROJECTS: Project[] = [
         "url": "https://fred.stlouisfed.org/",
         "note": "Interest-rate and liquidity indicators."
       }
-    ]
+    ],
+    "tests": 25,
+    "highlights": [
+      "The reported result was in-sample: optimised on the whole history and scored on the same history. Maximum Sharpe reports 5.61 there and 0.32 out of sample, a 17x collapse, while 1/N moves from 0.88 to 0.83 because it has no parameters to overfit",
+      "1/N earns the most out of sample and is the only rule that estimates nothing -- DeMiguel, Garlappi and Uppal (2009), reproduced on five ETFs",
+      "Minimum variance's Sharpe of 6.37 is an artefact: it holds a short-Treasury ETF at 100% and has almost no volatility to divide by. Read its +1.61% return instead",
+      "`adjust_factor_weights_based_on_regression` multiplied a factor loading by 1.5 above 0.5 and 1.2 above 0.2 -- six unjustified constants -- and `normalize_client_weights` iterated factor names while indexing the result as asset names",
+      "average_turnover compared consecutive target weights, so it reported 1/N as never trading; the book drifts between rebalances and returning to a fixed target costs 1.8% a quarter, so every cost drag was understated",
+      "The shrinkage estimator divided by n while sample_covariance divided by n-1, leaving the shrunk diagonal disagreeing with the sample variance by n/(n-1)"
+    ],
+    "output": {
+      "caption": "Out of sample, 504-day window, quarterly rebalance, 5 bps",
+      "text": "  strategy                ann ret      vol  Sharpe     maxDD   turnover\n  equal weight (1/N)       +6.50%    8.02%    0.83     22.6%       1.8%\n  risk parity              +4.98%    4.39%    1.13     13.9%       5.7%\n  maximum Sharpe           +1.80%    6.09%    0.32     20.0%      14.9%\n  minimum variance         +1.61%    0.25%    6.37      0.4%       1.5%\n\n  in sample, maximum Sharpe reports a Sharpe of 5.61."
+    }
   },
   {
     "slug": "weather-trends-and-forecast",
     "title": "Weather Trends & Forecast",
     "category": "data-science",
-    "summary": "Pulls decades of hourly reanalysis weather data from the Open-Meteo ERA5 API, extracts long-run temperature trends, and projects them forward.",
-    "detail": "Scripts rather than a notebook: one downloads and caches from the ERA5 archive for a given latitude and longitude, one computes descriptive statistics and resamples to the period of interest, and one fits a linear trend and extrapolates. Note one honest caveat \u2014 a legislation-influence feature in the forecast is synthetic, generated rather than sourced, so it demonstrates the mechanism rather than measuring a real effect.",
+    "summary": "Warming rates for six cities over 75 years \u2014 and the part the original scripts got wrong, which is not the slope but the error bar around it.",
+    "detail": "Ordinary least squares assumes independent residuals and temperature does not oblige: a warm year follows a warm year. The lag-1 residual correlation is significantly positive in all six cities, so the effective sample is smaller than the row count \u2014 Tokyo's 75 years are worth about 32 \u2014 and the naive standard error is understated by 23% to 53%. Three corrections that share no assumptions agree: Newey-West, a moving-block bootstrap, and Mann-Kendall with Sen's slope. All four methods agree on the slope; only OLS disagrees on the width. Every city is warming, London fastest at +0.244 C/decade.",
     "tech": [
       "Python",
+      "NumPy",
       "pandas",
-      "scikit-learn",
-      "requests",
-      "matplotlib",
-      "time series"
+      "SciPy",
+      "statsmodels",
+      "pytest"
     ],
     "path": "data-science-projects/weather-trends-and-forecast",
     "rank": 7,
     "io": {
-      "input": "A latitude and longitude, plus a date range.",
-      "output": "Cleaned historical series, descriptive statistics, a fitted trend, and a forward projection.",
-      "scale": "Hourly ERA5 reanalysis. 3 scripts, ~200 lines."
+      "input": "Annual mean temperature by city, plus which city to examine and how many bootstrap draws.",
+      "output": "Sen slope with a distribution-free interval for every city, four trend estimates side by side with their standard errors and intervals, and autocorrelation diagnostics giving the effective sample size.",
+      "scale": "Six cities, 75 annual means each, reduced once from ERA5 daily reanalysis and committed as 14 KB. 20 tests; OLS and Newey-West checked against statsmodels."
     },
     "sources": [
       {
@@ -516,6 +577,19 @@ export const PROJECTS: Project[] = [
         "url": "https://open-meteo.com/en/docs/historical-weather-api",
         "note": "Hourly reanalysis by latitude and longitude. The README also cites Meteostat; the code calls Open-Meteo."
       }
-    ]
+    ],
+    "tests": 20,
+    "highlights": [
+      "The lag-1 residual correlation is significantly positive in all six cities, so the OLS standard error is understated by 23% to 53% -- Tokyo's 75 years are worth about 32 independent ones",
+      "Three corrections that share no assumptions land in the same place: Newey-West, a moving-block bootstrap, and rank-based Mann-Kendall with Sen's slope",
+      "The block bootstrap resampled temperatures against a fixed time axis, scrambling the trend out of the series: it returned [-0.11, +0.11] around a point estimate of +0.235, a null distribution rather than a sampling distribution",
+      "A fixed Durbin-Watson cut-off of 1.5 called London uncorrelated at DW 1.576, when the 5% bound for 75 observations is above that -- the critical value depends on the sample size",
+      "The year-to-year standard deviation exceeds a decade of trend in every city, which is why nobody notices warming from memory",
+      "The original regressed temperature on a synthetic `generate_dummy_legislation_influence` feature, and fitted a trend through 90 days of daily maxima -- which measures the seasons"
+    ],
+    "output": {
+      "caption": "London: one slope, four error bars",
+      "text": "  method                   slope   std err   95% interval             p\n  OLS                    +0.2346    0.0294   [+0.1760, +0.2933]  1.6e-11\n  Newey-West (lag 3)     +0.2346    0.0352   [+0.1644, +0.3049]  4.4e-09\n  block bootstrap (4y)   +0.2346    0.0323   [+0.1712, +0.2978]  0.0e+00\n  Mann-Kendall / Sen     +0.2438       nan   [+0.1836, +0.3050]  2.3e-09\n\n  residual lag-1 +0.200, effective n 50 of 75\n  -> the OLS standard error is too small by about 23%."
+    }
   }
 ];
