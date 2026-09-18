@@ -25,7 +25,12 @@ interface Props {
 }
 
 export function ProjectCard({ project, onOpen, baseUrl }: Props) {
-  const shot = project.images?.[0];
+  // A project may ship a light and a dark capture. Both are rendered and CSS
+  // shows whichever matches the active theme — the site's theme is a data
+  // attribute set by its own toggle, not just a media query, so `<picture>`
+  // with `prefers-color-scheme` would ignore the toggle and leave a blazing
+  // white screenshot on a dark card.
+  const [light, dark] = [project.images?.[0], project.images?.[1]];
 
   return (
     <button
@@ -57,8 +62,23 @@ export function ProjectCard({ project, onOpen, baseUrl }: Props) {
         </div>
       </div>
 
-      {project.featured && shot && (
-        <img className="shot" src={`${baseUrl}${shot.src}`} alt={shot.alt} loading="lazy" />
+      {project.featured && light && (
+        <div className="shot-frame">
+          <img
+            className={`shot${dark ? " light-only" : ""}`}
+            src={`${baseUrl}${light.src}`}
+            alt={light.alt}
+            loading="lazy"
+          />
+          {dark && (
+            <img
+              className="shot dark-only"
+              src={`${baseUrl}${dark.src}`}
+              alt={dark.alt}
+              loading="lazy"
+            />
+          )}
+        </div>
       )}
     </button>
   );

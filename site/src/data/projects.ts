@@ -48,7 +48,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A ticker and a plain-English question \u2014 e.g. AAPL, \"What supply chain risks does Apple disclose?\"",
       "output": "A cited answer plus structured findings, each with an accession number and filing date, a verified/unverified verdict, and the run's token, cost, and latency figures.",
-      "scale": "167 tests, all offline. Four tools, three model providers, one MCP server."
+      "scale": "176 tests, all offline. Four tools, three model providers, one MCP server."
     },
     "sources": [
       {
@@ -78,6 +78,18 @@ export const PROJECTS: Project[] = [
       "vitest"
     ],
     "path": "ai-platform-projects/piano-arrangement-lab",
+    "featured": true,
+    "rank": 1,
+    "images": [
+      {
+        "src": "piano-light.png",
+        "alt": "The arranger's keyboard with a B7 voicing lit \u2014 the left hand's B2 in orange, the right hand's F#3, A3, B3 and D#4 in blue \u2014 above the chord-by-chord table of hand positions, stretch and cost"
+      },
+      {
+        "src": "piano-dark.png",
+        "alt": "The same arrangement in dark mode"
+      }
+    ],
     "io": {
       "input": "A chord chart as text, plus the difficulty, voicing style and tempo — or a sentence like \"an easy jazzy version, slow\", which is parsed without a model.",
       "output": "A voicing per chord for each hand, the cost and hand span of each, every voice-leading rule broken, every simplification made to fit the level, and a two-track MIDI file.",
@@ -95,7 +107,7 @@ export const PROJECTS: Project[] = [
         "note": "Where the optional model layer points. Both issue free keys; the arranger works fully without one."
       }
     ],
-    "tests": 1011,
+    "tests": 497,
     "highlights": [
       "Arrangement as a shortest path rather than a lookup: Viterbi over a lattice of candidate voicings, checked against brute force and beating the greedy baseline by 5.3% / 9.6% / 28.9% at the three difficulty levels",
       "Difficulty stated as enforceable numbers, so \"beginner\" is a promise a test can check rather than an adjective — and chords that cannot be played at a level are simplified with the reason shown, not swapped silently",
@@ -134,7 +146,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A ticker and a date range.",
       "output": "One row per announcement \u2014 surprise percentage and forward returns at each horizon \u2014 plus the correlation between them.",
-      "scale": "29 tests. The demo covers 62 companies and 1,959 real announcements."
+      "scale": "47 tests. The demo covers 62 companies and 1,959 real announcements."
     },
     "sources": [
       {
@@ -179,7 +191,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A list of tickers, a date range, which factors to use, how many names to hold, and how often to rebalance.",
       "output": "A daily NAV path, per-rebalance weights, total and annualized return, volatility, Sharpe, max drawdown, and a Fama-French attribution table.",
-      "scale": "52 tests. The bundled demo runs 62 tickers over six years of real daily closes."
+      "scale": "70 tests. The bundled demo runs 62 tickers over six years of real daily closes."
     },
     "sources": [
       {
@@ -319,7 +331,7 @@ export const PROJECTS: Project[] = [
     ],
     "output": {
       "caption": "Four courses from the live Autumn 2026-27 listing, nothing before 10am, Friday and the weekend free",
-      "text": "32 course(s) from Autumn 2026-27, live from the department.\n\n1. MPCS 55001-1, MPCS 51042-1, MPCS 51046-1, MPCS 53001-1\n  cost 145\n    Tue  11:00-12:20 MPCS 51042-1, 17:30-20:30 MPCS 55001-1\n    Wed  14:00-17:00 MPCS 51046-1, 17:30-20:30 MPCS 53001-1\n    why: extra_days 120, gaps 25\n\nsearched 320 nodes"
+      "text": "32 course(s) from Autumn 2026-27, live from the department.\n1 best schedule(s) of 4, cheapest first:\n\n1. MPCS 50101-1, MPCS 51046-1, MPCS 52060-1, MPCS 53001-1\n  cost 125\n    Mon  14:30-17:20 MPCS 52060-1, 17:30-19:30 MPCS 50101-1\n    Wed  14:00-17:00 MPCS 51046-1, 17:00-19:30 MPCS 53001-1\n    why: extra_days 120, gaps 5\n\nsearched 11,400 nodes"
     },
     "io": {
       "input": "A quarter (`2026-27/winter`, or `current`), plus either a search -- code prefix, keyword, day -- or a request: how many courses, which are required, which days to keep free, nothing before a given time.",
@@ -439,7 +451,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The Telco CSV, plus the campaign economics: cost per offer, acceptance rate, margin, and horizon -- all arguments, because none of them can be read off the dataset.",
       "output": "Survival curves with confidence bands, hazard ratios with intervals and an assumption test, cross-validated AUC with bootstrap intervals, calibration error, and the expected value of every targeting threshold.",
-      "scale": "7,043 customers, 73.5% censored. 58 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
+      "scale": "7,043 customers, 73.5% censored. 59 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
     },
     "sources": [
       {
