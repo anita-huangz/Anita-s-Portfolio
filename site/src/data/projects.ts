@@ -401,7 +401,7 @@ export const PROJECTS: Project[] = [
         "note": "7,043 customers; the notebook drops 11 rows with blank TotalCharges."
       }
     ],
-    "tests": 58,
+    "tests": 59,
     "highlights": [
       "The dataset is right-censored survival data and the notebook treated it as binary classification, discarding the timing information entirely -- the Cox model's concordance (0.870) beats the classifier's AUC (0.845) on the same rows",
       "Class rebalancing -- SMOTE, which the notebook used -- changed the ranking by 0.0001 of AUC and made the probabilities twice too large: calibration error 0.149 against 0.012 unweighted. AUC cannot see it, and it matters the moment a score is multiplied by money",
