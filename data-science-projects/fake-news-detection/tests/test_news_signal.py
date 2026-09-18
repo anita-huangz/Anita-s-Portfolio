@@ -161,10 +161,25 @@ def test_the_p_value_cannot_be_exactly_zero():
     assert result.p_value == pytest.approx(1 / 21)
 
 
+def test_too_few_permutations_is_refused_rather_than_reported():
+    """The floor this correction creates, made explicit.
+
+    With 10 permutations the smallest reachable p-value is 0.091, so the test
+    cannot return a significant result however large the effect -- and that
+    reads exactly like "no effect" if nobody checks. Found by a test of mine
+    that used 10 draws on a planted effect and failed.
+    """
+    with pytest.raises(ValueError, match="unreachable"):
+        permutation_test(planted(), permutations=10)
+    result = permutation_test(planted(), permutations=20)
+    assert result.can_reach_significance
+    assert result.smallest_possible_p == pytest.approx(1 / 21)
+
+
 def test_only_the_labels_are_shuffled(data):
     """Feature-feature correlations must survive, or the null is the wrong null."""
-    first = permutation_test(data, permutations=10, seed=1)
-    second = permutation_test(data, permutations=10, seed=1)
+    first = permutation_test(data, permutations=20, seed=1)
+    second = permutation_test(data, permutations=20, seed=1)
     assert first.observed == second.observed  # the real fit is deterministic
 
 

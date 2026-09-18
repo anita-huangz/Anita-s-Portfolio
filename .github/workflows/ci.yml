@@ -30,6 +30,7 @@ jobs:
           - data-science-projects/customer-churn-prediction
           - data-science-projects/bitcoin-and-asset-trading
           - data-science-projects/fake-news-detection
+          - data-science-projects/global-security-threats
     defaults:
       run:
         working-directory: ${{ matrix.project }}

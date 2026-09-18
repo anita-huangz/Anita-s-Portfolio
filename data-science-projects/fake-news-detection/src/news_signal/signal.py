@@ -141,6 +141,21 @@ class PermutationTest:
         )
 
     @property
+    def smallest_possible_p(self) -> float:
+        """`1 / (permutations + 1)` -- the floor on significance.
+
+        With 10 permutations the smallest reachable p-value is 0.091, so the
+        test cannot return a significant result however large the effect. That
+        is a property of the permutation count, not of the data, and reads
+        exactly like "no effect" if nobody checks.
+        """
+        return 1.0 / (self.permutations + 1)
+
+    @property
+    def can_reach_significance(self) -> bool:
+        return self.smallest_possible_p < 0.05
+
+    @property
     def distinguishable(self) -> bool:
         return self.p_value < 0.05
 
@@ -161,6 +176,12 @@ def permutation_test(
     among the features intact and destroys only the feature-label
     relationship, which is the one being tested.
     """
+    if permutations < 19:
+        raise ValueError(
+            f"{permutations} permutations puts a floor of "
+            f"{1 / (permutations + 1):.3f} on the p-value, so a significant "
+            "result is unreachable; use at least 19"
+        )
     observed = cross_validated_auc(data, estimator, folds=folds, seed=seed)
     rng = np.random.default_rng(seed)
     scores = np.empty(permutations)
