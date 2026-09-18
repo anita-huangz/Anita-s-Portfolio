@@ -1,0 +1,10 @@
+# The repository routes *.csv through Git LFS for the large data-science
+# datasets. This one is 955 KB and every test in this project reads it, but
+# `actions/checkout` does not fetch LFS content by default -- so under LFS CI
+# receives a three-line pointer file and all 29 data-backed tests fail with
+# "missing column(s)", which is a confusing way to say "this is not a CSV".
+#
+# Un-LFS-ing it costs ~1 MB of history once. The alternative, `lfs: true` on
+# the checkout, would pull every LFS object in the repository -- including the
+# 127 MB bitcoin file -- into all 24 CI jobs.
+data/*.csv -filter -diff -merge text

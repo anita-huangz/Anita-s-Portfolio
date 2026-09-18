@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "churn"
+version = "0.1.0"
+description = "Survival analysis and decision modelling for customer churn."
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "pandas>=2.0", "scikit-learn>=1.4"]
+
+[project.optional-dependencies]
+# statsmodels is a *test* dependency only: the Cox and Kaplan-Meier
+# implementations here are from scratch, and the tests check them against
+# statsmodels' independent ones. Shipping it as a runtime dependency would
+# defeat the point of writing them.
+dev = ["pytest>=8", "ruff>=0.7", "statsmodels>=0.14"]
+
+[project.scripts]
+churn = "churn.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+# The original notebook is kept as the record of what this replaced, not as
+# code to maintain. Ruff does have opinions about it -- including two
+# `F821 Undefined name` findings that are the real bugs the README describes --
+# but it is not going to be brought up to standard, it is being superseded.
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

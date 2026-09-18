@@ -303,7 +303,7 @@ export const PROJECTS: Project[] = [
       "scikit-learn"
     ],
     "path": "data-science-projects/bitcoin-and-asset-trading",
-    "rank": 2,
+    "rank": 3,
     "io": {
       "input": "Minute-resolution BTC/USD trade history, a lookback window, and a forecast horizon.",
       "output": "A trained model plus predicted-versus-actual price paths on a held-out period.",
@@ -333,7 +333,7 @@ export const PROJECTS: Project[] = [
       "seaborn"
     ],
     "path": "data-science-projects/fake-news-detection",
-    "rank": 3,
+    "rank": 4,
     "io": {
       "input": "4,000 labelled articles with title, body, author, source and structural metadata.",
       "output": "Per-model accuracy, ROC AUC and confusion matrices, plus feature importances.",
@@ -351,21 +351,22 @@ export const PROJECTS: Project[] = [
     "slug": "customer-churn-prediction",
     "title": "Customer Churn Prediction",
     "category": "data-science",
-    "summary": "Predicts which telecom customers will leave, and shows why accuracy is the wrong headline number when only a quarter of them do.",
-    "detail": "A supervised pipeline over 7,032 Telco customers: encode the contract, service and billing fields, train and compare classifiers under cross-validation, and inspect what drives the prediction. It reaches an ROC AUC of 0.83, but recall at the default threshold is 49.7% \u2014 it catches about half the customers who actually left. The 78.9% accuracy is close to what you would score by predicting nobody churns. The strongest pattern in the data needs no model at all: month-to-month customers churn at 42.7% against 2.9% on a two-year contract.",
+    "summary": "Telco churn treated as what it actually is \u2014 right-censored survival data driving a spending decision \u2014 rather than a binary score. Kaplan-Meier, the log-rank test and Cox regression from scratch, checked against statsmodels.",
+    "detail": "73.5% of these 7,043 customers had not left when the data was cut, so their lifetime is not \"no churn\" but *at least* their current tenure \u2014 and a classifier reads a one-month customer who stayed and a six-year customer who stayed as the same row. Survival analysis uses them properly: the median lifetime turns out to be undefined (more than half are still subscribed), the restricted mean says 46.8 of the next 60 months, and the Cox model reaches a concordance of 0.870 against the classifier's 0.845 AUC on the same rows. It then turns the score into a decision, because a churn model retains nobody: the optimal cut-off given a $30 offer is 0.25 rather than 0.5, and ranking by probability \u00d7 value returns 33% more than ranking by probability for the same budget \u2014 which needs expected remaining months, something only the survival model has.",
     "tech": [
       "Python",
-      "scikit-learn",
+      "NumPy",
       "pandas",
-      "seaborn",
-      "matplotlib"
+      "scikit-learn",
+      "statsmodels",
+      "pytest"
     ],
     "path": "data-science-projects/customer-churn-prediction",
-    "rank": 6,
+    "rank": 1,
     "io": {
-      "input": "7,032 customers with contract type, tenure, services, and billing fields.",
-      "output": "Churn probability per customer, plus ROC, confusion matrix and feature importances.",
-      "scale": "7,032 customers, 26.6% churned. AUC 0.83, recall 49.7%."
+      "input": "The Telco CSV, plus the campaign economics: cost per offer, acceptance rate, margin, and horizon -- all arguments, because none of them can be read off the dataset.",
+      "output": "Survival curves with confidence bands, hazard ratios with intervals and an assumption test, cross-validated AUC with bootstrap intervals, calibration error, and the expected value of every targeting threshold.",
+      "scale": "7,043 customers, 73.5% censored. 58 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
     },
     "sources": [
       {
@@ -373,7 +374,21 @@ export const PROJECTS: Project[] = [
         "url": "https://www.kaggle.com/datasets/blastchar/telco-customer-churn",
         "note": "7,043 customers; the notebook drops 11 rows with blank TotalCharges."
       }
-    ]
+    ],
+    "tests": 58,
+    "highlights": [
+      "The dataset is right-censored survival data and the notebook treated it as binary classification, discarding the timing information entirely -- the Cox model's concordance (0.870) beats the classifier's AUC (0.845) on the same rows",
+      "Class rebalancing -- SMOTE, which the notebook used -- changed the ranking by 0.0001 of AUC and made the probabilities twice too large: calibration error 0.149 against 0.012 unweighted. AUC cannot see it, and it matters the moment a score is multiplied by money",
+      "The leak everyone names was worth +0.0002 of AUC. Reporting one lucky 80/20 split as an estimate was worth 0.017, and 0.8617 sits outside the interval cross-validation supports",
+      "`roc_curve(y_test_numeric, y_prob)` referenced a variable assigned nowhere in the notebook -- ruff reports F821 twice, plus three undefined `np`",
+      "Eleven customers with a blank TotalCharges were filled with the column mean, $2,283. All eleven have tenure 0: they have never been billed, so the answer is exactly 0 and it is derivable",
+      "Six one-hot columns were exact duplicates of another column (\"No internet service\" is the same 1,526 customers as InternetService=No), leaving the design matrix at rank 21 of 27 and the Cox Hessian singular",
+      "The proportional-hazards assumption fails for 16 of 20 covariates, so the hazard ratios are time-averages -- reported next to the table rather than in a footnote"
+    ],
+    "output": {
+      "caption": "Survival, and the same budget spent three ways",
+      "text": "  S( 6 months) = 0.885   95% CI [0.877, 0.892]\n  S(24 months) = 0.789   95% CI [0.778, 0.799]\n  S(60 months) = 0.664   95% CI [0.650, 0.678]\n  median lifetime: never reached inside the window\n  concordance 0.870  vs classifier AUC 0.845\n\n  same budget of 1,000 calls:\n    by_expected_value    $61,496\n    by_probability       $46,317\n    everyone             $ 5,602\n    random               $ 1,172"
+    }
   },
   {
     "slug": "global-security-threats",
@@ -392,7 +407,7 @@ export const PROJECTS: Project[] = [
       "seaborn"
     ],
     "path": "data-science-projects/global-security-threats",
-    "rank": 5,
+    "rank": 6,
     "io": {
       "input": "3,000 incident records with loss, users affected, resolution time and categorical attributes.",
       "output": "Cluster assignments, a 2-D projection, and a flagged set of anomalous incidents.",
@@ -420,7 +435,7 @@ export const PROJECTS: Project[] = [
       "recommender systems"
     ],
     "path": "data-science-projects/personalized-recommendations-for-e-commerce",
-    "rank": 4,
+    "rank": 5,
     "io": {
       "input": "A customer's browsing and purchase history, segment, season, and the product catalogue.",
       "output": "Ranked product recommendations, with model comparison across the candidate approaches.",
@@ -450,7 +465,7 @@ export const PROJECTS: Project[] = [
       "portfolio theory"
     ],
     "path": "data-science-projects/stock-bond-portfolio-analysis",
-    "rank": 1,
+    "rank": 2,
     "io": {
       "input": "Five ETF tickers, a date range, and a client risk profile expressed as target factor weights.",
       "output": "Optimal portfolio weights per Sharpe preference, the factor exposures they imply, and realised performance over the period.",

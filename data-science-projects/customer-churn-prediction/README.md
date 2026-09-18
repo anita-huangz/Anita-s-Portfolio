@@ -1,61 +1,206 @@
 # Customer Churn Prediction
 
-## Overview
-This project aims to predict customer churn for a telecom company using machine learning techniques. The goal is to help businesses identify factors contributing to customer churn and take proactive steps to improve retention strategies. This is achieved by analyzing the provided dataset, training multiple machine learning models, and evaluating their performance.
+Telco churn, treated as what it actually is: **right-censored survival data
+driving a spending decision**, not a binary classification score.
 
-## Problem Statement
-Churn prediction is a critical task for businesses in customer-centric industries, where retaining customers is often more cost-effective than acquiring new ones. By accurately predicting churn, companies can take targeted actions to improve customer satisfaction and reduce churn rates.
-
-## Key Steps in the Project
-1. **Data Exploration and Preprocessing (EDA)**: Explore the dataset for any missing values, data inconsistencies, and outliers. Clean and prepare the data for model training.
-2. **Feature Engineering**: Transform categorical variables into numerical ones, handle missing values, and scale numerical features.
-3. **Model Training**: Train multiple machine learning models (Logistic Regression, Random Forest, SVM) to predict customer churn.
-4. **Model Evaluation**: Evaluate model performance using metrics such as accuracy, precision, recall, ROC-AUC, and confusion matrix.
-5. **Hyperparameter Tuning**: Tune the best-performing model to further improve accuracy.
-6. **Results Interpretation**: Analyze the importance of features in predicting churn and provide business insights.
-
-## Dataset
-The dataset used in this project is from Kaggle: [Telco Customer Churn](https://www.kaggle.com/blastchar/telco-customer-churn).
-
-### Data Columns:
-- **customerID**: Unique identifier for each customer.
-- **gender**: Gender of the customer.
-- **SeniorCitizen**: Whether the customer is a senior citizen (1 or 0).
-- **Partner**: Whether the customer has a partner (Yes or No).
-- **Dependents**: Whether the customer has dependents (Yes or No).
-- **tenure**: Number of months the customer has been with the company.
-- **PhoneService**: Whether the customer has phone service (Yes or No).
-- **MultipleLines**: Whether the customer has multiple lines (Yes or No).
-- **InternetService**: The customer's internet service provider (DSL, Fiber optic, No).
-- **OnlineSecurity**: Whether the customer has online security (Yes or No).
-- **OnlineBackup**: Whether the customer has online backup (Yes or No).
-- **DeviceProtection**: Whether the customer has device protection (Yes or No).
-- **TechSupport**: Whether the customer has tech support (Yes or No).
-- **StreamingTV**: Whether the customer has streaming TV (Yes or No).
-- **StreamingMovies**: Whether the customer has streaming movies (Yes or No).
-- **Contract**: The customer's contract type (Month-to-month, One year, Two year).
-- **PaperlessBilling**: Whether the customer has paperless billing (Yes or No).
-- **PaymentMethod**: The customer's payment method (Electronic check, Mailed check, Bank transfer, Credit card).
-- **MonthlyCharges**: The amount charged to the customer monthly.
-- **TotalCharges**: The total amount charged to the customer.
-- **Churn**: Whether the customer churned (Yes or No).
-
-## Model Evaluation Metrics
-- **Accuracy**: The percentage of correctly predicted churns.
-- **Precision**: The percentage of positive predictions that were correct.
-- **Recall**: The percentage of actual positives that were correctly predicted.
-- **ROC-AUC**: The area under the receiver operating characteristic curve, which evaluates the trade-off between true positives and false positives.
-- **Confusion Matrix**: A table used to describe the performance of classification models.
-
-## Technologies Used
-- **Python**: Programming language used for data analysis and model building.
-- **Pandas**: Data manipulation and analysis library.
-- **Scikit-learn**: Machine learning library used for model training and evaluation.
-- **Matplotlib**: Visualization library used for creating charts and graphs.
-- **Seaborn**: Data visualization library based on Matplotlib.
-
-## Installation
-To set up the environment, install the required dependencies by running:
+73.5% of these 7,043 customers had not left when the data was cut. Their
+lifetime is not "no churn" — it is *at least* their current tenure, and the
+difference is the whole problem. A classifier sees a one-month customer who
+hasn't left and a six-year customer who hasn't left as the same row.
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+churn                      # the whole analysis
+churn --section survival   # or one part of it
+churn --offer-cost 50 --acceptance 0.2   # stress-test the economics
+pytest -q                  # 58 tests
+```
+
+---
+
+## What the data supports that the notebook didn't use
+
+```
+  S( 6 months) = 0.885   95% CI [0.877, 0.892]
+  S(12 months) = 0.843   95% CI [0.834, 0.852]
+  S(24 months) = 0.789   95% CI [0.778, 0.799]
+  S(60 months) = 0.664   95% CI [0.650, 0.678]
+
+  median lifetime: never reached inside the window
+  expected months retained over 5 years: 46.8
+
+  Month-to-month   n=3875  S(24) = 0.586
+  One year         n=1473  S(24) = 0.978
+  Two year         n=1695  S(24) = 1.000
+```
+
+**The median lifetime is undefined, and that is the correct answer.** More than
+half of these customers are still subscribed at the end of the window, so the
+median has not happened yet. Quoting a number would mean inventing the part of
+the curve that hasn't occurred. The restricted mean — 46.8 of the next 60
+months — is the summary that *is* answerable.
+
+Kaplan-Meier, the log-rank test and Cox regression are implemented from
+scratch in [`survival.py`](src/churn/survival.py). That's only defensible if
+the arithmetic is checked, so every one is compared against statsmodels'
+independent implementation in the tests: Kaplan-Meier agrees to 1e-16, the
+log-rank statistic to 1e-9, Cox coefficients and standard errors to 1e-8.
+
+## Cox regression, and the assumption nobody checks
+
+| effect | hazard ratio | 95% CI |
+|---|---:|---|
+| each step up in contract length | **0.199** | [0.175, 0.226] |
+| pays by electronic check | 1.797 | [1.562, 2.066] |
+| has a partner | 0.596 | [0.535, 0.664] |
+| has online security | 0.542 | [0.418, 0.704] |
+
+Concordance index **0.870**, against the classifier's 0.845 AUC on the same
+rows. The survival model ranks better because it can see *when* people left.
+
+Then the caveat, reported rather than buried: **the proportional-hazards
+assumption fails for 16 of the 20 covariates.** The model assumes a covariate's
+effect is a constant multiplier — the same in month 2 as in month 60 — and
+correlating the scaled Schoenfeld residuals against time says it isn't. Those
+hazard ratios are averages over effects that move. A stratified or
+time-varying model is the honest next step, and the number above has an
+asterisk on it until then.
+
+## Three bugs in the original notebook
+
+**`y_prob` was never defined.** The evaluation loop called
+`roc_curve(y_test_numeric, y_prob)` for a variable that is assigned nowhere in
+the notebook. Running `ruff` over it reports `F821 Undefined name 'y_prob'`
+twice, along with three undefined `np`.
+
+**Eleven customers were told they had paid $2,283.** `TotalCharges` holds a
+blank string for eleven rows; the notebook coerced them to NaN and filled with
+the column mean. All eleven have `tenure == 0` — they signed up and haven't
+been billed. The correct value is exactly 0, and it is derivable rather than
+guessable.
+
+**Six columns were exact duplicates of another column.** Every add-on service
+has a "No internet service" level, and all six are the same 1,526 customers as
+`InternetService == "No"`; `MultipleLines == "No phone service"` likewise
+restates `PhoneService == "No"`. One-hot encoded as they stand, the design
+matrix is 27 columns of rank 21 and the Cox Hessian is singular. The notebook
+never hit this because label-encoding collapses each column to one number,
+which hides the collinearity rather than removing it.
+
+## What the shortcuts were actually worth
+
+I expected the leakage to be the story. It wasn't — and reporting that is the
+point of measuring instead of asserting.
+
+```
+one 80/20 split, scaler fitted on everything : AUC 0.8617   <- the notebook
+one 80/20 split, scaler fitted on train only : AUC 0.8615
+the leak was worth                           : +0.0002
+
+5-fold out-of-fold, preprocessing inside the pipeline:
+  logistic           AUC 0.8449  95% CI [0.8343, 0.8546]
+  random_forest      AUC 0.8438  95% CI [0.8332, 0.8539]
+  gradient_boosting  AUC 0.8288  95% CI [0.8182, 0.8386]
+```
+
+**The leak was worth 0.0002 of AUC. The lucky split was worth 0.017** — and
+0.8617 sits outside the 95% interval the cross-validated estimate supports.
+The methodological error everyone names cost nothing here; reporting one split
+as though it were an estimate cost eighty times more. The three models also tie
+within their intervals, so "random forest was best" was never a finding.
+
+## The finding that matters: rebalancing destroys the probabilities
+
+| | AUC | mean predicted | ECE | Brier skill |
+|---|---:|---:|---:|---:|
+| `class_weight="balanced"` | 0.8449 | 0.414 | 0.1490 | +0.149 |
+| unweighted | 0.8450 | 0.266 | **0.0120** | **+0.305** |
+
+Actual churn rate: 0.265.
+
+Rebalancing changed the ranking by **0.0001 of AUC** and made the probabilities
+roughly twice too large. SMOTE, which the notebook used, does the same thing —
+that is what rebalancing *is for*. Customers the balanced model scores at 0.45
+churn 22% of the time; at 0.65, 37%.
+
+AUC never notices, because it only asks whether churners outrank non-churners
+and is unchanged if you square every probability. It stops being harmless the
+moment the score is multiplied by a dollar amount — which is exactly what
+happens next.
+
+## Turning a probability into a decision
+
+A churn model doesn't retain anybody. Someone has to be offered something, the
+offer costs money, and most people who accept were never going to leave.
+
+```
+assumptions: $30 per offer, 30% accept, 30% margin, 24-month horizon
+value at stake: median $378, max $854 (from each customer's own survival curve)
+
+best threshold 0.25: call 3,022, net $83,498
+default 0.50       : call 1,570, net $67,860   ($15,638 left on the table)
+```
+
+**0.5 has no claim on being the right cut-off.** It is only optimal when the
+two errors cost the same, and here contacting a happy customer costs one
+discount while losing an unhappy one costs their whole remaining value.
+
+An honest note on the calibration finding: if you tune the threshold by search
+on the same data, the mis-calibrated model lands in almost the same place
+(0.49, $83,857) — the threshold absorbs the bias. What you lose is the ability
+to *derive* the cut-off from the economics rather than grid-search it, to read
+a score as a probability, and to move that threshold to next quarter's data.
+
+### Where the survival model pays for itself
+
+```
+same budget of 1,000 calls:
+  by_probability       $46,317
+  by_expected_value    $61,496     <- +33% for the same spend
+  random               $ 1,172
+  everyone             $ 5,602
+```
+
+Ranking by churn probability spends the budget on whoever is most likely to
+leave, regardless of whether they were worth keeping. Ranking by probability ×
+value needs to know how long each customer *would* have stayed — which is the
+area under their own survival curve, and is not something a classifier can
+produce. "Will churn" is the same label for a customer with eight months left
+and one with four years.
+
+The optimiser can also return "run no campaign", because when the offer costs
+more than the customer is worth that is the right answer and it has to be on
+the menu.
+
+## Layout
+
+```
+src/churn/
+  data.py         load, repair, validate; the design matrix     (pure)
+  survival.py     Kaplan-Meier, log-rank, Cox, concordance      (pure)
+  classify.py     pipelines, cross-validation, bootstrap CIs
+  calibration.py  reliability, Brier, ECE                       (pure)
+  economics.py    expected value, thresholds, targeting         (pure)
+  cli.py          the report
+tests/            58 tests, statsmodels used only to check the maths
+notebooks/        the original, kept as the record of what this replaced
+```
+
+## Limits
+
+- **Proportional hazards fails**, as above. The hazard ratios are time-averaged
+  and a stratified model would be the next step.
+- **The economics are assumptions, not findings.** Offer cost, acceptance rate
+  and margin are arguments to `Campaign` precisely so the conclusion can be
+  stress-tested; none of them can be read off this dataset.
+- **There is no experiment here, so no uplift model.** Targeting by expected
+  value is still a proxy: the right target is who would *change their mind
+  because of the offer*, and answering that needs a randomised holdout the
+  data doesn't contain.
+- **One snapshot, no time dimension across customers.** Everything is measured
+  at a single cutoff, so nothing here detects drift.
+
+## Dataset
+
+[Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) —
+7,043 customers, 21 columns, bundled in [`data/`](data/).

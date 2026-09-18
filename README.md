@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**781 tests** — 696 in Python, 85 cross-checking the site's TypeScript ports
+**839 tests** — 754 in Python, 85 cross-checking the site's TypeScript ports
 against fixtures the Python generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
 half.
@@ -253,11 +253,52 @@ slice of events.
 
 ## Data Science
 
-Exploratory analyses rather than engineered packages — no test suites. Ordered
-by complexity, most involved first: depth of method, how much domain reasoning
-the result rests on, and how easy it is to get quietly wrong.
+Ordered by complexity, most involved first: depth of method, how much domain
+reasoning the result rests on, and how easy it is to get quietly wrong. The
+first one is an engineered, tested package; the rest are still exploratory
+notebooks.
 
-### 1. [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis)
+### 1. ✅ [Customer Churn Prediction](data-science-projects/customer-churn-prediction) · 58 tests
+Telco churn treated as what it actually is: **right-censored survival data
+driving a spending decision**, not a binary score. 73.5% of these customers
+hadn't left when the data was cut, so their lifetime is *at least* their
+current tenure — and a classifier reads a one-month customer who stayed and a
+six-year customer who stayed as the same row.
+
+Kaplan-Meier, the log-rank test and Cox regression are implemented from
+scratch and checked against statsmodels to 1e-8. **The median lifetime is
+undefined, and that's the right answer** — more than half are still
+subscribed, so it hasn't happened yet; the restricted mean says 46.8 of the
+next 60 months. The Cox model reaches concordance **0.870** against the
+classifier's 0.845 AUC, because it can see *when* people left. The
+proportional-hazards assumption then fails for 16 of 20 covariates, which is
+reported next to the hazard ratios rather than in a footnote.
+
+Three bugs in the original notebook: `roc_curve(y_test_numeric, y_prob)`
+referenced a variable assigned nowhere; eleven customers with a blank
+`TotalCharges` were filled with the column mean, $2,283, when all eleven have
+tenure 0 and the answer is exactly 0; and six one-hot columns were exact
+duplicates of another column, leaving the design matrix at rank 21 of 27.
+
+**The finding I didn't expect:** the data leak everyone names was worth
+**+0.0002** of AUC. Reporting one lucky 80/20 split as an estimate was worth
+**0.017**. And class rebalancing — SMOTE, which the notebook used — changed
+the ranking by 0.0001 of AUC while making the probabilities twice too large
+(calibration error 0.149 against 0.012). AUC can't see that, and it stops
+being harmless the moment the score is multiplied by money:
+
+| same budget of 1,000 calls | net |
+|---|---:|
+| rank by probability × value | **$61,496** |
+| rank by probability | $46,317 |
+| call everyone | $5,602 |
+| call at random | $1,172 |
+
+Ranking by value needs to know how long each customer *would* have stayed —
+the area under their own survival curve, which a classifier cannot produce.
+**Python · NumPy · pandas · scikit-learn · statsmodels (tests only)**
+
+### 2. [Stock-Bond Portfolio Optimisation](data-science-projects/stock-bond-portfolio-analysis)
 Allocates across five ETFs by solving a constrained optimisation whose objective
 trades variance against Sharpe, swept across twelve risk preferences. At a
 Sharpe weight of zero it is pure minimum-variance and holds **100% short
@@ -266,7 +307,7 @@ live demo lets you drag that preference and watch the weights, the frontier
 position, and the realised NAV all move.
 **463 lines, SPY/IWM/TLT/LQD/SHV, 2012–2024** · SciPy, statsmodels, yfinance
 
-### 2. [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading)
+### 3. [Bitcoin Price Forecasting](data-science-projects/bitcoin-and-asset-trading)
 A stacked LSTM with dropout, trained on rolling 90-day windows cut from 127 MB
 of minute-resolution trades resampled to daily bars. **Running the saved model
 against a one-line baseline is the finding:** predicting "tomorrow equals
@@ -276,7 +317,7 @@ is the trap. A line that tracks a price *level* can carry no information about
 its *changes*, and only the change is tradeable.
 **TensorFlow, Keras, scikit-learn**
 
-### 3. [Fake News Detection](data-science-projects/fake-news-detection)
+### 4. [Fake News Detection](data-science-projects/fake-news-detection)
 TF-IDF over article text, sentiment polarity, and structural metadata, compared
 across several classifiers under cross-validation. **The reportable result is
 negative, and it is about the data:** every title is `Breaking News N`, every
@@ -287,27 +328,19 @@ accuracy quoted on this dataset measures nothing.
 [Dataset](https://www.kaggle.com/datasets/khushikyad001/fake-news-detection) ·
 **4,000 articles** · scikit-learn, XGBoost, TextBlob
 
-### 4. [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce)
+### 5. [E-commerce Recommendations](data-science-projects/personalized-recommendations-for-e-commerce)
 Joins customer behaviour against a product catalogue across boosting,
 ensembles, text features and seasonality. The data undercuts the premise: the
 three customer segments barely differ in average order value, so the segment
 label carries little signal.
 **10,000 customers × 10,000 products** · scikit-learn, XGBoost
 
-### 5. [Cybersecurity Threat Analysis](data-science-projects/global-security-threats)
+### 6. [Cybersecurity Threat Analysis](data-science-projects/global-security-threats)
 Six unsupervised methods over a decade of incidents — PCA and t-SNE, K-Means
 and DBSCAN, Isolation Forest and Local Outlier Factor. Unsupervised work is
 harder to judge than it looks: with no ground truth, a clean separation can be
 an artifact of handing the clusterer the same columns the projection used.
 **3,000 incidents, 2015–2024, 150 flagged anomalous** · scikit-learn
-
-### 6. [Customer Churn Prediction](data-science-projects/customer-churn-prediction)
-A supervised pipeline reaching AUC 0.83 — and a demonstration of why accuracy
-is the wrong headline. Recall is 49.7%, so it catches half the customers who
-actually left, and 78.9% accuracy is near what you'd score predicting nobody
-churns. The strongest pattern needs no model: **month-to-month churns at 42.7%
-against 2.9% on a two-year contract.**
-**7,032 customers, 26.6% churned** · scikit-learn, seaborn
 
 ### 7. [Weather Trends & Forecast](data-science-projects/weather-trends-and-forecast)
 Pulls hourly ERA5 reanalysis from the Open-Meteo API, extracts long-run

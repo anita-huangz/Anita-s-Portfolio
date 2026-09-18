@@ -26,6 +26,8 @@ jobs:
           - software-engineer-projects/course-catalog-scheduling-system
           - software-engineer-projects/performance-optimization
           - software-engineer-projects/web-crawler-and-search-engine
+          # The only data-science project that is a tested package.
+          - data-science-projects/customer-churn-prediction
     defaults:
       run:
         working-directory: ${{ matrix.project }}
