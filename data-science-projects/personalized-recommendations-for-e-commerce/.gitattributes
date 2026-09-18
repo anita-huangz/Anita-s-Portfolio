@@ -1,0 +1,3 @@
+# The repository routes *.csv through Git LFS. These two files are read by
+# every test, and actions/checkout does not fetch LFS content.
+data/*.csv -filter -diff -merge text
