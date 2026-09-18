@@ -29,6 +29,7 @@ jobs:
           # The only data-science project that is a tested package.
           - data-science-projects/customer-churn-prediction
           - data-science-projects/bitcoin-and-asset-trading
+          - data-science-projects/fake-news-detection
     defaults:
       run:
         working-directory: ${{ matrix.project }}

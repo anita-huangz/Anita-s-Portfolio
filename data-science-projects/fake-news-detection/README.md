@@ -1,116 +1,162 @@
 # Fake News Detection
 
-## 📦 Dataset Overview
+A null result, established properly. **This dataset contains no learnable
+signal, and the analysis says how much that rules out** — which is a stronger
+and more useful claim than "my model got 51%".
 
-- **Source**: KaggleHub Dataset: 
-- **Size**: 4,000 articles
-- **Features**:
-  - Text: `title`, `text`
-  - Metadata: `source`, `category`, `state`, `date_published`, `author`
-  - Numerical: `sentiment_score`, `clickbait_score`, `trust_score`, etc.
-  - Labels: `Fake` or `Real`
-
----
-
-## 🧹 Preprocessing Steps
-
-Goal: Convert raw data into a model-ready format (256 features).
-
-- **Drop ID**: Irrelevant for modeling.
-- **TF-IDF**: Extracted top 100 features each from `title` and `text`.
-- **One-Hot Encoding**: Categorical columns (`source`, `state`, etc.).
-- **Date Parsing**: `days_since` earliest publish date.
-- **Standardization**: Normalized numerical features.
-- **Label Encoding**: `Fake` = 1, `Real` = 0.
-
-✅ Shape: `(4000, 256)`
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+news-signal                      # the whole analysis
+news-signal --section contents   # or one part
+pytest -q                        # 26 tests
+```
 
 ---
 
-## 🔧 Feature Engineering
+## The file does not contain articles
 
-Goal: Enhance predictive power beyond raw TF-IDF and metadata.
+| column | distinct | distinct after removing digits | templated |
+|---|---:|---:|---|
+| title | 4,000 | **1** | yes |
+| text | 4,000 | **1** | yes |
+| author | 5 | 5 | no |
+| source | 13 | 13 | no |
 
-Engineered 12 additional features:
+```
+title[0]: 'Breaking News 1'
+text[0] : 'This is the content of article 1. It contains detailed analysis and reports.'
+```
 
-| Feature | Why It Was Added |
-|--------|------------------|
-| `title_length` | Captures wordiness or minimalism (clickbait proxy) |
-| `text_sentiment_consistency` | Detects mismatched tone vs. overall sentiment |
-| `engagement_ratio` | Measures virality: shares vs. comments |
-| `credibility_composite` | Blends trust_score & source_reputation |
-| `title_entropy` | Assesses lexical diversity in title |
-| `text_entropy` | Assesses lexical diversity in body |
-| `readability_squared` | Captures complexity through squared readability |
-| `readability_inverse` | Highlights extreme difficulty/ease to read |
-| `shares_to_length` | Share efficiency relative to article length |
-| `media_richness` | Encodes presence of image/video media |
-| `clickbait_vs_credibility` | Interaction of emotional tone & reputation |
+Every title is `Breaking News {i}` and every body is the same sentence with the
+index substituted. **Strip the digits and 4,000 distinct titles collapse to
+one.** So the TF-IDF model in the original notebook was a model of the row
+number.
 
-✅ Final Shape: `(4000, 268)`
+That check is three lines and it would have stopped the analysis before the
+first classifier was fitted. It is now the first thing the package does.
 
----
+One trap worth naming: the label's correlation with row order is +0.008, so the
+file is shuffled. Had it been sorted or blocked by label — which datasets often
+are — a text model would have scored well *by reading the number*, and the
+result would have looked entirely convincing.
 
-## 📊 EDA Highlights
+## Showing there is no signal is harder than failing to find one
 
-- **Balanced Labels**: 50.65% Fake, 49.35% Real
-- **Numerical Signals**: Most features overlapped between labels
-- **Categorical Trends**:
-  - `Entertainment` category: 54% Fake
-  - `BBC`: 57.5% Fake
-  - `Maryland`: 58.6% Fake
-  - `CNN`: 52.9% Real
-- **Correlation**: Near-zero correlation between most numeric features
-- **Top Engineered Feature Signals**:
-  - `credibility_composite`: Best separation
-  - Others (e.g., `title_length`, `entropy`) weakly separated
+"51% AUC" is consistent with three different worlds: the data is noise, the
+model is wrong, or 4,000 rows are too few to see a small effect. Those need
+different responses, so three tools separate them.
 
----
+### A permutation test
 
-## 🤖 Model Selection & Evaluation
+```
+logistic regression, 5-fold out-of-fold AUC  0.5145
+gradient boosting, 200 trees                 0.5136
 
-### 🧪 Experiment Setup
-- **Train/Test Split**: 80/20
-- **Feature Reduction**: Top 50 via Random Forest importance
+permutation test, 150 shuffles of the label:
+  observed                 0.5145
+  shuffled-label null      0.4994 +/- 0.0122
+  95% of shuffles fall in  [0.4759, 0.5227]
+  z = +1.24,  p = 0.113
+  -> the real labels are NOT distinguishable from random ones.
+```
 
-### 🧠 Models Used
-| Model | Rationale |
-|-------|-----------|
-| Logistic Regression | Simple, baseline for high-dimensional data |
-| Random Forest | Captures non-linear interactions |
-| XGBoost | Boosting with regularization |
-| SVM | Handles small/mid datasets well |
-| Gradient Boosting | Sequential tree ensemble |
-| MLP (Neural Net) | Explores deep learning baseline |
+**The model found as much in the real labels as in randomly shuffled ones.**
 
-### 🔍 Results Summary
-📌 **Top Features (by importance)**:
-- `engagement_ratio`, `clickbait_vs_credibility`, `shares_to_length`, `credibility_composite`
+This is the only way to be certain, because the null distribution of a
+*cross-validated* AUC is not the textbook one. It is centred near 0.5, but its
+spread depends on the sample size, the fold count and how much the model can
+overfit — and those interact in ways no formula captures. So it is simulated,
+by refitting on shuffled labels. Only the labels are shuffled: every
+feature-feature correlation survives, and only the relationship under test is
+destroyed.
 
----
+### A power analysis
 
-## ❗ Challenges & Learnings
+```
+with 4,000 rows this design would detect AUC >= 0.526 at 80% power.
+The observed AUC is 0.5145, below that threshold.
+```
 
-### ❌ Why Performance Plateaued (48%–53%)
-- **Feature Overlap**: Fake and Real distributions look nearly identical for most features.
-- **Sparse TF-IDF**: Generic and high-dimensional—fails to capture tone shifts or satire.
-- **Small Dataset**: 4,000 samples and 268 features = overfitting risk.
-- **Metadata Noise**: Inconsistent label quality (e.g., BBC marked Fake).
-- **Model Underfit**: Even advanced models failed to leverage weak signals.
+This is the number that turns *we found nothing* into **there is nothing bigger
+than this to find**. Without it, "no signal" and "not enough data to see the
+signal" are indistinguishable, and only the first is a statement about the
+data. It uses the Hanley-McNeil null variance of AUC, which accounts for the
+class split — an unbalanced sample has less power at the same total size.
 
----
+### A learning curve
 
-## 🔮 Future Improvements
+| rows | AUC |
+|---:|---:|
+| 800 | 0.5101 |
+| 1,600 | 0.5003 |
+| 2,400 | 0.5017 |
+| 3,200 | 0.5003 |
+| 4,000 | 0.5045 |
 
-- 🔁 Use **BERT/RoBERTa** embeddings instead of TF-IDF
-- 🧠 Include **n-grams**, **POS tags**, or **topic modeling**
-- 🧼 Improve label quality and text preprocessing
-- 🔍 Explore multi-task learning (e.g., classify satire vs. fake)
-- 📈 Expand dataset size for better generalization
+Slope **−0.0014** AUC per 1,000 rows. More data is not the missing ingredient.
 
----
+A caveat I got wrong first and kept: a flat curve means "the ceiling is not the
+sample size", which is true both when there is nothing to learn *and* when what
+there is has already been learned. A planted effect in the tests produces a
+curve that is flat too — just flat at 0.7. The level distinguishes them, not
+the slope, which is why the permutation test is the load-bearing evidence and
+this is corroboration.
 
-## ✅ Final Takeaway
-Despite extensive feature engineering, modeling, and tuning, results stayed close to chance. This highlights a key lesson in machine learning: **data quality and representation often matter more than model complexity**.
+## Per-feature tests, corrected for testing many
 
-Thanks for reading! Contributions and feedback welcome 🙌
+| feature | r | p | BH threshold | reject |
+|---|---:|---:|---:|---|
+| has_videos | −0.0276 | 0.0808 | 0.0038 | no |
+| clickbait_score | +0.0271 | 0.0863 | 0.0077 | no |
+| num_shares | +0.0229 | 0.1481 | 0.0115 | no |
+| char_count | −0.0222 | 0.1600 | 0.0154 | no |
+
+Nothing survives. Testing 13 features at p < 0.05 produces about **0.65 false
+positives by chance**, so an uncorrected "this feature is significant" on a
+dataset this wide means very little. Benjamini-Hochberg controls the false
+discovery rate instead.
+
+## Every test works in both directions
+
+A null result is only credible if the method would have found an effect. So the
+test suite plants one — a synthetic dataset with a known signal in
+`trust_score` — and checks that:
+
+- the permutation test flags it (z > 5) and is not distinguishable on the real data
+- the power calculation's threshold falls as rows are added
+- the per-feature test finds the planted column and nothing on the real file
+- the template detector flags `Breaking News {i}` and *not* a column of five real author names
+
+That last one was a bug: the first version of the heuristic flagged anything
+with few distinct skeletons, which called five author names a template. Five
+names are five names. The test is collapse, not count.
+
+## Layout
+
+```
+src/news_signal/
+  data.py    loading, template detection, the row-order trap   (pure)
+  signal.py  permutation test, power, learning curve,
+             per-feature tests with BH correction              (pure)
+  cli.py     the report
+tests/       26 tests, most of them paired against planted data
+notebooks/   the original, kept as the record
+```
+
+## Limits
+
+- **This is a statement about this file, not about fake-news detection.** Real
+  corpora — LIAR, FakeNewsNet — have genuine signal. Nothing here says the task
+  is impossible, only that this dataset cannot be used to attempt it.
+- **The power analysis assumes the AUC is estimated on independent rows.**
+  Cross-validated AUC is slightly correlated across folds, so the true
+  detectable effect is marginally larger than 0.526.
+- **No text model is fitted at all**, because there is no text. Running TF-IDF
+  over the row index would produce a number, and the number would be
+  meaningless.
+
+## Data
+
+[Fake News Detection](https://www.kaggle.com/datasets/khushikyad001/fake-news-detection)
+— 4,000 rows, 24 columns, bundled in [`data/`](data/). Synthetic, which the
+dataset page does not say.

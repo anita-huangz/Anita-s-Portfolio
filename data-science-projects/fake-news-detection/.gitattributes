@@ -1,0 +1,4 @@
+# The repository routes *.csv through Git LFS. This 873 KB dataset is read by
+# every test, and actions/checkout does not fetch LFS content -- so under LFS
+# CI receives a pointer file and nothing loads.
+data/*.csv -filter -diff -merge text
