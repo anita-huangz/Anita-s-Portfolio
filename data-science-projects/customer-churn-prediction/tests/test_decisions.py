@@ -272,3 +272,21 @@ def test_ranking_by_value_beats_ranking_by_probability(data):
     assert result["by_expected_value"] > result["by_probability"]
     assert result["by_probability"] > result["random"]
     assert result["nobody"] == 0.0
+
+
+def test_the_bundled_csv_is_a_real_file_not_an_lfs_pointer():
+    """The repository routes `*.csv` through Git LFS.
+
+    `actions/checkout` does not fetch LFS content, so without the project-level
+    `.gitattributes` exclusion CI receives a three-line pointer file. Every
+    data-backed test then fails with "missing column(s)", which is a
+    confusing way to be told the file is not a CSV. This says it plainly.
+    """
+    from churn.data import DATA
+
+    first_line = DATA.read_text().splitlines()[0]
+    assert not first_line.startswith("version https://git-lfs"), (
+        f"{DATA} is a Git LFS pointer, not the dataset. The project-level "
+        ".gitattributes should exclude data/*.csv from LFS."
+    )
+    assert first_line.startswith("customerID,")
