@@ -118,7 +118,7 @@ def arrange(
     simplifications: list[Simplified] = []
     for chord in chords:
         simplifications.append(simplify(chord, level))
-        layers.append(candidates(chord, level))
+        layers.append(candidates(chord, level, style))
 
     # Viterbi forward pass. `best[i]` is the cost of the cheapest path ending
     # at candidate i of the current layer; `came_from[i]` is the candidate in
@@ -186,7 +186,7 @@ def arrange_greedy(
     total = 0.0
     previous: Voicing | None = None
     for chord in chords:
-        layer = candidates(chord, level)
+        layer = candidates(chord, level, style)
         if previous is None:
             chosen = min(layer, key=lambda v: static_cost(v, level, style))
             step_cost = static_cost(chosen, level, style)

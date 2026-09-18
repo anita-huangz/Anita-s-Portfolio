@@ -4,6 +4,7 @@ import { CacheDemo } from "./components/CacheDemo";
 import { CardsDemo } from "./components/CardsDemo";
 import { EarningsDemo } from "./components/EarningsDemo";
 import { FactorDemo } from "./components/FactorDemo";
+import { PianoDemo } from "./components/PianoDemo";
 import { ScheduleDemo } from "./components/ScheduleDemo";
 import { TrieDemo } from "./components/TrieDemo";
 import {
@@ -56,11 +57,11 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
     component: FakeNewsDemo,
   },
   "global-security-threats": {
-    title: "Explore the clusters",
+    title: "Compare the clusters against noise",
     component: ThreatsDemo,
   },
   "personalized-recommendations-for-e-commerce": {
-    title: "Explore the catalogue",
+    title: "Score the recommenders",
     component: RecommendDemo,
   },
   "stock-bond-portfolio-analysis": {
@@ -74,6 +75,10 @@ export const DEMOS: Record<string, { title: string; component: ComponentType }> 
   "weather-trends-and-forecast": {
     title: "Chart the trend",
     component: WeatherDemo,
+  },
+  "piano-arrangement-lab": {
+    title: "Arrange something",
+    component: PianoDemo,
   },
 };
 

@@ -223,7 +223,9 @@ def static_cost(voicing: Voicing, level: Level, style: Style | None = None) -> f
 
 
 @lru_cache(maxsize=512)
-def candidates(chord: Chord, level: Level) -> tuple[Voicing, ...]:
+def candidates(
+    chord: Chord, level: Level, style: Style | None = None
+) -> tuple[Voicing, ...]:
     """Every playable voicing of this chord at this level, best-first.
 
     Cached: progressions repeat chords constantly -- a twelve-bar blues names
@@ -277,5 +279,9 @@ def candidates(chord: Chord, level: Level) -> tuple[Voicing, ...]:
             f"{chord.symbol} cannot be voiced at the {level.name} level "
             f"(needs {sorted(essential)} within a {level.max_span}-semitone span)"
         )
-    out.sort(key=lambda v: static_cost(v, level))
+    # Ranked under the same objective the solver will use, style included.
+    # Ranking without the style and then optimising with it truncated away the
+    # voicings the style actually wanted -- a "sparse" arrangement was chosen
+    # from the 60 voicings that were best for *plain*.
+    out.sort(key=lambda v: static_cost(v, level, style))
     return tuple(out[:MAX_CANDIDATES])
