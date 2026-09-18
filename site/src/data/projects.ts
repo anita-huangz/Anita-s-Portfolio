@@ -245,7 +245,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "software-engineer-projects/web-crawler-and-search-engine",
-    "tests": 77,
+    "tests": 84,
     "highlights": [
       "Search was retrieval without ranking: each word mapped to the set of pages holding it, returned alphabetically, with no way to prefer a page matching both words of a two-word query",
       "BM25's IDF needs a floor at zero -- a term on more than half the pages otherwise scores negative, and a page improves its rank by not matching the query",
@@ -261,7 +261,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A start URL and a link depth, then a query: words, `par*` for a prefix, `d?g` for a wildcard.",
       "output": "Pages ranked by BM25, each showing its score and which terms matched how many times. Plus a report of pages that could not be fetched.",
-      "scale": "77 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
+      "scale": "84 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
     }
   },
   {

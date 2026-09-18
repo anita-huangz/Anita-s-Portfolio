@@ -158,7 +158,7 @@ src/threat_structure/
   anomalies.py   detector agreement against chance, tail checks   (pure)
   cli.py         the report
 tests/           22 tests, each paired against planted structure
-notebooks/       the original, kept as the record
+notebooks/       the original, kept as the record (marked superseded)
 ```
 
 ## Limits

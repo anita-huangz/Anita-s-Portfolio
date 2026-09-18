@@ -14,6 +14,7 @@ dev = ["pytest>=8", "ruff>=0.7"]
 
 [project.scripts]
 trie-search = "trie_search.cli:main"
+trie-bench = "trie_search.benchmark:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

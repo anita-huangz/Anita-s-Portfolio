@@ -69,12 +69,70 @@ correlation toward zero.
 **Correlation needs at least three paired observations.** Over two points it is
 always ±1 and carries no information.
 
+## One correlation is the wrong summary
+
+The headline above is a single ticker's correlation, and across a real sample
+that number is close to useless. Pooled over **2,388 announcements from 62
+companies** — the sample the site's demo runs on — the surprise-to-drift
+correlation is `+0.038` at one day, `+0.011` at five, and `-0.003` at ten.
+Read on its own, that says there is no effect.
+
+Sorted into surprise quintiles, the same events say something different:
+
+```
+horizon 5d                n    mean surprise    mean drift        t
+  Q1 (most negative)    479          -50.50%       -0.48%    -1.53
+  Q2                    476           +1.98%       +0.27%    +1.11
+  Q3                    478           +4.88%       +0.30%    +1.21
+  Q4                    478          +10.23%       +0.91%    +3.46  *
+  Q5 (most positive)    477          +63.03%       +1.10%    +3.24  *
+
+  top minus bottom   +1.57%   t = 3.42   monotonic   significant
+  hit rate 53.5%
+```
+
+The relationship is there and it is ordered — drift rises across every
+quintile — but it is not linear, so a Pearson correlation averages it away.
+That is why `surprise_buckets()` and `spread_test()` exist and why the
+long-short spread, not the correlation, is the number to read. The spread is
+significant at all three horizons (t = 4.29, 3.42, 3.21) and monotonic at one
+and five days but **not** at ten, which is the kind of detail a correlation
+cannot express either way.
+
+Two cautions that keep this honest. The hit rate is 52–55% against a coin
+flip's 50%, so the effect is real and small — the spread comes from the size of
+the moves, not from being right more often. And the quintile breakpoints are
+wildly uneven: Q1 averages a −50% surprise while Q2 averages +2%, because
+consensus estimates cluster just below what companies report. Equal-count
+buckets are not equal-width ones.
+
+The table above is cross-sectional, and the command line is single-ticker —
+quintiles of a dozen events say nothing. Pool first:
+
+```python
+from earnings_drift.drift import analyze_drift, pool, spread_test, surprise_buckets
+
+drift = pool(analyze_drift(stock, benchmark=spy) for stock in stocks)
+for bucket in surprise_buckets(drift, horizon=5):
+    print(bucket.label, bucket.n, bucket.mean_return, bucket.t_stat)
+print(spread_test(drift, horizon=5))
+```
+
 ## Notes
 
 - Drift is measured in trading days from the baseline close, not calendar days.
 - Prices are auto-adjusted for splits and dividends.
-- The correlation is descriptive. It is not a strategy, and it is not corrected
-  for market or sector moves over the same window.
+- Pass a benchmark and every horizon also gets an **abnormal** return — the
+  stock's move minus the benchmark's over the identical window. A stock that
+  rose 4% in a week the whole market rose 4% has not drifted, and the bucket
+  and spread tests default to the abnormal column when one is available. The
+  quintile table above is raw returns, because the committed extract it was
+  computed from does not carry the benchmark column.
+- `run_up` records the move over the sessions *before* the announcement, so a
+  price that had already absorbed the news is visible rather than counted as
+  drift.
+- None of this is a strategy. There is no position sizing, no cost model, and
+  no attempt to trade the spread.
 
 ## Changes from the first version
 
