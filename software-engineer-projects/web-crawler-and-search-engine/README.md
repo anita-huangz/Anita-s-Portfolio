@@ -24,7 +24,8 @@ Without `--query` it drops into an interactive prompt.
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 trie-search https://example.com --depth 1
-pytest -q       # 77 tests, no network
+trie-bench      # the trie against a dictionary scan
+pytest -q       # 84 tests, no network
 ruff check .
 ```
 
@@ -47,6 +48,42 @@ everything else. Keys fold into that alphabet, which makes the trie
 That's lossy, and it's the trade: a fixed small alphabet is what keeps wildcard
 search a simple bounded walk instead of a scan. `original_keys()` gives back
 the text as it was inserted when you need it.
+
+## Is the trie worth it? Measured, not assumed
+
+A trie is more code than a dictionary, and it is lossy — the fixed alphabet
+above folds case and punctuation away. That trade only pays if prefix and
+wildcard lookup are genuinely cheaper than scanning the keys, so the project
+measures it rather than asserting it:
+
+```
+$ trie-bench
+Prefix 'ab' and wildcard '?ar?', best of 5. Milliseconds.
+
+                      PREFIX                       WILDCARD
+    words      trie     scan     hits      trie     scan     hits
+------------------------------------------------------------------------
+    5,000     0.008    0.056       12     0.013    0.284        0
+   25,000     0.026    0.265       41     0.020    1.388        5
+  100,000     0.095    1.096      141     0.031    5.825       22
+
+Over a 20x larger vocabulary the scan got 20x slower and the trie 12x.
+```
+
+The ratio is not the interesting number — it moves around with how many words
+happen to match. The shape of the columns is. **The scan grows with the
+vocabulary** because it visits every key: 20× the words, 20× the time, dead
+linear. **The trie grows with the answer** — its 12× tracks the hit count
+going from 12 to 141, not the vocabulary going from 5,000 to 100,000.
+
+That is the whole case for the data structure, and it is why the wildcard
+column is the more lopsided of the two: a regex scan still touches all 100,000
+keys to return 22 of them, while the trie's `?` is a bounded branch over 27
+children at one depth.
+
+`tests/test_benchmark.py` asserts the trie and the scan return **the same
+words** for every prefix and pattern it tries. A faster answer that disagreed
+with the obvious one would not be an optimisation.
 
 ## Bugs this version fixes
 

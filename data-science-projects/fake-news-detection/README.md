@@ -140,7 +140,7 @@ src/news_signal/
              per-feature tests with BH correction              (pure)
   cli.py     the report
 tests/       26 tests, most of them paired against planted data
-notebooks/   the original, kept as the record
+notebooks/   the original, kept as the record (marked superseded)
 ```
 
 ## Limits

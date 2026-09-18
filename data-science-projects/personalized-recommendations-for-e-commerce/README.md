@@ -120,7 +120,7 @@ src/rec_eval/
   evaluate.py      leave-one-out, paired across recommenders        (pure)
   cli.py           the report
 tests/             28 tests; metrics checked against hand-computed values
-notebooks/         the original, kept as the record
+notebooks/         the original, kept as the record (marked superseded)
 ```
 
 ## Limits

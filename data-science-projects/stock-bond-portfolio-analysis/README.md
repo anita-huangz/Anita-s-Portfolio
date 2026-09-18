@@ -109,7 +109,7 @@ src/allocation/
   cli.py       the report
   data/        216 KB of adjusted closes for five ETFs
 tests/         25 tests; shrinkage cross-checked against scikit-learn
-stock-bond-analysis.ipynb   the original, kept as the record
+notebooks/     the original, kept as the record (marked superseded)
 ```
 
 ## Limits

@@ -141,7 +141,7 @@ src/btc_forecast/
   lstm.py         loads the saved model; tensorflow optional
   cli.py          the report
 tests/            39 tests, none needing tensorflow
-notebooks/        the original, kept as the record
+notebooks/        the original, kept as the record (marked superseded)
 ```
 
 ## Limits

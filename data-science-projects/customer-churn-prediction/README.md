@@ -183,7 +183,7 @@ src/churn/
   economics.py    expected value, thresholds, targeting         (pure)
   cli.py          the report
 tests/            59 tests, statsmodels used only to check the maths
-notebooks/        the original, kept as the record of what this replaced
+notebooks/        the original, kept as the record of what this replaced (marked superseded)
 ```
 
 ## Limits
