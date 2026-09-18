@@ -64,6 +64,53 @@ export const PROJECTS: Project[] = [
     ]
   },
   {
+    "slug": "piano-arrangement-lab",
+    "title": "Piano Arrangement Lab",
+    "category": "ai-platform",
+    "summary": "A chord chart in, a playable piano arrangement out, at the difficulty you ask for — solved as a shortest path through every way two hands could voice the chords, not looked up.",
+    "detail": "A chord symbol names pitch classes and never octaves, so \"Cmaj7\" is several hundred ways two hands could play it, and the right one depends entirely on the chord before it: a lovely voicing that leaves the hand a tenth from the next chord is the wrong voicing. Written out that is a shortest path. Each chord contributes a layer of candidate voicings, each candidate carries a static cost (hand span, muddy low intervals, missing chord tones, register), and each pair across adjacent layers carries a transition cost (part-writing rules broken, hands moved, common tones held). Viterbi finds the cheapest route exactly in O(n·k²) where trying every combination is O(kⁿ). Against brute force on three-chord progressions the two agree exactly; against the greedy baseline that ships alongside it, greedy is 5.3% worse at beginner and 28.9% worse at advanced over eight real progressions. Difficulty is data rather than an adjective — hand span, notes per hand, register, whether inversions and extensions are allowed — which is what makes it checkable: a test asserts no arrangement ever exceeds its own limits across every progression, level and style.",
+    "tech": [
+      "Python",
+      "TypeScript",
+      "React",
+      "Web Audio",
+      "pytest",
+      "vitest"
+    ],
+    "path": "ai-platform-projects/piano-arrangement-lab",
+    "io": {
+      "input": "A chord chart as text, plus the difficulty, voicing style and tempo — or a sentence like \"an easy jazzy version, slow\", which is parsed without a model.",
+      "output": "A voicing per chord for each hand, the cost and hand span of each, every voice-leading rule broken, every simplification made to fit the level, and a two-track MIDI file.",
+      "scale": "497 Python tests and 514 in the browser. The engine is ported to TypeScript so the demo solves live, and the port is cross-checked against the Python across 120 combinations of progression, level and style — every voicing, every cost, every violation."
+    },
+    "sources": [
+      {
+        "label": "Standard MIDI File 1.0 specification",
+        "url": "https://midi.org/standard-midi-files",
+        "note": "The output format, written by hand in 80 lines rather than pulled in as a dependency."
+      },
+      {
+        "label": "Groq / Google AI Studio free tiers",
+        "url": "https://console.groq.com/",
+        "note": "Where the optional model layer points. Both issue free keys; the arranger works fully without one."
+      }
+    ],
+    "tests": 1011,
+    "highlights": [
+      "Arrangement as a shortest path rather than a lookup: Viterbi over a lattice of candidate voicings, checked against brute force and beating the greedy baseline by 5.3% / 9.6% / 28.9% at the three difficulty levels",
+      "Difficulty stated as enforceable numbers, so \"beginner\" is a promise a test can check rather than an adjective — and chords that cannot be played at a level are simplified with the reason shown, not swapped silently",
+      "The AI layer never chooses a note. It fills in four validated fields, so a bad completion fails validation and falls back to the keyword parser — which is also why the demo works for every visitor with no API key",
+      "Styles could once loosen hard constraints, so a \"jazzy\" beginner arrangement bought a fourth right-hand note; they can no longer touch the limits, and capping \"sparse\" at two notes turned out to make Dm7 unvoiceable because its root, third and seventh are three tones",
+      "The MIDI header omitted its four-byte length field — a file of exactly the right size that no parser would open. Caught by parsing the output back rather than checking it was non-empty",
+      "Keyword conflicts resolved by dictionary order rather than sentence order, so \"jazzy but gentle\" and \"gentle but jazzy\" gave the same answer, and the test that should have caught it passed for the same wrong reason",
+      "A candidate cap of 60 measured as identical to 200 across all 120 corpus arrangements at seven times the speed; with two profiling fixes a seven-chord advanced arrangement went from 2.18s to 0.070s"
+    ],
+    "output": {
+      "caption": "arrange \"Dm7 G7 Cmaj7\" --level beginner",
+      "text": "  chord     left hand            right hand                     span   cost\n  -------------------------------------------------------------------------\n  Dm7       D3                   F4 C5 D5                          9   1.45\n  G7        G2                   F4 G4 B4                          6   7.85\n  Cmaj7     C3                   E4 B4 C5                          8   3.45\n\n  total cost 12.75   hand travel 13 semitones   widest stretch 9 semitones\n  92 transitions evaluated (exact, not greedy)\n\n  voice-leading notes:\n    G7: voice overlap — voice 4 falls to 71, below voice 3's 72"
+    }
+  },
+  {
     "slug": "earnings-drift-tracker",
     "rank": 6,
     "title": "Earnings Drift Tracker",

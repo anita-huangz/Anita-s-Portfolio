@@ -21,6 +21,7 @@ seven packages.
 | `generate_weather_results.py` | `climate_trend` | requests | ~1 min (rate-limited, backs off) |
 | `generate_stockbond_results.py` | `allocation` | yfinance, SciPy | ~30 s |
 | `generate_bitcoin_results.py` | `btc_forecast` | TensorFlow, yfinance | ~3 min |
+| `generate_piano_results.py` | `arranger` | — | ~20 s |
 
 ```bash
 pip install pandas numpy scikit-learn scipy yfinance requests tensorflow
@@ -29,6 +30,7 @@ python site/scripts/generate_notebook_results.py
 python site/scripts/generate_weather_results.py
 python site/scripts/generate_stockbond_results.py
 python site/scripts/generate_bitcoin_results.py
+python site/scripts/generate_piano_results.py
 npm test          # the ports are checked against the regenerated fixtures
 ```
 
@@ -59,6 +61,16 @@ are tested against, and a floating reference would mean the tests could never
 fail.
 
 ## Things worth knowing
+
+**The piano generator writes a fixture, not a chart.** The arranger runs in the
+browser so a visitor can type any chords they like, which means the engine
+exists twice. `piano-golden.json` records what the Python says across 120
+combinations of progression, difficulty level and style, and
+`src/demos/lib/arranger.test.ts` asserts the port agrees on every voicing, cost
+and rule violation. Nothing in that file is used to draw anything. It also
+stores costs to twelve decimals rather than the six that reads nicely, for the
+same reason the weather fixture stores six: a rounded fixture forces a
+tolerance loose enough to hide a real disagreement.
 
 **Two of these analyses are also implemented in TypeScript.** The weather demo
 lets a visitor look up any city, which is fetched and analysed in the browser —

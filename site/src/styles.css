@@ -331,6 +331,30 @@ footer {
 .demo-table tr.highlight td { background: color-mix(in srgb, var(--ds) 8%, transparent); }
 .demo-table .dim { color: var(--muted); }
 
+/* ------------------------------------------------------- piano keyboard */
+
+/* Drawn as an SVG rather than divs so the whole keyboard scales with the
+   panel and the black keys stay put between their neighbours at any width. */
+.keyboard {
+  width: 100%; height: auto; display: block; margin-top: 12px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+}
+.key { stroke: var(--line); stroke-width: 0.15; }
+.key.white { fill: var(--surface); }
+.key.black { fill: var(--text); }
+/* A lit key gets its colour from the hand playing it, set inline. The
+   transition is short enough to read as a strike rather than a fade. */
+.key.lit { transition: fill 90ms ease-out; }
+.key.playing { filter: brightness(1.15); }
+.key-label {
+  font-size: 1.4px; fill: var(--muted); text-anchor: middle;
+  font-family: var(--mono); pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  .key.white { fill: #d8d6cf; }
+  .key.black { fill: #1a1a19; stroke: #3a3a38; }
+}
+
 /* ------------------------------------------------------------- charts */
 
 .chart-svg { width: 100%; height: auto; display: block; }

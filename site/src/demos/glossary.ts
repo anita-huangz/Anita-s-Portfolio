@@ -944,6 +944,92 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       "out to be it in disguise with extra fees.",
     aliases: ["buy & hold"],
   },
+  // ------------------------------------------------------------------ music
+  viterbi: {
+    term: "Viterbi algorithm",
+    body:
+      "A way of finding the single cheapest route through a sequence of "
+      + "choices, when each choice has a cost of its own and each pair of "
+      + "neighbouring choices has a cost between them. It works by keeping, at "
+      + "every step, only the best route to each option \u2014 which is why it "
+      + "can be exact without trying every combination.",
+    here:
+      "Each chord offers dozens of playable voicings, and the best one depends "
+      + "on the chord before it. Trying every combination of a seven-chord "
+      + "progression would mean billions of paths; this finds the best in a "
+      + "few hundred thousand comparisons.",
+    aliases: ["dynamic programming", "shortest path"],
+  },
+  greedy: {
+    term: "Greedy",
+    body:
+      "Making each choice as well as possible at the moment you make it, "
+      + "without looking ahead. It is fast and often close, but it cannot "
+      + "accept a slightly worse choice now in exchange for a much better one "
+      + "later \u2014 so it can talk itself into a corner.",
+    here:
+      "Picking the nicest voicing for each chord in turn leaves the hand in "
+      + "awkward places for the chord after. Measured over eight progressions "
+      + "it costs 5% at beginner and 29% at advanced.",
+    aliases: ["greedy baseline"],
+  },
+  "voice-leading": {
+    term: "Voice leading",
+    body:
+      "How each individual line moves from one chord to the next. The ear "
+      + "follows lines, not chords, so a chord change sounds smooth when every "
+      + "note moves a short distance \u2014 or better, does not move at all.",
+    here:
+      "Notes shared between neighbouring chords are held in place wherever "
+      + "possible, which is the main reason to invert a chord rather than play "
+      + "it in root position.",
+  },
+  "parallel-fifths": {
+    term: "Parallel fifths",
+    body:
+      "Two voices a fifth apart that both move by the same amount, staying a "
+      + "fifth apart. They stop sounding like two independent lines and "
+      + "collapse into one thickened one, which is why four-part writing has "
+      + "avoided them for about five hundred years.",
+    aliases: ["parallel octaves", "parallels"],
+  },
+  inversion: {
+    term: "Inversion",
+    body:
+      "Playing a chord with something other than its root as the lowest note. "
+      + "The chord is unchanged \u2014 same notes, same name \u2014 but it sits "
+      + "differently under the hand and connects differently to its neighbours.",
+    here:
+      "The freedom to invert is most of what separates the intermediate level "
+      + "from the beginner one: it lets the solver keep the right hand still "
+      + "across a chord change.",
+    aliases: ["slash chord", "root position"],
+  },
+  "hand-span": {
+    term: "Hand span",
+    body:
+      "The widest interval a hand can comfortably reach, measured in "
+      + "semitones. Twelve is an octave, which most adults manage; fourteen is "
+      + "a tenth and is a professional stretch. It is a hard physical limit, "
+      + "not a preference.",
+  },
+  "shell-voicing": {
+    term: "Shell voicing",
+    body:
+      "A chord played with only the notes that define it \u2014 usually root, "
+      + "third and seventh \u2014 dropping the fifth. The fifth carries no "
+      + "information about whether a chord is major or minor, so leaving it "
+      + "out frees a finger and loses nothing.",
+  },
+  "chord-symbol": {
+    term: "Chord symbol",
+    body:
+      "Shorthand naming which notes are in a chord, like Cmaj7 or F#m7b5. It "
+      + "says nothing about which octave each note goes in, how many of each "
+      + "to play, or which hand plays what \u2014 all of which someone has to "
+      + "decide before it can be played.",
+    aliases: ["chord chart", "lead sheet"],
+  },
   "scaler-leak": {
     term: "Scaler leakage",
     body:

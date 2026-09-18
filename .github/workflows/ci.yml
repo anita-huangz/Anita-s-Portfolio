@@ -20,6 +20,7 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
         project:
           - ai-platform-projects/sec-filing-intelligence
+          - ai-platform-projects/piano-arrangement-lab
           - software-engineer-projects/earnings-drift-tracker
           - software-engineer-projects/factor-based-portfolio-simulator
           - software-engineer-projects/card-game-system
