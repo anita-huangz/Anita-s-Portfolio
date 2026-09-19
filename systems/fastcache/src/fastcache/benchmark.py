@@ -14,6 +14,7 @@ from collections.abc import Callable
 
 from .cache import cached
 from .lru import lru_cache
+from .policy import TinyLFUPolicy
 
 
 def timed(fn: Callable[[], object], repeats: int) -> float:
@@ -214,9 +215,45 @@ def compare_policies(
     for name, build in WORKLOADS.items():
         trace = build(keys, calls, max_size)
         results[name] = {
-            policy: replay(trace, max_size, policy) for policy in ("lru", "lfu")
+            policy: replay(trace, max_size, policy)
+            for policy in ("lru", "lfu", "tinylfu")
         }
     return results
+
+
+def print_window_sweep(
+    fractions: list[float], keys: int, calls: int, max_size: int
+) -> None:
+    """How the admission window trades one failure mode against the other.
+
+    A bigger window behaves more like LRU -- it adapts when the working set
+    moves -- and less like LFU, so it gives back some of the protection a
+    skewed workload enjoys. Caffeine tunes this at runtime by hill-climbing on
+    the hit rate; this one does not, so the dial is exposed and measured
+    instead of being hidden at a default nobody checked.
+    """
+    interesting = ["zipf (skewed)", "hot set + scans", "shifting hot set"]
+    print(f"\n{calls:,} accesses over {keys:,} keys, cache holds {max_size}.\n")
+    print(f"{'window':>7}  " + "  ".join(f"{n:>16}" for n in interesting))
+    print("-" * (9 + 18 * len(interesting)))
+    original = TinyLFUPolicy.WINDOW_FRACTION
+    try:
+        for fraction in fractions:
+            TinyLFUPolicy.WINDOW_FRACTION = fraction
+            rates = []
+            for name in interesting:
+                trace = WORKLOADS[name](keys, calls, max_size)
+                rates.append(replay(trace, max_size, "tinylfu")[0])
+            print(f"{fraction:>6.0%}  " + "  ".join(f"{r:>15.1%}" for r in rates))
+    finally:
+        TinyLFUPolicy.WINDOW_FRACTION = original
+
+    print(f"\n{'LRU':>6}  " + "  ".join(
+        f"{replay(WORKLOADS[n](keys, calls, max_size), max_size, 'lru')[0]:>15.1%}"
+        for n in interesting))
+    print(f"{'LFU':>6}  " + "  ".join(
+        f"{replay(WORKLOADS[n](keys, calls, max_size), max_size, 'lfu')[0]:>15.1%}"
+        for n in interesting))
 
 
 def print_policy_comparison(keys: int, calls: int, max_size: int) -> None:
@@ -225,27 +262,34 @@ def print_policy_comparison(keys: int, calls: int, max_size: int) -> None:
         f"\n{calls:,} accesses over {keys:,} distinct keys, cache holds "
         f"{max_size} ({max_size / keys:.0%} of them).\n"
     )
-    print(f"{'workload':<24} {'LRU hit':>9} {'LFU hit':>9} {'winner':>10}  us/call")
-    print("-" * 70)
+    header = (
+        f"{'workload':<24} {'LRU':>7} {'LFU':>7} {'W-TinyLFU':>10} {'best':>10}"
+        f"   us/call (lru/lfu/w)"
+    )
+    print(header)
+    print("-" * len(header))
     for name, byp in results.items():
-        lru_hit, lru_us = byp["lru"]
-        lfu_hit, lfu_us = byp["lfu"]
-        gap = lfu_hit - lru_hit
-        winner = (
-            "tie"
-            if abs(gap) < 0.01
-            else f"{'LFU' if gap > 0 else 'LRU'} +{abs(gap):.0%}"
-        )
+        rates = {p: byp[p][0] for p in ("lru", "lfu", "tinylfu")}
+        best = max(rates, key=rates.__getitem__)
+        label = {"lru": "LRU", "lfu": "LFU", "tinylfu": "W-TinyLFU"}[best]
+        # A win inside a point is noise, not a result.
+        runner_up = max(r for p, r in rates.items() if p != best)
+        if rates[best] - runner_up < 0.01:
+            label = "tie"
         print(
-            f"{name:<24} {lru_hit:>8.1%} {lfu_hit:>9.1%} {winner:>10}  "
-            f"{lru_us:.2f} / {lfu_us:.2f}"
+            f"{name:<24} {rates['lru']:>6.1%} {rates['lfu']:>7.1%} "
+            f"{rates['tinylfu']:>10.1%} {label:>10}   "
+            + " / ".join(f"{byp[p][1]:.2f}" for p in ("lru", "lfu", "tinylfu"))
         )
     print(
-        "\nNeither policy wins everywhere, which is the finding. LFU protects a"
-        "\nstable hot set from scans; LRU adapts when the hot set moves and LFU"
-        "\ncannot, because old frequency counts never decay. Pick by workload, and"
-        "\nif you do not know the workload, LRU is the safer default -- its bad"
-        "\ncase is a scan, and its bad case is temporary."
+        "\nNo policy wins everywhere, which is still the finding -- but the shape"
+        "\nof the disagreement changed. LFU protects a stable hot set from scans"
+        "\nand collapses when the hot set moves, because its counts never decay."
+        "\nW-TinyLFU keeps the scan resistance and recovers most of the loss: it"
+        "\nages its frequency estimates, and it admits every new key to a small"
+        "\nwindow first, so a newcomer is never rejected for having been seen"
+        "\nonly once. It does not fully match LRU on a shifting hot set, and"
+        "\n`--window` shows why: that is a dial, not a bug."
     )
 
 
@@ -261,13 +305,32 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache-size", type=int, default=200)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument(
+        "--window",
+        type=float,
+        help="Sweep W-TinyLFU's admission-window fraction, e.g. 0.01,0.1,0.4. "
+        "Accepts one value to fix it, or use --window-sweep for a table.",
+    )
+    parser.add_argument(
+        "--window-sweep",
+        help="Comma-separated window fractions to compare, e.g. 0.01,0.1,0.4",
+    )
+    parser.add_argument(
         "--sizes",
         default="8,128,1024",
         help="Cache sizes to sweep. The gap grows with size for an O(n) hit path.",
     )
     args = parser.parse_args(argv)
 
+    if args.window_sweep:
+        print_window_sweep(
+            [float(w) for w in args.window_sweep.split(",") if w.strip()],
+            args.keys, args.calls, args.cache_size,
+        )
+        return 0
+
     if args.policies:
+        if args.window is not None:
+            TinyLFUPolicy.WINDOW_FRACTION = args.window
         print_policy_comparison(args.keys, args.calls, args.cache_size)
         return 0
 

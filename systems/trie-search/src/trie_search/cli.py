@@ -72,6 +72,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--depth", type=int, default=1, help="Link depth to follow.")
     parser.add_argument("--query", help="Search and exit instead of prompting.")
     parser.add_argument(
+        "--stem",
+        action="store_true",
+        help="Fold words to Porter stems, so 'parks' finds 'park' and 'parking'.",
+    )
+    parser.add_argument(
+        "--no-positions",
+        action="store_true",
+        help="Skip occurrence offsets. Smaller index, no phrase search.",
+    )
+    parser.add_argument(
         "--allow",
         default=None,
         help="Comma-separated URL prefixes the crawl may visit (default: the start URL).",
@@ -101,10 +111,19 @@ def main(argv: list[str] | None = None) -> int:
         console.print("[red]Nothing was indexed.[/red]")
         return 1
 
-    index = build_search_index(result.pages)
+    index = build_search_index(
+        result.pages, positions=not args.no_positions, stemming=args.stem
+    )
+    extras = ["ranked with BM25"]
+    if index.stemmed:
+        extras.append("Porter-stemmed")
+    extras.append(
+        'phrases via "quoted words"' if index.has_positions else "no phrase search"
+    )
     console.print(
-        f"Indexed [bold]{len(index):,}[/bold] distinct words across "
-        f"{index.pages} page(s), ranked with BM25.\n"
+        f"Indexed [bold]{len(index):,}[/bold] distinct "
+        f"{'stems' if index.stemmed else 'words'} across "
+        f"{index.pages} page(s); {', '.join(extras)}.\n"
     )
 
     if args.query:

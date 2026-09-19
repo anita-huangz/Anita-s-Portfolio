@@ -115,6 +115,84 @@ improvement in between.
 **If you don't know the workload, use LRU.** Its bad case is a scan, and its
 bad case is temporary.
 
+## Fixing LFU's collapse: W-TinyLFU
+
+The table above has a hole in it. LFU loses to LRU by 86 points on a shifting
+hot set, and the reason is structural rather than a tuning problem:
+
+**Counts never decay.** A key that was hot an hour ago holds a frequency
+nothing new can reach, so the cache stays frozen around a working set that has
+moved on.
+
+**A new key cannot get in.** A fresh key has frequency 1. If everything
+resident has been touched more, it is by definition the least frequently used
+and goes straight back out — however often it is asked for afterwards.
+
+`policy="tinylfu"` fixes both, following Caffeine's design. Every new key is
+admitted unconditionally to a small LRU **window**; only when pushed out of the
+window must it beat the main region's victim on estimated frequency. Those
+estimates live in a **count-min sketch** that halves all its counters
+periodically, so history decays instead of accumulating forever.
+
+```
+$ fastcache-bench --policies --calls 50000
+
+workload                     LRU     LFU  W-TinyLFU       best   us/call (lru/lfu/w)
+------------------------------------------------------------------------------------
+zipf (skewed)             71.3%   76.4%      77.7%  W-TinyLFU   0.66 / 0.94 / 2.75
+uniform (no locality)     10.1%   10.1%      10.0%        tie   0.94 / 1.12 / 5.14
+sequential scan            0.0%    0.0%       0.0%        tie   0.94 / 1.03 / 5.40
+hot set + scans           14.3%   24.9%      24.8%        tie   0.93 / 0.94 / 4.59
+shifting hot set          96.4%   10.7%      71.8%        LRU   0.55 / 1.17 / 3.08
+```
+
+**The collapse is mostly gone: 10.7% → 71.8%.** Scan resistance is kept
+(24.8% against LFU's 24.9%), and on the skewed workload it beats both — the
+admission filter keeps one-hit wonders from displacing the genuinely popular.
+
+It does **not** reach LRU's 96.4%, and the reason is a deliberate dial rather
+than a defect:
+
+```
+$ fastcache-bench --window-sweep 0.01,0.1,0.4,0.6 --calls 50000
+
+ window     zipf (skewed)   hot set + scans  shifting hot set
+---------------------------------------------------------------
+    1%            77.7%            25.9%            71.8%
+   10%            77.4%            25.5%            73.5%
+   40%            75.9%            24.7%            81.1%
+   60%            74.5%            22.9%            86.0%
+
+   LRU            71.3%            14.3%            96.4%
+   LFU            76.4%            24.9%            10.7%
+```
+
+A wider window behaves more like LRU and adapts faster; a narrower one behaves
+more like LFU and protects the skewed case better. There is no setting that
+wins both columns. Caffeine resolves this by hill-climbing the window size at
+runtime against the observed hit rate; this implementation does not, so the
+dial is exposed and measured rather than buried at a default nobody checked.
+
+### What it costs
+
+**Three to five times the CPU per call.** Every access hashes the key into four
+sketch positions and maintains three segments, and on the two workloads with no
+locality to exploit — uniform and scan — that buys exactly nothing. On a fast
+function with a low hit rate, W-TinyLFU is strictly the wrong choice, and the
+`us/call` column says so rather than leaving it to be discovered.
+
+**Memory is bounded and does not grow with the key space**, which is the whole
+reason the frequency estimates live in a sketch rather than a dictionary of
+counts: 4 KB at capacity 200, 256 KB at capacity 10,000, unchanged whether the
+workload touches a thousand distinct keys or ten million. Counters are four
+bits, packed two to a byte, saturating at 15 — enough to rank keys, which is
+the only question being asked.
+
+**The estimates are approximate, and only ever too high.** Hash collisions add
+counts, never remove them, so a key that looks rare really is rare. That is the
+direction that matters: overestimating keeps a cold key one extra round, while
+underestimating would evict a hot one and cost a real fetch.
+
 ## The bug: the hit path was O(n)
 
 The original tracked recency in a list:
@@ -206,9 +284,14 @@ call doesn't block every other reader.
   a fast function, lock contention will dominate.
 - `cache_keys()` returns internal key tuples; it's for tests and
   introspection, not a public data format.
-- **LFU has no aging.** Production designs decay counts (TinyLFU, periodic
-  halving) precisely because of the shifting-hot-set collapse above. This one
-  doesn't, and the benchmark shows what that costs rather than hiding it.
+- **`policy="lfu"` still has no aging**, and keeps its collapse. It is left
+  that way on purpose: it is the baseline `policy="tinylfu"` is measured
+  against, and deleting it would delete the evidence. Use `tinylfu` unless you
+  want the unaged behaviour specifically.
+- **W-TinyLFU's window is fixed, not adaptive.** Caffeine hill-climbs it at
+  runtime against the observed hit rate. Here it is a constructor argument with
+  a measured sweep, which is honest but is not the same thing — no single
+  setting wins every workload.
 - **TTL is per-decorator, not per-entry.** One lifetime for every key is what
   makes the O(1) expiry queue work; a per-call TTL would need a real heap.
 - **Two threads can compute the same key concurrently.** The function runs

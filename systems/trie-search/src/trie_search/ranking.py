@@ -27,10 +27,36 @@ B = 0.75
 
 @dataclass
 class Posting:
-    """Where a term occurs, and how often."""
+    """Where a term occurs, how often, and -- when known -- exactly where.
+
+    `counts` is enough for BM25, which only asks how many times a term appears
+    on a page. `positions` is what phrase search needs, because "park hours" is
+    not the same query as "park" and "hours" on the same page: the words have
+    to be adjacent and in order, and only a position list can say whether they
+    were.
+
+    Positions are optional because they are not free -- a list of offsets per
+    term per page is much larger than a count, and an index built for ranking
+    alone should not pay for a feature it will not use. `record()` is the way
+    to populate both together; setting `counts` directly is supported for
+    callers that will never search for a phrase.
+    """
 
     #: URL -> occurrences on that page.
     counts: dict[str, int] = field(default_factory=dict)
+    #: URL -> word offsets, ascending. Empty when the index was built without
+    #: positions, which `has_positions` reports rather than leaving to be
+    #: discovered as an empty result set.
+    positions: dict[str, list[int]] = field(default_factory=dict)
+
+    def record(self, url: str, offsets: list[int]) -> None:
+        """Add one page's occurrences, keeping count and positions in step."""
+        self.positions[url] = offsets
+        self.counts[url] = len(offsets)
+
+    @property
+    def has_positions(self) -> bool:
+        return bool(self.positions)
 
     @property
     def document_frequency(self) -> int:
@@ -153,3 +179,78 @@ def rank(
 
 def count_words(words: list[str]) -> Counter[str]:
     return Counter(words)
+
+
+class MissingPositions(RuntimeError):
+    """A phrase query hit an index built without position data."""
+
+
+def phrase_matches(postings: list[Posting], url: str) -> int:
+    """How many times the terms appear consecutively, in order, on one page.
+
+    Walks the first term's offsets and checks each following term sits exactly
+    one position later. Membership is tested against sets, so the cost is
+    proportional to the occurrences of the *rarest* placement rather than to
+    the length of the page -- looking for "the quick brown fox" on a page with
+    a thousand "the"s still only does a thousand constant-time probes.
+    """
+    if not postings:
+        return 0
+    first, *rest = postings
+    if url not in first.positions:
+        return 0
+    later = [set(p.positions.get(url, ())) for p in rest]
+    hits = 0
+    for start in first.positions[url]:
+        if all(start + offset + 1 in seen for offset, seen in enumerate(later)):
+            hits += 1
+    return hits
+
+
+def rank_phrase(
+    terms: list[str],
+    postings: list[Posting],
+    corpus: Corpus,
+) -> list[Hit]:
+    """Score pages containing the exact phrase.
+
+    The phrase is scored as though it were a single term: its occurrence count
+    is the number of adjacent runs, and its document frequency is the number of
+    pages containing one. That is the honest reading -- a page mentioning
+    "park" forty times and "hours" thirty times has not mentioned "park hours"
+    at all, and summing the two terms' scores would rank it top.
+    """
+    if len(postings) != len(terms) or corpus.size == 0:
+        return []
+    for term, posting in zip(terms, postings, strict=True):
+        if not posting.has_positions:
+            raise MissingPositions(
+                f"no positions recorded for {term!r}; build the index with "
+                f"`build_search_index(..., positions=True)` to search phrases"
+            )
+
+    # Only pages carrying every term can carry the phrase.
+    candidates = set(postings[0].counts)
+    for posting in postings[1:]:
+        candidates &= set(posting.counts)
+
+    occurrences = {url: phrase_matches(postings, url) for url in candidates}
+    occurrences = {url: n for url, n in occurrences.items() if n > 0}
+    if not occurrences:
+        return []
+
+    phrase = " ".join(terms)
+    idf = inverse_document_frequency(corpus.size, len(occurrences))
+    average = corpus.average_length
+    hits = [
+        Hit(
+            url=url,
+            score=round(
+                bm25_score(count, corpus.lengths.get(url, 0), average, idf), 6
+            ),
+            matched={phrase: count},
+        )
+        for url, count in occurrences.items()
+    ]
+    hits.sort(key=lambda h: (-h.score, h.url))
+    return hits

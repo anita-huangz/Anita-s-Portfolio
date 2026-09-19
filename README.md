@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,060 tests** — 1,424 in Python, and 636 in the browser, most of them
+**2,155 tests** — 1,519 in Python, and 636 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -72,7 +72,7 @@ algorithmic depth, and how much the correctness depends on domain reasoning,
 not on line count: the scheduler below has twice the tests of the cache and is
 not twice the problem.
 
-### ✅ [Trie Search](systems/trie-search) · 84 tests
+### ✅ [Trie Search](systems/trie-search) · 157 tests
 
 Crawls a website, indexes every word into a trie, searches by prefix or
 single-character wildcard — and **ranks** the results with BM25.
@@ -143,7 +143,7 @@ conflict. Prefix search was actually *substring* search, so `"530"` matched
 
 **Python · csv · interval logic**
 
-### ✅ [fastcache](systems/fastcache) · 67 tests
+### ✅ [fastcache](systems/fastcache) · 89 tests
 
 An LRU cache decorator benchmarked against `functools`, plus a general `cached`
 decorator with TTL expiry and a choice of eviction policy.
