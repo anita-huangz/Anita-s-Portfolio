@@ -25,7 +25,9 @@ Without `--query` it drops into an interactive prompt.
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 trie-search https://example.com --depth 1
 trie-bench      # the trie against a dictionary scan
-pytest -q       # 84 tests, no network
+trie-bench --index   # what positions and stemming cost
+trie-search https://example.com --stem --query '"park hours"'
+pytest -q       # 157 tests, no network
 ruff check .
 ```
 
@@ -85,6 +87,93 @@ children at one depth.
 words** for every prefix and pattern it tries. A faster answer that disagreed
 with the obvious one would not be an optimisation.
 
+## Phrases, and why a word index cannot answer one
+
+Searching `park hours` finds pages containing both words. That is not the same
+question as "which pages say *park hours*", and on a real corpus the difference
+is most of the results:
+
+```
+$ trie-search https://example.com --query '"park hours"'
+```
+
+A word index physically cannot tell them apart. `word -> {urls}` records that a
+page contains a term, not where, and adjacency is a fact about *where*. So the
+posting list now carries offsets:
+
+```python
+Posting(counts={"/a": 2}, positions={"/a": [4, 18]})
+```
+
+Matching walks the first term's offsets and probes the others for `start + 1`,
+`start + 2` and so on. Membership is tested against sets, so the cost tracks
+the occurrences of the term being anchored on, not the length of the page —
+looking for "the quick brown fox" on a page with a thousand `the`s is still a
+thousand constant-time probes.
+
+The phrase is then scored **as a single term**: its frequency is the number of
+adjacent runs, and its document frequency is the number of pages containing
+one. Summing the two words' BM25 scores would rank a page mentioning `park`
+forty times and `hours` thirty times above one that actually says `park hours`,
+which is the bug the feature exists to avoid.
+
+Positions are optional, because they are not free:
+
+```
+$ trie-bench --index
+
+400 pages x 600 words = 240,000 tokens.
+
+index                     terms      payload  vs counts     build
+------------------------------------------------------------------
+counts only                 462        102 KB       1.0x      16 ms
+with positions              462      1,977 KB      19.4x      22 ms
+positions + stemming        340      1,927 KB      18.9x     426 ms
+```
+
+**Nineteen times the payload.** Counts cost one entry per distinct term per
+page; positions cost one per *token*, so the gap widens with page length rather
+than with vocabulary. `--no-positions` builds the smaller index, and a phrase
+query against it raises `MissingPositions` with the reason rather than
+returning an empty list that looks like "no matches".
+
+## Stemming: park, parks, parking
+
+Without it those are three unrelated keys, and a search for one misses pages
+that only use another. The wildcard partly covers this — `par*` finds all three
+— but only if the searcher thinks to type it, and it over-matches badly:
+`par*` also returns `parliament`, `parenthesis` and `parasite`.
+
+`--stem` folds words to their Porter stem at index time and folds the query the
+same way:
+
+```
+                   without --stem              with --stem
+park        ->     /a                          /a  /b  /c
+parks       ->     /b                          /a  /b  /c
+parking     ->     /a  /c                      /a  /b  /c
+parked      ->     /c                          /a  /b  /c
+```
+
+`stem.py` is Porter's 1980 algorithm written out — the measure function, the
+five steps, the `*o` condition and all. It agrees with NLTK's
+`PorterStemmer(mode=ORIGINAL_ALGORITHM)` on **all 235,974 words** in the system
+dictionary; `tests/porter_reference.json` pins 4,000 of those so the suite
+checks it without taking a dependency on NLTK.
+
+Deliberately the 1980 paper and not Porter's later revisions. He went on to add
+`BLI -> BLE` and `LOGI -> LOG`, which change about one word in 220 — every
+`-ology`, and words like `accessibly`. Either set is defensible; implementing
+one while citing the other is not.
+
+**What it costs.** Stemming is a heuristic, and it conflates words that are
+genuinely different: `universe`, `university` and `universal` all reduce to
+`univers`. Stems are often not words — `happy` becomes `happi`. And the
+algorithm is **not idempotent**: `abase` stems to `abas`, which stems again to
+`aba`. That is harmless here because the index and the query are each folded
+exactly once, and there is a test pinning that invariant rather than a comment
+asserting it. It is also why stemming is opt-in.
+
 ## Bugs this version fixes
 
 **`__iter__` yielded `(key, value)` pairs instead of keys.**
@@ -131,5 +220,10 @@ crawl.
   boundary.
 - `robots.txt` is not consulted and there is no rate limiting. Point this at
   test sites.
-- The index maps word → set of URLs. It has no ranking, no phrase search, and
-  no stemming — "park" and "parks" are separate keys.
+- Ranking is BM25 over term frequency and page length; see the section above
+  for why the trie and the corpus are separate structures.
+- Phrase search needs `positions=True`, which is the default for
+  `build_search_index` and off under `--no-positions`.
+- Stemming is off by default. On, it is Porter's algorithm and the index holds
+  stems rather than surface forms, so `original_keys()` is how you recover what
+  was actually written on the page.

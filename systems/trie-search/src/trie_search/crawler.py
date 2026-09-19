@@ -6,7 +6,15 @@ from collections import Counter, deque
 from dataclasses import dataclass, field
 
 from .fetch import Fetcher, FetchError, get_links, get_text, tokenize
-from .ranking import Corpus, Hit, Posting, rank
+from .ranking import (
+    Corpus,
+    Hit,
+    MissingPositions,
+    Posting,
+    rank,
+    rank_phrase,
+)
+from .stem import stem
 from .trie import Trie
 
 
@@ -106,6 +114,14 @@ class SearchIndex:
 
     trie: Trie = field(default_factory=Trie)
     corpus: Corpus = field(default_factory=Corpus)
+    #: Whether occurrence offsets were recorded, and so whether phrase search
+    #: is available. Stated up front so a phrase query can fail with a reason
+    #: instead of quietly returning nothing.
+    has_positions: bool = False
+    #: Whether terms were reduced to Porter stems. The query has to be folded
+    #: the same way or it will look up a surface form the index does not hold,
+    #: so this travels with the index rather than being passed per search.
+    stemmed: bool = False
 
     def __len__(self) -> int:
         return len(self.trie)
@@ -128,6 +144,12 @@ class SearchIndex:
         token = token.strip().lower()
         if not token:
             return {}
+
+        # A stemmed index holds roots, so the query has to be a root too.
+        # Wildcards are left alone: `par*` is a pattern over the stored keys,
+        # and stemming a pattern would mangle it.
+        if self.stemmed and "?" not in token and not token.endswith("*"):
+            token = stem(token)
 
         if "?" in token:
             return {
@@ -154,7 +176,15 @@ class SearchIndex:
         `require_all` defaults to True: someone typing two words almost always
         means both, and an OR search buries the good hits under pages that only
         matched the commoner word.
+
+        Double quotes make a phrase: `"park hours"` requires the words adjacent
+        and in that order, where the unquoted form only requires both somewhere
+        on the page.
         """
+        phrase = _quoted(query)
+        if phrase is not None:
+            return self.search_phrase(phrase, limit=limit)
+
         tokens = [t for t in query.strip().lower().split() if t]
         if not tokens:
             return []
@@ -177,16 +207,71 @@ class SearchIndex:
         strict = require_all and len(tokens) == len(postings)
         return rank(postings, self.corpus, require_all=strict)[:limit]
 
+    def search_phrase(self, terms: list[str], limit: int = 20) -> list[Hit]:
+        """Rank pages where these words appear adjacent and in order."""
+        if not terms:
+            return []
+        if not self.has_positions:
+            raise MissingPositions(
+                "this index was built without positions, so phrase search is "
+                "unavailable; rebuild with build_search_index(pages)"
+            )
+        if self.stemmed:
+            terms = [stem(t) for t in terms]
+        postings = []
+        for term in terms:
+            posting = self.posting(term)
+            # One absent word means the phrase cannot occur. Falling back to a
+            # bag-of-words search here would answer a question nobody asked.
+            if posting is None:
+                return []
+            postings.append(posting)
+        if len(postings) == 1:
+            return rank({terms[0]: postings[0]}, self.corpus)[:limit]
+        return rank_phrase(terms, postings, self.corpus)[:limit]
 
-def build_search_index(pages: dict[str, list[str]]) -> SearchIndex:
-    """Build a ranked index: term frequencies per page, plus page lengths."""
-    index = SearchIndex()
+
+def _quoted(query: str) -> list[str] | None:
+    """The words inside double quotes, or None if the query is not a phrase."""
+    text = query.strip()
+    if len(text) >= 2 and text[0] == text[-1] == '"':
+        return [t for t in text[1:-1].lower().split() if t]
+    return None
+
+
+def build_search_index(
+    pages: dict[str, list[str]], positions: bool = True, stemming: bool = False
+) -> SearchIndex:
+    """Build a ranked index: term frequencies per page, plus page lengths.
+
+    `positions` also records where each occurrence sits, which is what phrase
+    search needs. It costs memory proportional to the corpus rather than to the
+    vocabulary -- every occurrence, not every distinct word -- so it is a real
+    choice and not a free upgrade. `--no-positions` on the command line turns
+    it off, and `trie-bench --index` measures what it costs.
+    """
+    index = SearchIndex(has_positions=positions, stemmed=stemming)
     for url, words in pages.items():
         index.corpus.add(url, len(words))
-        for word, count in Counter(words).items():
-            posting = index.posting(word)
-            if posting is None:
-                index.trie[word] = Posting(counts={url: count})
-            else:
-                posting.counts[url] = count
+        if stemming:
+            # Positions still refer to the original word order, so a phrase
+            # query works on stems exactly as it does on surface forms.
+            words = [stem(w) for w in words]
+        if positions:
+            offsets: dict[str, list[int]] = {}
+            for offset, word in enumerate(words):
+                offsets.setdefault(word, []).append(offset)
+            for word, where in offsets.items():
+                posting = index.posting(word)
+                if posting is None:
+                    posting = Posting()
+                    index.trie[word] = posting
+                posting.record(url, where)
+        else:
+            for word, count in Counter(words).items():
+                posting = index.posting(word)
+                if posting is None:
+                    index.trie[word] = Posting(counts={url: count})
+                else:
+                    posting.counts[url] = count
     return index

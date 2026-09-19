@@ -103,7 +103,8 @@ def cached(
     `max_size=None` caches without bound. `max_size=0` disables caching while
     still counting misses, which matches `functools.lru_cache`.
 
-    `policy` is `"lru"` or `"lfu"`; see `policy.py` for when each one wins.
+    `policy` is `"lru"`, `"lfu"` or `"tinylfu"`; see `policy.py` for when
+    each one wins, and `benchmark.compare_policies` for the measurements.
     `ttl` is a lifetime in seconds, after which an entry is recomputed.
 
     The clock is `time.monotonic`, not `time.time`: wall-clock time can jump
@@ -120,7 +121,7 @@ def cached(
         cache: dict[Hashable, T] = {}
         #: Only populated when a TTL is set, so the no-TTL path stays free.
         deadlines: dict[Hashable, float] = {}
-        evictor = make_policy(policy)
+        evictor = make_policy(policy, max_size)
         info = CacheInfo(max_size=max_size, policy=policy, ttl=ttl)
         # A plain dict mutation is not atomic across threads; the lock keeps
         # `cache`, the policy, and `info` from disagreeing under concurrency.

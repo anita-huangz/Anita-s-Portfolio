@@ -175,5 +175,6 @@ Also fixed:
 
 - Scoring uses all seven cards, not the best five, so a flush needs five of a
   suit anywhere in the hand.
-- Straights are not scored — they aren't in the table above.
+- Straights and straight flushes *are* scored, at 150 and 5000. They were the
+  omission this version fixed; see the section above.
 - The deck reshuffles discards when it runs low, so a long game keeps dealing.

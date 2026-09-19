@@ -212,7 +212,7 @@ export const PROJECTS: Project[] = [
       "benchmarking"
     ],
     "path": "systems/fastcache",
-    "tests": 67,
+    "tests": 89,
     "highlights": [
       "The original called `list.remove` on every cache hit -- a linear scan on the one path a cache exists to make fast. Across sizes 128 to 32,768 it slows 8.7x while this one stays flat at ~0.45us",
       "Expiry needs no heap: every entry gets the same TTL, so deadline order is insertion order and the next entry to die is the front of the dict",
@@ -227,7 +227,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A function to memoise, a max size, optionally a TTL in seconds and a policy (`lru` or `lfu`).",
       "output": "A wrapped function plus hits, misses, evictions, expirations, and hit rate; the benchmark emits microseconds per call and hit rate by workload.",
-      "scale": "67 tests. Benchmarked to 32,768 entries, and 50,000 accesses over 2,000 keys."
+      "scale": "89 tests. Benchmarked to 32,768 entries, and 50,000 accesses over 2,000 keys."
     }
   },
   {
@@ -245,7 +245,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "systems/trie-search",
-    "tests": 84,
+    "tests": 157,
     "highlights": [
       "Search was retrieval without ranking: each word mapped to the set of pages holding it, returned alphabetically, with no way to prefer a page matching both words of a two-word query",
       "BM25's IDF needs a floor at zero -- a term on more than half the pages otherwise scores negative, and a page improves its rank by not matching the query",
@@ -261,7 +261,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A start URL and a link depth, then a query: words, `par*` for a prefix, `d?g` for a wildcard.",
       "output": "Pages ranked by BM25, each showing its score and which terms matched how many times. Plus a report of pages that could not be fetched.",
-      "scale": "84 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
+      "scale": "157 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
     }
   },
   {
