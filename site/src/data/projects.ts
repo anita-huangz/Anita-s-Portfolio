@@ -443,7 +443,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The Telco CSV, plus the campaign economics: cost per offer, acceptance rate, margin, and horizon -- all arguments, because none of them can be read off the dataset.",
       "output": "Survival curves with confidence bands, hazard ratios with intervals and an assumption test, cross-validated AUC with bootstrap intervals, calibration error, and the expected value of every targeting threshold.",
-      "scale": "7,043 customers, 73.5% censored. 59 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
+      "scale": "7,043 customers, 73.5% censored. 76 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
     },
     "sources": [
       {
@@ -452,7 +452,7 @@ export const PROJECTS: Project[] = [
         "note": "7,043 customers; the notebook drops 11 rows with blank TotalCharges."
       }
     ],
-    "tests": 59,
+    "tests": 76,
     "highlights": [
       "The dataset is right-censored survival data and the notebook treated it as binary classification, discarding the timing information entirely -- the Cox model's concordance (0.870) beats the classifier's AUC (0.845) on the same rows",
       "Class rebalancing -- SMOTE, which the notebook used -- changed the ranking by 0.0001 of AUC and made the probabilities twice too large: calibration error 0.149 against 0.012 unweighted. AUC cannot see it, and it matters the moment a score is multiplied by money",

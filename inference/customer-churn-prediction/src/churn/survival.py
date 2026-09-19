@@ -14,6 +14,7 @@ downward. Censoring is what these estimators are for.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -405,6 +406,268 @@ def fit_cox(
     )
     return model
 
+
+
+@dataclass
+class StratifiedCoxModel(CoxModel):
+    """Cox with a separate baseline hazard per stratum.
+
+    The ordinary model assumes a covariate's effect is a constant multiplier on
+    the hazard for the whole follow-up. On this data that assumption fails for
+    16 of 20 covariates, which `proportional_hazards_test` reports and which
+    makes every hazard ratio a time-average over a changing effect.
+
+    Stratifying is the standard response, and the trick is what it gives up.
+    The offending variable is moved *out* of the linear predictor and into the
+    baseline: each stratum gets its own baseline hazard, free to have any shape
+    at all, so the variable no longer has to act proportionally. In exchange
+    you no longer get a coefficient for it -- there is nothing to estimate,
+    because its whole effect is absorbed into the baselines.
+
+    That is the right trade for a nuisance variable whose effect you need to
+    control for but do not need to quantify. It is the wrong trade if the
+    variable is the thing you are studying, which is why `stratify_on` is a
+    choice rather than something applied automatically to whatever fails.
+
+    The likelihood decomposes cleanly: each stratum contributes its own Efron
+    terms over its own risk sets, and the total is the sum. Only the
+    coefficients are shared.
+    """
+
+    #: Column the baseline is split on, and the value for each stratum.
+    stratum_name: str = ""
+    strata: list[str] = field(default_factory=list)
+    stratum_sizes: dict[str, int] = field(default_factory=dict)
+    #: Per-stratum Breslow baselines, keyed by stratum label.
+    baselines: dict[str, tuple[np.ndarray, np.ndarray]] = field(default_factory=dict)
+
+    def predict_survival(
+        self, X: pd.DataFrame | np.ndarray, t: np.ndarray, strata: Sequence[str]
+    ) -> np.ndarray:
+        """Survival curves, each row using its own stratum's baseline."""
+        values = X.to_numpy(dtype=float) if isinstance(X, pd.DataFrame) else np.asarray(
+            X, dtype=float
+        )
+        scores = np.exp((values - self.means) @ self.coefficients)
+        t = np.asarray(t, dtype=float)
+        out = np.empty((len(values), len(t)))
+        for row, (score, stratum) in enumerate(zip(scores, strata, strict=True)):
+            times, cumulative = self.baselines[stratum]
+            if times.size == 0:
+                out[row] = 1.0
+                continue
+            idx = np.searchsorted(times, t, side="right") - 1
+            hazard = np.where(idx < 0, 0.0, cumulative[np.clip(idx, 0, None)])
+            out[row] = np.exp(-score * hazard)
+        return out
+
+
+def fit_stratified_cox(
+    X: pd.DataFrame,
+    duration: np.ndarray,
+    event: np.ndarray,
+    strata: Sequence[str],
+    stratum_name: str = "stratum",
+) -> StratifiedCoxModel:
+    """Fit Cox with one baseline hazard per stratum, sharing the coefficients.
+
+    `strata` is one label per row. Columns belonging to the stratifying
+    variable must already be out of `X`; leaving them in is not an error the
+    maths catches, it just estimates a coefficient for something the baseline
+    has already absorbed.
+    """
+    names = list(X.columns)
+    values = X.to_numpy(dtype=float)
+    duration = np.asarray(duration, dtype=float)
+    event = np.asarray(event).astype(int)
+    labels = np.asarray(strata)
+
+    if labels.size != values.shape[0]:
+        raise ValueError("strata and X disagree on the number of rows")
+    if event.sum() == 0:
+        raise ValueError("no events; the partial likelihood is empty")
+
+    groups = {}
+    for label in dict.fromkeys(labels.tolist()):
+        mask = labels == label
+        if event[mask].sum() == 0:
+            # A stratum with no events contributes nothing to the partial
+            # likelihood; including it would divide by an empty risk set.
+            continue
+        groups[str(label)] = mask
+    if not groups:
+        raise ValueError("no stratum contains an event")
+
+    rank = np.linalg.matrix_rank(values)
+    if rank < values.shape[1]:
+        raise ValueError(
+            f"design matrix has {values.shape[1]} columns but rank {rank}; "
+            "check that the stratifying variable's columns were removed"
+        )
+
+    def terms(beta: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
+        """Efron terms summed over strata, each with its own risk sets."""
+        total_ll = 0.0
+        total_g = np.zeros(values.shape[1])
+        total_h = np.zeros((values.shape[1], values.shape[1]))
+        for mask in groups.values():
+            ll, g, h = _efron_terms(values[mask], beta, duration[mask], event[mask])
+            total_ll += ll
+            total_g += g
+            total_h += h
+        return total_ll, total_g, total_h
+
+    beta = np.zeros(values.shape[1])
+    converged = False
+    iterations = 0
+    while iterations < MAX_ITERATIONS:
+        iterations += 1
+        _, gradient, hessian = terms(beta)
+        step = np.linalg.solve(hessian, gradient)
+        beta = beta - step
+        if np.max(np.abs(step)) < TOLERANCE:
+            converged = True
+            break
+
+    loglik, _, hessian = terms(beta)
+    means = values.mean(axis=0)
+    model = StratifiedCoxModel(
+        names=names,
+        coefficients=beta,
+        covariance=np.linalg.inv(-hessian),
+        log_likelihood=loglik,
+        iterations=iterations,
+        converged=converged,
+        means=means,
+        stratum_name=stratum_name,
+        strata=sorted(groups),
+        stratum_sizes={label: int(mask.sum()) for label, mask in groups.items()},
+    )
+    for label, mask in groups.items():
+        model.baselines[label] = _breslow_baseline(
+            values[mask], beta, duration[mask], event[mask], means
+        )
+    return model
+
+
+def stratified_proportional_hazards_test(
+    model: StratifiedCoxModel,
+    X: pd.DataFrame,
+    duration: np.ndarray,
+    event: np.ndarray,
+    strata: Sequence[str],
+) -> ProportionalHazardsTest:
+    """Re-run the Schoenfeld test, with residuals computed within strata.
+
+    The point of stratifying is to remove one variable's time-varying effect
+    from the linear predictor. Whether that helped is a question the same test
+    answers -- run again, properly, with each residual measured against the
+    risk set of its own stratum.
+    """
+    values = X.to_numpy(dtype=float)
+    duration = np.asarray(duration, dtype=float)
+    event = np.asarray(event).astype(int)
+    labels = np.asarray(strata)
+    scores = np.exp(values @ model.coefficients)
+
+    residuals, event_times = [], []
+    for label in dict.fromkeys(labels.tolist()):
+        mask = labels == label
+        d, e, v, sc = duration[mask], event[mask], values[mask], scores[mask]
+        for t in np.unique(d[e == 1]):
+            at_risk = d >= t
+            weights = sc[at_risk]
+            expected = (weights[:, None] * v[at_risk]).sum(axis=0) / weights.sum()
+            for row in v[(d == t) & (e == 1)]:
+                residuals.append(row - expected)
+                event_times.append(t)
+
+    matrix = np.asarray(residuals)
+    ranked = stats.rankdata(np.asarray(event_times, dtype=float))
+    corr, pvals = {}, {}
+    for j, name in enumerate(model.names):
+        column = matrix[:, j]
+        if np.allclose(column, column[0]):
+            corr[name], pvals[name] = 0.0, 1.0
+            continue
+        r, p = stats.pearsonr(ranked, column)
+        corr[name], pvals[name] = float(r), float(p)
+    return ProportionalHazardsTest(
+        correlations=pd.Series(corr), p_values=pd.Series(pvals)
+    )
+
+
+@dataclass(frozen=True)
+class PeriodComparison:
+    """The same model fitted early and late, to see what actually changed.
+
+    A proportional-hazards test says an effect is not constant. It does not say
+    how it moves, and a p-value on a Schoenfeld residual is not something to
+    put in front of anyone. Splitting the follow-up and fitting both halves
+    answers the question directly: here is the hazard ratio in the first year,
+    here it is afterwards.
+
+    The early fit uses every customer with their follow-up censored at the
+    cut-off, not only those who left early -- restricting to them would
+    condition on the outcome and bias every coefficient.
+    """
+
+    cutoff: float
+    early: CoxModel
+    late: CoxModel
+    names: list[str]
+    early_events: int
+    late_events: int
+
+    def table(self) -> pd.DataFrame:
+        """Hazard ratios side by side, ordered by how much they moved."""
+        frame = pd.DataFrame(
+            {
+                "early": self.early.hazard_ratios,
+                "late": self.late.hazard_ratios,
+            },
+            index=self.names,
+        )
+        frame["ratio"] = frame["late"] / frame["early"]
+        # A sign flip is the interesting case: protective early, risky later.
+        frame["reverses"] = (frame["early"] < 1) != (frame["late"] < 1)
+        return frame.sort_values("ratio", ascending=False)
+
+    @property
+    def reversals(self) -> list[str]:
+        """Covariates whose effect changes direction across the cut-off."""
+        table = self.table()
+        return sorted(table.index[table["reverses"]])
+
+
+def compare_periods(
+    X: pd.DataFrame,
+    duration: np.ndarray,
+    event: np.ndarray,
+    cutoff: float,
+) -> PeriodComparison:
+    """Fit the same covariates before and after `cutoff` months."""
+    duration = np.asarray(duration, dtype=float)
+    event = np.asarray(event).astype(int)
+
+    # Everyone contributes to the early fit, censored at the cut-off. Keeping
+    # only customers who churned early would select on the outcome.
+    early_event = np.where(duration <= cutoff, event, 0)
+    early = fit_cox(X, np.minimum(duration, cutoff), early_event)
+
+    survived = duration > cutoff
+    if event[survived].sum() == 0:
+        raise ValueError(f"no events after month {cutoff:g}")
+    late = fit_cox(X[survived], duration[survived], event[survived])
+
+    return PeriodComparison(
+        cutoff=float(cutoff),
+        early=early,
+        late=late,
+        names=list(X.columns),
+        early_events=int(early_event.sum()),
+        late_events=int(event[survived].sum()),
+    )
 
 def _breslow_baseline(
     X: np.ndarray,
