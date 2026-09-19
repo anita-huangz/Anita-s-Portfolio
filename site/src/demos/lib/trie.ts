@@ -6,6 +6,8 @@
  * Python, so a divergence fails a test rather than quietly disagreeing.
  */
 
+import { stem } from "./stem";
+
 export const ALPHABET_SIZE = 26;
 export const OTHER = 26;
 export const WILDCARD = "?";
@@ -353,4 +355,193 @@ export function searchIndex(
   const strict =
     requireAll && tokens.length === Object.keys(postings).length;
   return rank(postings, index.corpus, strict).slice(0, limit);
+}
+
+// --------------------------------------------------------------------------- //
+// Positions, phrases, and indexing text in the browser
+// --------------------------------------------------------------------------- //
+
+/**
+ * Ported from `systems/trie-search`. The demo indexes text you paste rather
+ * than crawling, because a static page cannot fetch arbitrary sites — but
+ * everything downstream of the tokenizer is the same code path the command
+ * line runs, and `trie.test.ts` checks it against fixtures the Python wrote.
+ */
+
+/** Stripped from the ends of a token; internal punctuation is kept, so
+ *  "well-known" stays one word while a bare "--" is dropped entirely. */
+const PUNCTUATION = ".,;:!?()[]{}<>\"'`—–-_*|/\\";
+
+/** Split text into lowercase words, dropping punctuation-only tokens. */
+export function tokenize(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.split(/\s+/)) {
+    let word = raw.toLowerCase();
+    let start = 0;
+    let end = word.length;
+    while (start < end && PUNCTUATION.includes(word[start])) start += 1;
+    while (end > start && PUNCTUATION.includes(word[end - 1])) end -= 1;
+    word = word.slice(start, end);
+    if (word) out.push(word);
+  }
+  return out;
+}
+
+/** Term → URL → ascending word offsets. */
+export type Positions = Record<string, Record<string, number[]>>;
+
+export interface BuiltIndex extends SearchIndex {
+  positions: Positions;
+  stemmed: boolean;
+  /** Stem → the surface forms it came from, so results can show real words. */
+  surfaces: Record<string, string[]>;
+  tokens: number;
+}
+
+/**
+ * Index documents given as text. `documents` maps a label to its content.
+ *
+ * Positions are always recorded here. The command line makes them optional
+ * because a large crawl pays for them in memory; a few pasted paragraphs does
+ * not, and phrase search is half the point of the demo.
+ */
+export function buildFromDocuments(
+  documents: Record<string, string>,
+  stemming = false,
+): BuiltIndex {
+  const postings: Record<string, Posting> = {};
+  const positions: Positions = {};
+  const lengths: Record<string, number> = {};
+  const surfaces: Record<string, Set<string>> = {};
+  let tokens = 0;
+
+  for (const [label, text] of Object.entries(documents)) {
+    const words = tokenize(text);
+    lengths[label] = words.length;
+    tokens += words.length;
+    words.forEach((surface, offset) => {
+      const term = stemming ? stem(surface) : surface;
+      if (stemming) {
+        (surfaces[term] ??= new Set()).add(surface);
+      }
+      ((positions[term] ??= {})[label] ??= []).push(offset);
+      const posting = (postings[term] ??= {});
+      posting[label] = (posting[label] ?? 0) + 1;
+    });
+  }
+
+  return {
+    postings,
+    positions,
+    corpus: { lengths },
+    trie: new Trie(Object.fromEntries(Object.keys(postings).map((t) => [t, t]))),
+    stemmed: stemming,
+    surfaces: Object.fromEntries(
+      Object.entries(surfaces).map(([k, v]) => [k, [...v].sort()]),
+    ),
+    tokens,
+  };
+}
+
+/** How many times the terms appear consecutively, in order, in one document. */
+export function phraseMatches(
+  positions: Positions,
+  terms: string[],
+  url: string,
+): number {
+  if (terms.length === 0) return 0;
+  const first = positions[terms[0]]?.[url];
+  if (!first) return 0;
+  const later = terms.slice(1).map((t) => new Set(positions[t]?.[url] ?? []));
+  let hits = 0;
+  for (const start of first) {
+    if (later.every((seen, i) => seen.has(start + i + 1))) hits += 1;
+  }
+  return hits;
+}
+
+/**
+ * Score documents containing the exact phrase, treating it as a single term.
+ *
+ * Summing the words' individual BM25 scores would rank a page saying "park"
+ * forty times and "hours" thirty times above one that actually contains the
+ * phrase — which is the bug this exists to avoid.
+ */
+export function rankPhrase(
+  index: BuiltIndex,
+  terms: string[],
+  limit = 20,
+): Hit[] {
+  if (terms.length === 0) return [];
+  if (terms.some((t) => !(t in index.postings))) return [];
+
+  let candidates = new Set(Object.keys(index.postings[terms[0]]));
+  for (const term of terms.slice(1)) {
+    const next = new Set(Object.keys(index.postings[term]));
+    candidates = new Set([...candidates].filter((u) => next.has(u)));
+  }
+
+  const counts: Record<string, number> = {};
+  for (const url of candidates) {
+    const n = phraseMatches(index.positions, terms, url);
+    if (n > 0) counts[url] = n;
+  }
+  if (Object.keys(counts).length === 0) return [];
+
+  const phrase = terms.join(" ");
+  const size = corpusSize(index.corpus);
+  const idf = inverseDocumentFrequency(size, Object.keys(counts).length);
+  const average = averageLength(index.corpus);
+  const hits: Hit[] = Object.entries(counts).map(([url, count]) => ({
+    url,
+    score: Number(
+      bm25Score(count, index.corpus.lengths[url] ?? 0, average, idf).toFixed(6),
+    ),
+    matched: { [phrase]: count },
+  }));
+  hits.sort((a, b) => b.score - a.score || a.url.localeCompare(b.url));
+  return hits.slice(0, limit);
+}
+
+/** The words inside double quotes, or null if the query is not a phrase. */
+export function quotedTerms(query: string): string[] | null {
+  const text = query.trim();
+  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
+    return text.slice(1, -1).toLowerCase().split(/\s+/).filter(Boolean);
+  }
+  return null;
+}
+
+/**
+ * Search a browser-built index, handling quoted phrases and stemming.
+ *
+ * Kept separate from `searchIndex` so the existing golden-fixture tests keep
+ * exercising the original path unchanged.
+ */
+export function searchBuilt(
+  index: BuiltIndex,
+  query: string,
+  requireAll = true,
+  limit = 20,
+): Hit[] {
+  const phrase = quotedTerms(query);
+  if (phrase !== null) {
+    const terms = index.stemmed ? phrase.map(stem) : phrase;
+    if (terms.length === 1) {
+      return searchIndex(index, terms[0], requireAll, limit);
+    }
+    return rankPhrase(index, terms, limit);
+  }
+  if (!index.stemmed) return searchIndex(index, query, requireAll, limit);
+
+  // A stemmed index holds roots, so fold the query too -- but leave wildcards
+  // alone, since they are patterns over the stored keys.
+  const folded = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => (t.includes("?") || t.endsWith("*") ? t : stem(t)))
+    .join(" ");
+  return searchIndex(index, folded, requireAll, limit);
 }

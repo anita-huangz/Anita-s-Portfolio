@@ -821,6 +821,71 @@ def generate_ranking_golden() -> None:
     )
 
 
+
+def generate_text_golden() -> None:
+    """Stems and phrase results, for the browser port to be checked against.
+
+    The demo indexes text the visitor pastes, which means the tokenizer, the
+    Porter stemmer and the phrase matcher all exist in TypeScript as well as
+    Python. This records what the Python says for a spread of inputs so
+    `trie.test.ts` can assert the two agree, the same way the arranger and
+    trend ports are checked.
+    """
+    from trie_search.crawler import build_search_index
+    from trie_search.fetch import tokenize
+    from trie_search.stem import stem
+
+    # Real morphology, plus the words Porter's own paper uses as examples.
+    vocabulary = """
+        park parks parking parked walker walking walks
+        caresses ponies ties cats feed agreed plastered motoring sing
+        conflated troubled hopping tanned falling hissing filing
+        happy sky relational conditional rational electricity
+        hopeful goodness revival allowance inference airliner
+        universe university universal analysis analyses abase
+        probate rate cease controll roll adjustment dependent
+    """
+    words = sorted(set(vocabulary.split()))
+
+    documents = {
+        "/adjacent": "The park hours are posted at the gate.",
+        "/apart": "Opening hours are listed for every park.",
+        "/repeated": "Park hours, park hours, park hours.",
+        "/reversed": "Hours park.",
+        "/forms": "Parks and parking are parked near the park.",
+        "/punctuation": "well-known -- co-operative, 'quoted' and (bracketed).",
+    }
+
+    cases = []
+    for stemming in (False, True):
+        index = build_search_index(
+            {k: tokenize(v) for k, v in documents.items()}, stemming=stemming
+        )
+        for query in (
+            "park", "hours", "park hours", '"park hours"', '"hours park"',
+            '"park zebra"', "par*", "d?g", "parking", "well-known",
+        ):
+            cases.append({
+                "stemming": stemming,
+                "query": query,
+                "hits": [
+                    {"url": h.url, "score": round(h.score, 6), "matched": h.matched}
+                    for h in index.search(query)
+                ],
+            })
+
+    # The demo seeds its editable corpus from the same pages the fixed index
+    # was built from, so it opens on something meaningful and the README's
+    # worked example still holds before anyone types.
+    write("text-golden.json", {
+        "seed": {url: " ".join(text.split()) for url, text in SEARCH_PAGES.items()},
+        "documents": documents,
+        "tokenized": {k: tokenize(v) for k, v in documents.items()},
+        "stems": {w: stem(w) for w in words},
+        "cases": cases,
+    })
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("generating demo data:")
@@ -831,6 +896,7 @@ def main() -> int:
     generate_ranking_golden()
     generate_solver_golden()
     generate_search_index()
+    generate_text_golden()
     generate_factor_data()
     generate_earnings_data()
     print("done")
