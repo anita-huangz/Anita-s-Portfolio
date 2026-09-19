@@ -301,7 +301,7 @@ deploy.
 ## Testing
 
 ```bash
-make test     # 176 tests, no network, no API key
+make test     # 268 tests, no network, no API key
 ```
 
 The suite covers cost arithmetic, cache and TTL semantics, telemetry
@@ -353,7 +353,7 @@ src/filing_intel/
   providers/demo.py deterministic stub model, for running without a key
 evals/              dataset, grading, harness
 web/                React + Vite UI (components, SSE client, styles)
-tests/              176 tests
+tests/              268 tests
 ```
 
 ---

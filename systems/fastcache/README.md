@@ -40,7 +40,7 @@ exchange_rate.cache_info
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-pytest -q                                      # 67 tests
+pytest -q                                      # 98 tests
 fastcache-bench --sizes 128,1024,8192,32768    # timing
 fastcache-bench --policies                     # LRU vs LFU by workload
 ```

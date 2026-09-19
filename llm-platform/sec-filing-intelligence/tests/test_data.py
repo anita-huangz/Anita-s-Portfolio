@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import UTC, date, datetime
 
 import httpx
@@ -10,6 +12,7 @@ import pytest
 from filing_intel.config import Settings
 from filing_intel.contracts import FilingSection
 from filing_intel.data import EdgarClient, PriceClient, extract_section, html_to_text
+from filing_intel.data.edgar import _RateLimiter
 from filing_intel.data.prices import _baseline_index
 from filing_intel.errors import UpstreamDataError
 
@@ -348,3 +351,176 @@ def test_duration_days_is_none_for_an_instant_fact():
     assert FinancialFact(
         concept="Assets", unit="USD", value=1.0, period_end=date(2024, 6, 30)
     ).duration_days is None
+
+
+# --------------------------------------------------------------------------- #
+# Fetching a section end to end
+# --------------------------------------------------------------------------- #
+
+ACCESSION = "0000320193-23-000106"
+
+# Two HTML files in the accession. The larger one is the filing; the other is
+# the cover letter that EDGAR stores alongside it.
+INDEX_JSON = {
+    "directory": {
+        "item": [
+            {"name": "aapl-20230930-index.htm", "size": "900000"},
+            {"name": "R2.htm", "size": "800000"},
+            {"name": "exhibit.txt", "size": "700000"},
+            {"name": "aapl-20230930.htm", "size": "120000"},
+            {"name": "cover.htm", "size": "4000"},
+        ]
+    }
+}
+
+FILING_HTML = (
+    "<div>Item 1A. Risk Factors</div>"
+    "<p>Our supply chain is concentrated in a small number of partners.</p>"
+    "<div>Item 1B. Unresolved Staff Comments</div><p>None.</p>"
+)
+
+
+def archive_handler(
+    index_json=INDEX_JSON, doc_html=FILING_HTML, seen: list[str] | None = None
+):
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if seen is not None:
+            seen.append(url)
+        if "company_tickers" in url:
+            return httpx.Response(200, json=TICKERS_PAYLOAD)
+        if url.endswith("/index.json"):
+            return httpx.Response(200, json=index_json)
+        if url.endswith(".htm"):
+            return httpx.Response(200, text=doc_html)
+        return httpx.Response(404)
+
+    return handler
+
+
+async def test_the_primary_document_is_the_largest_real_html_file():
+    # Exhibits, the index page itself, and EDGAR's generated R*.htm viewer
+    # files are all larger here. Picking the largest without excluding them
+    # would index the viewer markup instead of the filing.
+    seen: list[str] = []
+    edgar = edgar_with(archive_handler(seen=seen))
+    await edgar.fetch_section("AAPL", ACCESSION, FilingSection.RISK_FACTORS)
+    assert any(u.endswith("/aapl-20230930.htm") for u in seen)
+    assert not any(u.endswith("/R2.htm") or u.endswith("-index.htm") for u in seen)
+
+
+async def test_the_accession_dashes_are_stripped_from_the_archive_path():
+    seen: list[str] = []
+    edgar = edgar_with(archive_handler(seen=seen))
+    await edgar.fetch_section("AAPL", ACCESSION, FilingSection.RISK_FACTORS)
+    # The CIK is unpadded in Archives paths, unlike the submissions endpoint.
+    assert any("/Archives/edgar/data/320193/000032019323000106/" in u for u in seen)
+
+
+async def test_a_fetched_section_reports_its_true_length_when_truncated():
+    edgar = edgar_with(archive_handler())
+    section = await edgar.fetch_section(
+        "AAPL", ACCESSION, FilingSection.RISK_FACTORS, max_chars=20
+    )
+    assert section.truncated is True
+    assert len(section.text) == 20
+    assert section.char_count > 20
+
+
+async def test_an_untruncated_section_says_so():
+    edgar = edgar_with(archive_handler())
+    section = await edgar.fetch_section("AAPL", ACCESSION, FilingSection.RISK_FACTORS)
+    assert section.truncated is False
+    assert "supply chain" in section.text
+    assert section.accession == ACCESSION
+
+
+async def test_a_section_the_filing_does_not_contain_is_an_upstream_error():
+    edgar = edgar_with(archive_handler(doc_html="<p>Nothing item-shaped here.</p>"))
+    with pytest.raises(UpstreamDataError, match="risk_factors"):
+        await edgar.fetch_section("AAPL", ACCESSION, FilingSection.RISK_FACTORS)
+
+
+async def test_an_accession_with_no_html_document_is_an_upstream_error():
+    empty = {"directory": {"item": [{"name": "exhibit.txt", "size": "10"}]}}
+    edgar = edgar_with(archive_handler(index_json=empty))
+    with pytest.raises(UpstreamDataError, match="no primary document"):
+        await edgar.fetch_section("AAPL", ACCESSION, FilingSection.RISK_FACTORS)
+
+
+# --------------------------------------------------------------------------- #
+# HTTP failure modes
+# --------------------------------------------------------------------------- #
+
+
+async def test_a_transport_error_is_reported_as_an_upstream_error_not_a_raw_httpx_one():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("name resolution failed")
+
+    with pytest.raises(UpstreamDataError, match="EDGAR request failed"):
+        await edgar_with(handler).cik_for("AAPL")
+
+
+async def test_a_404_names_the_url_that_was_missing():
+    edgar = edgar_with(lambda r: httpx.Response(404))
+    with pytest.raises(UpstreamDataError, match="no resource at"):
+        await edgar.cik_for("AAPL")
+
+
+async def test_a_500_is_surfaced_with_its_status_code():
+    edgar = edgar_with(lambda r: httpx.Response(503))
+    with pytest.raises(UpstreamDataError, match="503"):
+        await edgar.cik_for("AAPL")
+
+
+async def test_a_registrant_with_no_filing_history_returns_no_filings():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "company_tickers" in str(request.url):
+            return httpx.Response(200, json=TICKERS_PAYLOAD)
+        return httpx.Response(200, json={"filings": {"recent": {}}})
+
+    assert await edgar_with(handler).search_filings("AAPL") == []
+
+
+async def test_the_client_can_be_used_as_an_async_context_manager():
+    async with edgar_with(default_handler) as edgar:
+        assert await edgar.cik_for("AAPL") == "0000320193"
+
+
+async def test_closing_leaves_a_caller_supplied_client_alone():
+    # The caller owns the client it passed in; closing it here would break the
+    # next EdgarClient built over the same shared connection pool.
+    client = httpx.AsyncClient(transport=httpx.MockTransport(default_handler))
+    edgar = EdgarClient(Settings(sec_user_agent="t/0.1 (t@e.com)"), client=client)
+    await edgar.aclose()
+    assert not client.is_closed
+    await client.aclose()
+
+
+async def test_a_client_the_edgar_client_created_itself_is_closed():
+    edgar = EdgarClient(Settings(sec_user_agent="t/0.1 (t@e.com)"))
+    await edgar.aclose()
+    assert edgar._client.is_closed
+
+
+# --------------------------------------------------------------------------- #
+# Rate limiting
+# --------------------------------------------------------------------------- #
+
+
+async def test_requests_are_spaced_so_edgar_is_not_hammered():
+    limiter = _RateLimiter(min_interval=0.05)
+    start = time.monotonic()
+    for _ in range(3):
+        await limiter.wait()
+    # Three waits, two of them gated: the first is free.
+    assert time.monotonic() - start >= 0.09
+
+
+async def test_a_slow_caller_is_never_made_to_wait():
+    limiter = _RateLimiter(min_interval=0.05)
+    await limiter.wait()
+    await asyncio.sleep(0.06)
+    start = time.monotonic()
+    await limiter.wait()
+    assert time.monotonic() - start < 0.02

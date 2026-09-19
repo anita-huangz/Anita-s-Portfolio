@@ -22,4 +22,11 @@ venv/
 .mypy_cache/
 .ipynb_checkpoints/
 .coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Written by the site's CI job so the documented browser test count can be
+# checked against what vitest actually ran.
+vitest.json
 htmlcov/

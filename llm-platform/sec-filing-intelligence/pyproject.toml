@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.7"]
+dev = ["pytest>=8", "pytest-cov>=5", "pytest-asyncio>=0.24", "ruff>=0.7"]
 
 [project.scripts]
 filing-intel-mcp = "filing_intel.mcp_server:main"
@@ -37,6 +37,23 @@ pythonpath = ["src", "."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 filterwarnings = ["error::DeprecationWarning:filing_intel.*"]
+
+# Branch coverage, with a floor CI enforces. The floor sits a couple of points
+# under what the suite measures today: it is a ratchet against silent rot, not
+# a target to game. Raise it when the suite earns it.
+[tool.coverage.run]
+source = ["filing_intel"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 92
+show_missing = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
 
 [tool.ruff]
 line-length = 100

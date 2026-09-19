@@ -10,7 +10,7 @@ projections and the anomalies were all geometry.
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 threat-structure                     # the whole analysis
 threat-structure --section clusters  # or one part
-pytest -q                            # 22 tests
+pytest -q                            # 30 tests
 ```
 
 ---
@@ -157,7 +157,7 @@ src/threat_structure/
   clustering.py  null comparison, bootstrap stability, gap        (pure)
   anomalies.py   detector agreement against chance, tail checks   (pure)
   cli.py         the report
-tests/           22 tests, each paired against planted structure
+tests/           30 tests, each paired against planted structure
 notebooks/       the original, kept as the record (marked superseded)
 ```
 

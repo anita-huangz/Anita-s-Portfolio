@@ -8,7 +8,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 allocation                          # the whole comparison
 allocation --section out            # or one part
 allocation --rebalance-every 21     # settings change the answer; they're arguments
-pytest -q                           # 25 tests
+pytest -q                           # 29 tests
 ```
 
 4,201 trading days, 2010–2026, adjusted closes committed as 216 KB.
@@ -108,7 +108,7 @@ src/allocation/
   backtest.py  rolling out-of-sample with costs; in-sample foil    (pure)
   cli.py       the report
   data/        216 KB of adjusted closes for five ETFs
-tests/         25 tests; shrinkage cross-checked against scikit-learn
+tests/         29 tests; shrinkage cross-checked against scikit-learn
 notebooks/     the original, kept as the record (marked superseded)
 ```
 

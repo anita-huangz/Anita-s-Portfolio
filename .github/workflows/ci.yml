@@ -61,7 +61,19 @@ jobs:
         # Every suite runs offline: no network, no API keys. The AI platform
         # uses its replay provider and fake data clients; the two quantitative
         # projects run on synthetic price paths.
-        run: pytest -q
+        #
+        # `--cov` reads its source and its floor from the project's pyproject,
+        # so a drop below that floor fails the build. Coverage that quietly
+        # rots is how a suite ends up measuring 97% of the modules it happens
+        # to import -- which is exactly what these projects used to do.
+        run: pytest -q --cov --cov-report=term-missing
+
+      - name: Documented test count matches the suite
+        # Run once rather than on all three interpreters: the count does not
+        # depend on the Python version, and three identical failures are noise.
+        if: matrix.python-version == '3.13'
+        working-directory: .
+        run: python scripts/check_test_counts.py "${{ matrix.project }}"
 
   site:
     name: portfolio site
@@ -78,7 +90,14 @@ jobs:
           cache-dependency-path: site/package-lock.json
       - run: npm ci
       - run: npx tsc -b --noEmit
+      - run: npm test -- --reporter=json --outputFile=../vitest.json
       - run: npm run build
+
+      - name: Documented browser test count matches vitest
+        working-directory: .
+        run: |
+          count=$(python3 -c "import json;print(json.load(open('vitest.json'))['numTotalTests'])")
+          python3 scripts/check_test_counts.py --browser "$count"
 
   web:
     name: web UI

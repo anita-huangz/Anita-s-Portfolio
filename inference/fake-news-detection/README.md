@@ -8,7 +8,7 @@ and more useful claim than "my model got 51%".
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 news-signal                      # the whole analysis
 news-signal --section contents   # or one part
-pytest -q                        # 26 tests
+pytest -q                        # 32 tests
 ```
 
 ---
@@ -139,7 +139,7 @@ src/news_signal/
   signal.py  permutation test, power, learning curve,
              per-feature tests with BH correction              (pure)
   cli.py     the report
-tests/       26 tests, most of them paired against planted data
+tests/       32 tests, most of them paired against planted data
 notebooks/   the original, kept as the record (marked superseded)
 ```
 

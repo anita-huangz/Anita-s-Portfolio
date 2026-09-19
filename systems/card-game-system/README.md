@@ -30,7 +30,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 card-game --seed 42      # --seed makes the shuffle reproducible
 card-game --hints        # show the best discards before each prompt
 card-game --advise "Ah Kh Qh Jh 7c 7s 2d"   # analyse one hand and exit
-pytest -q                # 114 tests
+pytest -q                # 137 tests
 ruff check .
 ```
 

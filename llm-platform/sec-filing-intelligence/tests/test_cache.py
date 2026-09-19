@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from filing_intel.cache import InMemoryCache, RedisCache, cache_key
+from filing_intel.cache.store import build_cache
 from filing_intel.contracts import TokenUsage
 
 
@@ -63,6 +65,83 @@ async def test_redis_failure_degrades_instead_of_raising():
     await cache.set("k", "v", 60)
     assert await cache.ping() is False
     assert cache.healthy is False
+
+
+class FakeRedis:
+    """Enough of the redis.asyncio surface to exercise the happy path."""
+
+    def __init__(self, raw: bool = False) -> None:
+        self.data: dict[str, Any] = {}
+        self.ttls: dict[str, int] = {}
+        self._raw = raw
+
+    async def get(self, key):
+        value = self.data.get(key)
+        if value is None:
+            return None
+        # A real client returns bytes unless decode_responses is set, and the
+        # deployment does not set it.
+        return value.encode() if self._raw else value
+
+    async def set(self, key, value, ex=None):
+        self.data[key] = value
+        self.ttls[key] = ex
+
+    async def delete(self, key):
+        self.data.pop(key, None)
+
+    async def ping(self):
+        return True
+
+
+async def test_redis_roundtrip_carries_the_ttl_through():
+    cache = RedisCache(FakeRedis())
+    await cache.set("k", "v", 45)
+    assert await cache.get("k") == "v"
+    assert cache._redis.ttls["k"] == 45
+    assert await cache.ping() is True
+    assert cache.healthy is True
+
+
+async def test_bytes_from_redis_are_decoded_to_the_str_the_caller_expects():
+    cache = RedisCache(FakeRedis(raw=True))
+    await cache.set("k", "v", 60)
+    assert await cache.get("k") == "v"
+
+
+async def test_a_redis_miss_is_none_not_an_error():
+    assert await RedisCache(FakeRedis()).get("absent") is None
+
+
+async def test_redis_delete_removes_the_key():
+    cache = RedisCache(FakeRedis())
+    await cache.set("k", "v", 60)
+    await cache.delete("k")
+    assert await cache.get("k") is None
+
+
+async def test_a_failed_delete_marks_the_cache_unhealthy_without_raising():
+    cache = RedisCache(BrokenRedis())
+    await cache.delete("k")
+    assert cache.healthy is False
+
+
+async def test_recovery_after_an_outage_clears_the_unhealthy_flag():
+    # `healthy` drives the readiness endpoint, so a flag that latches on would
+    # keep reporting an outage that is over.
+    cache = RedisCache(FakeRedis())
+    cache.healthy = False
+    await cache.get("k")
+    assert cache.healthy is True
+
+
+def test_no_redis_url_configured_means_the_in_process_cache():
+    assert isinstance(build_cache(None), InMemoryCache)
+    assert isinstance(build_cache(""), InMemoryCache)
+
+
+def test_a_redis_url_builds_a_redis_backed_cache():
+    assert isinstance(build_cache("redis://localhost:6379/0"), RedisCache)
 
 
 # --------------------------------------------------------------------------- #

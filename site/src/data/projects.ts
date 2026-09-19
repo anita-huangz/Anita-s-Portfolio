@@ -44,7 +44,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A ticker and a plain-English question \u2014 e.g. AAPL, \"What supply chain risks does Apple disclose?\"",
       "output": "A cited answer plus structured findings, each with an accession number and filing date, a verified/unverified verdict, and the run's token, cost, and latency figures.",
-      "scale": "176 tests, all offline. Four tools, three model providers, one MCP server."
+      "scale": "268 tests, all offline. Four tools, three model providers, one MCP server."
     },
     "sources": [
       {
@@ -85,7 +85,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A chord chart as text, plus the difficulty, voicing style and tempo — or a sentence like \"an easy jazzy version, slow\", which is parsed without a model.",
       "output": "A voicing per chord for each hand, the cost and hand span of each, every voice-leading rule broken, every simplification made to fit the level, and a two-track MIDI file.",
-      "scale": "497 Python tests and 514 in the browser. The engine is ported to TypeScript so the demo solves live, and the port is cross-checked against the Python across 120 combinations of progression, level and style — every voicing, every cost, every violation."
+      "scale": "516 Python tests and 514 in the browser. The engine is ported to TypeScript so the demo solves live, and the port is cross-checked against the Python across 120 combinations of progression, level and style — every voicing, every cost, every violation."
     },
     "sources": [
       {
@@ -138,7 +138,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A ticker and a date range.",
       "output": "One row per announcement \u2014 surprise percentage and forward returns at each horizon \u2014 plus the correlation between them.",
-      "scale": "47 tests. The demo covers 62 companies and 1,959 real announcements."
+      "scale": "79 tests. The demo covers 62 companies and 1,959 real announcements."
     },
     "sources": [
       {
@@ -183,7 +183,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A list of tickers, a date range, which factors to use, how many names to hold, and how often to rebalance.",
       "output": "A daily NAV path, per-rebalance weights, total and annualized return, volatility, Sharpe, max drawdown, and a Fama-French attribution table.",
-      "scale": "70 tests. The bundled demo runs 62 tickers over six years of real daily closes."
+      "scale": "87 tests. The bundled demo runs 62 tickers over six years of real daily closes."
     },
     "sources": [
       {
@@ -227,7 +227,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A function to memoise, a max size, optionally a TTL in seconds and a policy (`lru` or `lfu`).",
       "output": "A wrapped function plus hits, misses, evictions, expirations, and hit rate; the benchmark emits microseconds per call and hit rate by workload.",
-      "scale": "89 tests. Benchmarked to 32,768 entries, and 50,000 accesses over 2,000 keys."
+      "scale": "98 tests. Benchmarked to 32,768 entries, and 50,000 accesses over 2,000 keys."
     }
   },
   {
@@ -261,7 +261,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A start URL and a link depth, then a query: words, `par*` for a prefix, `d?g` for a wildcard.",
       "output": "Pages ranked by BM25, each showing its score and which terms matched how many times. Plus a report of pages that could not be fetched.",
-      "scale": "157 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
+      "scale": "165 tests, no network. Crawl is capped by depth, page count, and a URL allowlist."
     }
   },
   {
@@ -293,7 +293,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "Your discard choices each round, up to five of the seven cards -- or a hand typed as `Ah Kh Qh Jh 7c 7s 2d` for the advisor to analyse.",
       "output": "A hand rank and points per round with a running total, plus the expected value of every legal discard, labelled exact or sampled.",
-      "scale": "114 tests. 120 discards evaluated per recommendation: 45 draws enumerated for one card, 990 for two, sampled above that."
+      "scale": "137 tests. 120 discards evaluated per recommendation: 45 draws enumerated for one card, 990 for two, sampled above that."
     }
   },
   {
@@ -328,7 +328,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "A quarter (`2026-27/winter`, or `current`), plus either a search -- code prefix, keyword, day -- or a request: how many courses, which are required, which days to keep free, nothing before a given time.",
       "output": "Matching courses, or the best conflict-free schedules ranked by cost with the penalty that drove each, how many courses were set aside for having no published time, the nodes searched, and whether optimality was proven.",
-      "scale": "145 tests, all offline: the real listing pages are saved as fixtures and the transport is faked. 48 quarters available live; a 30-course quarter searches in a few hundred nodes."
+      "scale": "161 tests, all offline: the real listing pages are saved as fixtures and the transport is faked. 48 quarters available live; a 30-course quarter searches in a few hundred nodes."
     },
     "sources": [
       {
@@ -357,7 +357,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "Daily bars, plus the protocol: rolling-origin window size, transaction cost in basis points, and which section to run.",
       "output": "RMSE, return R-squared and directional accuracy with Wilson intervals for each forecast; Diebold-Mariano tests between them; per-fold spread across 21 origins; and net return at 0, 10 and 30 bps against buy-and-hold.",
-      "scale": "4,825 daily bars reduced once from a 127 MB minute file and committed as 230 KB. 40 tests, none needing TensorFlow."
+      "scale": "4,825 daily bars reduced once from a 127 MB minute file and committed as 230 KB. 55 tests, none needing TensorFlow."
     },
     "sources": [
       {
@@ -401,7 +401,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The dataset, plus the number of label permutations to run.",
       "output": "Template detection per text column, cross-validated AUC for two model families, the permutation null with its p-value and floor, the minimum detectable effect at 80% power, a learning curve, and per-feature tests with a Benjamini-Hochberg correction.",
-      "scale": "4,000 rows, 24 columns. 28 tests, most of them paired against planted data."
+      "scale": "4,000 rows, 24 columns. 32 tests, most of them paired against planted data."
     },
     "sources": [
       {
@@ -443,7 +443,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The Telco CSV, plus the campaign economics: cost per offer, acceptance rate, margin, and horizon -- all arguments, because none of them can be read off the dataset.",
       "output": "Survival curves with confidence bands, hazard ratios with intervals and an assumption test, cross-validated AUC with bootstrap intervals, calibration error, and the expected value of every targeting threshold.",
-      "scale": "7,043 customers, 73.5% censored. 76 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
+      "scale": "7,043 customers, 73.5% censored. 105 tests; statsmodels is a test dependency only, used to check the from-scratch estimators to 1e-8."
     },
     "sources": [
       {
@@ -486,7 +486,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The incident CSV, plus k and the number of null draws.",
       "output": "Kolmogorov-Smirnov and chi-square tests per column, pairwise associations, silhouette against a shuffled-column null, bootstrap cluster stability, the gap statistic across k, and detector agreement against its chance baseline.",
-      "scale": "3,000 incidents, 10 columns, 39 encoded features. 23 tests, each paired against planted structure."
+      "scale": "3,000 incidents, 10 columns, 39 encoded features. 30 tests, each paired against planted structure."
     },
     "sources": [
       {
@@ -526,7 +526,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "The two tables, plus the cut-off k for the ranking metrics.",
       "output": "recall@k, precision@k, MAP, MRR and NDCG for six recommenders including random, popularity and a deliberate oracle, with the count of customers excluded.",
-      "scale": "10,000 customers and 10,000 products over 24 subcategories. 29 tests; every metric checked against a hand-computed value."
+      "scale": "10,000 customers and 10,000 products over 24 subcategories. 33 tests; every metric checked against a hand-computed value."
     },
     "sources": [
       {
@@ -568,7 +568,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "Adjusted daily closes for five ETFs, plus the protocol: estimation window, rebalance cadence, transaction cost in basis points -- all arguments, because all of them change the answer.",
       "output": "Annualised return, volatility, Sharpe, max drawdown, turnover and cost drag for each allocation rule, out of sample and in sample side by side, plus weight instability per rebalance.",
-      "scale": "4,201 trading days, 2010-2026. 25 tests; Ledoit-Wolf shrinkage cross-checked against scikit-learn."
+      "scale": "4,201 trading days, 2010-2026. 29 tests; Ledoit-Wolf shrinkage cross-checked against scikit-learn."
     },
     "sources": [
       {
@@ -620,7 +620,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "Annual mean temperature by city, plus which city to examine and how many bootstrap draws.",
       "output": "Sen slope with a distribution-free interval for every city, four trend estimates side by side with their standard errors and intervals, and autocorrelation diagnostics giving the effective sample size.",
-      "scale": "Six cities, 75 annual means each, reduced once from ERA5 daily reanalysis and committed as 14 KB. 20 tests; OLS and Newey-West checked against statsmodels."
+      "scale": "Six cities, 75 annual means each, reduced once from ERA5 daily reanalysis and committed as 14 KB. 24 tests; OLS and Newey-West checked against statsmodels."
     },
     "sources": [
       {
