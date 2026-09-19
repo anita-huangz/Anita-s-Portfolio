@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,155 tests** — 1,519 in Python, and 636 in the browser, most of them
+**2,172 tests** — 1,536 in Python, and 636 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -322,7 +322,7 @@ Establishing that rigorously — permutation tests, power analyses, comparison
 against a null — is most of the work in those projects. Showing that something
 *isn't* there is harder than finding something that is.
 
-### 1. ✅ [Customer Churn Prediction](inference/customer-churn-prediction) · 59 tests
+### 1. ✅ [Customer Churn Prediction](inference/customer-churn-prediction) · 76 tests
 Telco churn treated as what it actually is: **right-censored survival data
 driving a spending decision**, not a binary score. 73.5% of these customers
 hadn't left when the data was cut, so their lifetime is *at least* their

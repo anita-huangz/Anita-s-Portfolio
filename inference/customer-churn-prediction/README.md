@@ -186,10 +186,75 @@ tests/            59 tests, statsmodels used only to check the maths
 notebooks/        the original, kept as the record of what this replaced (marked superseded)
 ```
 
+## The assumption fails. Stratifying does not fix it.
+
+The model rests on one claim: a covariate's effect is a constant multiplier on
+the hazard, the same in month 2 as in month 60. The Schoenfeld test says
+otherwise for **16 of 20 covariates**, and the README used to stop there,
+noting that "a stratified model would be the next step".
+
+It is the textbook next step, so it is now implemented — and it does not work:
+
+```
+                            covars  violations  mean |corr|     log-lik
+Cox                             20          16        0.112    -13884.6
+stratified on Contract          19          16        0.114    -13329.7
+```
+
+Stratifying moves `Contract` out of the linear predictor and gives each of its
+three levels its own baseline hazard, free to take any shape. The fit improves
+a great deal — 555 log-likelihood points, which it must, since the model is
+strictly more flexible. **The violation is untouched.** Still 16, and the mean
+absolute residual correlation is fractionally *worse*.
+
+Two things are worth saying about that number before trusting either column.
+With 1,869 events, a correlation of 0.045 already clears p < 0.05, so counting
+violations at that threshold mostly measures the sample size. The magnitudes
+are what matter, and at 0.11 to 0.27 they are far above that floor — the
+violation is real, not an artefact of power.
+
+### Why it does not work, and what is actually happening
+
+Stratifying on `Contract` only absorbs *`Contract`'s* non-proportionality. The
+problem is broader than one variable, and `compare_periods` shows it by
+fitting the same covariates before and after the first year:
+
+```
+period split at 12 months        early    late
+Contract                          0.06 ->  0.25   x4.5
+InternetService (fiber)           1.15 ->  3.04   x2.6
+PhoneService                      0.87 ->  1.83   x2.1   reverses
+StreamingTV                       0.77 ->  1.44   x1.9   reverses
+StreamingMovies                   0.71 ->  1.31   x1.8   reverses
+```
+
+These effects do not merely weaken. **Six of them change sign.** Streaming is
+protective in the first year and a risk factor afterwards; a long contract
+nearly eliminates early churn and matters four and a half times less later.
+
+That is a statement about the business, not a modelling nuisance. Early churn
+and late churn are different phenomena — early, a contract locks you in and
+extra services are a sign of engagement; later, the same services mark a
+customer paying for more than they use. A single hazard ratio averages those
+two regimes and describes neither.
+
+So the honest reporting is: the coefficients in the summary above are
+time-averages over an effect that reverses, the stratified model does not
+repair that, and the period split is what should be read instead. Fixing it
+properly needs time-varying coefficients — episode splitting with the
+covariates interacted against a function of time — which is a change to the
+likelihood rather than a change to the design matrix, and is not done here.
+
 ## Limits
 
-- **Proportional hazards fails**, as above. The hazard ratios are time-averaged
-  and a stratified model would be the next step.
+- **Proportional hazards fails**, as above, and stratifying does not fix it —
+  measured, not assumed. The hazard ratios are time-averages over effects that
+  reverse within the first year. The remedy is time-varying coefficients via
+  episode splitting, which changes the likelihood rather than the design
+  matrix and is not implemented.
+- **`compare_periods` splits at one cut-off**, chosen at 12 months because it
+  is interpretable, not because anything identified it as a breakpoint. A
+  changepoint search would be the honest way to pick it.
 - **The economics are assumptions, not findings.** Offer cost, acceptance rate
   and margin are arguments to `Campaign` precisely so the conclusion can be
   stress-tested; none of them can be read off this dataset.
