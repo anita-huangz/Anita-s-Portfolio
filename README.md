@@ -67,40 +67,12 @@ Docker · React · TypeScript**
 
 ## Systems
 
-Ordered by engineering complexity — interacting subsystems, algorithmic depth,
-and how much the correctness depends on domain reasoning. Not line count: the
-last entry is the smallest project here and also the subtlest, and the one
-above it has the most tests.
+Things that run. Ordered by engineering complexity — interacting subsystems,
+algorithmic depth, and how much the correctness depends on domain reasoning,
+not on line count: the scheduler below has twice the tests of the cache and is
+not twice the problem.
 
-### ✅ [Factor Portfolio Simulator](systems/factor-based-portfolio-simulator) · 70 tests
-
-Point-in-time backtest of cross-sectional equity factor strategies, with
-Fama-French 3-factor attribution — reported **against a benchmark**, because a
-backtest that only quotes its own return cannot answer the first question
-anyone asks.
-
-Fixed a **look-ahead bias that overstated total return by 92 percentage
-points** — factors were computed once from the entire sample and reused at
-every rebalance, so the 2021 allocation was picked using 2024 returns.
-[`examples/lookahead_demo.py`](systems/factor-based-portfolio-simulator/examples/lookahead_demo.py)
-reproduces both loops over identical prices:
-
-| | point-in-time | full-sample (bug) |
-|---|---:|---:|
-| total return | 2.85% | **95.43%** |
-| Sharpe | 0.14 | **1.42** |
-
-The report now carries beta, annualised alpha, tracking error, information
-ratio and up/down capture against SPY; drawdown *periods* with peak, trough
-and recovery dates, since a single max-drawdown number says nothing about time
-underwater; and turnover annualised from the real rebalance cadence, so the
-transaction costs it was already charging finally appear in the output. It also
-flags the way a factor backtest flatters itself: the default strategy beats SPY
-by 234 points while carrying 1.38× its market exposure, and says so.
-
-**Python · pandas · NumPy · statsmodels · yfinance**
-
-### ✅ [Trie Search](systems/trie-search) · 77 tests
+### ✅ [Trie Search](systems/trie-search) · 84 tests
 
 Crawls a website, indexes every word into a trie, searches by prefix or
 single-character wildcard — and **ranks** the results with BM25.
@@ -234,7 +206,89 @@ scored as three-of-a-kind rather than a full house.
 
 **Python · rich · OOP**
 
-### ✅ [Earnings Drift Tracker](systems/earnings-drift-tracker) · 47 tests
+## Quantitative Finance
+
+Four projects about prices, and the discipline that separates a real edge from
+a look-ahead bug. Ordered by complexity, most involved first.
+
+The failure mode they share is that a mistake here does not look like a
+mistake: it looks like a profitable strategy. A factor computed one day early,
+weights chosen with knowledge of the returns they are scored on, a scaler
+fitted on the test set — each turns a flat result into a spectacular one, and
+none of them raises an error.
+
+### 1. ✅ [Factor Portfolio Simulator](markets/factor-based-portfolio-simulator) · 70 tests
+
+Point-in-time backtest of cross-sectional equity factor strategies, with
+Fama-French 3-factor attribution — reported **against a benchmark**, because a
+backtest that only quotes its own return cannot answer the first question
+anyone asks.
+
+Fixed a **look-ahead bias that overstated total return by 92 percentage
+points** — factors were computed once from the entire sample and reused at
+every rebalance, so the 2021 allocation was picked using 2024 returns.
+[`examples/lookahead_demo.py`](markets/factor-based-portfolio-simulator/examples/lookahead_demo.py)
+reproduces both loops over identical prices:
+
+| | point-in-time | full-sample (bug) |
+|---|---:|---:|
+| total return | 2.85% | **95.43%** |
+| Sharpe | 0.14 | **1.42** |
+
+The report now carries beta, annualised alpha, tracking error, information
+ratio and up/down capture against SPY; drawdown *periods* with peak, trough
+and recovery dates, since a single max-drawdown number says nothing about time
+underwater; and turnover annualised from the real rebalance cadence, so the
+transaction costs it was already charging finally appear in the output. It also
+flags the way a factor backtest flatters itself: the default strategy beats SPY
+by 234 points while carrying 1.38× its market exposure, and says so.
+
+**Python · pandas · NumPy · statsmodels · yfinance**
+
+### 2. ✅ [Bitcoin Price Forecasting](markets/bitcoin-and-asset-trading) · 40 tests
+The conclusion was right; none of the evidence for it was.
+
+| forecast | RMSE | R²(returns) | directional |
+|---|---:|---:|---|
+| LSTM (honest) | 22,283 | **−206** | 49.0% [46%, 52%] |
+| LSTM (as written) | 13,867 | −58 | 49.7% |
+| naive | **1,401** | 0.0 | makes no call |
+
+**Diebold-Mariano: DM = +18.03, p = 7.9e-63** — "16× worse" becomes a
+hypothesis test with a HAC correction, because forecast errors on consecutive
+days are correlated. RMSE on a *level* is a statement about the level: across
+21 rolling origins the same forecaster scores **$5 in one fold and $2,076 in
+another**. R² on returns is the real question, and predicting "no change"
+scores exactly 0.
+
+`MinMaxScaler` was fitted on the whole series before splitting, so **36.2% of
+the scaled axis was territory training never reached** — the model was told how
+high the price would eventually go. And AR(5) turns +158% into **+8%** once you
+pay 30 bps to trade 291 times; nothing beats buy-and-hold.
+**Python · NumPy · pandas · SciPy · TensorFlow**
+
+### 3. ✅ [Stock-Bond Portfolio Optimisation](markets/stock-bond-portfolio-analysis) · 25 tests
+Mean-variance allocation across five ETFs, evaluated **out of sample** and
+against the benchmark that keeps winning.
+
+| strategy | ann return | Sharpe | turnover |
+|---|---:|---:|---:|
+| **equal weight (1/N)** | **+6.50%** | 0.83 | 1.8% |
+| risk parity | +4.98% | 1.13 | 5.7% |
+| maximum Sharpe | +1.80% | **0.32** | 14.9% |
+
+**1/N earns the most, and it's the only rule that estimates nothing** —
+DeMiguel, Garlappi and Uppal (2009), reproduced. **Maximum Sharpe comes last
+on the Sharpe ratio it optimises**, because expected returns can't be estimated
+well enough to optimise against. In sample it reports **5.61**, a 17× collapse
+— and the notebook reported the in-sample number. The mechanism is visible
+directly: it rewrites 15% of the book every quarter chasing a sample mean.
+
+Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
+by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
+**Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
+
+### 4. ✅ [Earnings Drift Tracker](markets/earnings-drift-tracker) · 47 tests
 
 Measures post-earnings-announcement drift against the size of the analyst
 surprise — **as abnormal return**, not raw return, because a stock that rose 2%
@@ -254,15 +308,19 @@ slice of events.
 
 ## Statistical Inference
 
-Ordered by complexity, most involved first: depth of method, how much domain
-reasoning the result rests on, and how easy it is to get quietly wrong. All
-seven are now engineered, tested packages; the original notebooks are kept
-beside them as the record of what they replaced.
+Whether an effect is real, and how you would know. Ordered by complexity, most
+involved first: depth of method, how much domain reasoning the result rests on,
+and how easy it is to get quietly wrong. Each is an engineered, tested package;
+the original notebooks are kept beside them, marked superseded, as the record
+of what they replaced.
 
-**Four of these seven datasets turn out to be synthetic**, and establishing
-that rigorously — permutation tests, power analyses, tests against a null —
-is most of the work in those projects. Showing that something *isn't* there
-is harder than finding something that is.
+**Three of these five datasets are synthetic** — fake news (4,000 distinct
+headlines collapse to one template once digits are stripped), cybersecurity
+threats (every numeric column flat, every column independent of every other),
+and e-commerce (the browsing field contains the purchase in 100% of rows).
+Establishing that rigorously — permutation tests, power analyses, comparison
+against a null — is most of the work in those projects. Showing that something
+*isn't* there is harder than finding something that is.
 
 ### 1. ✅ [Customer Churn Prediction](inference/customer-churn-prediction) · 59 tests
 Telco churn treated as what it actually is: **right-censored survival data
@@ -304,50 +362,7 @@ Ranking by value needs to know how long each customer *would* have stayed —
 the area under their own survival curve, which a classifier cannot produce.
 **Python · NumPy · pandas · scikit-learn · statsmodels (tests only)**
 
-### 2. ✅ [Stock-Bond Portfolio Optimisation](inference/stock-bond-portfolio-analysis) · 25 tests
-Mean-variance allocation across five ETFs, evaluated **out of sample** and
-against the benchmark that keeps winning.
-
-| strategy | ann return | Sharpe | turnover |
-|---|---:|---:|---:|
-| **equal weight (1/N)** | **+6.50%** | 0.83 | 1.8% |
-| risk parity | +4.98% | 1.13 | 5.7% |
-| maximum Sharpe | +1.80% | **0.32** | 14.9% |
-
-**1/N earns the most, and it's the only rule that estimates nothing** —
-DeMiguel, Garlappi and Uppal (2009), reproduced. **Maximum Sharpe comes last
-on the Sharpe ratio it optimises**, because expected returns can't be estimated
-well enough to optimise against. In sample it reports **5.61**, a 17× collapse
-— and the notebook reported the in-sample number. The mechanism is visible
-directly: it rewrites 15% of the book every quarter chasing a sample mean.
-
-Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
-by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
-**Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
-
-### 3. ✅ [Bitcoin Price Forecasting](inference/bitcoin-and-asset-trading) · 40 tests
-The conclusion was right; none of the evidence for it was.
-
-| forecast | RMSE | R²(returns) | directional |
-|---|---:|---:|---|
-| LSTM (honest) | 22,283 | **−206** | 49.0% [46%, 52%] |
-| LSTM (as written) | 13,867 | −58 | 49.7% |
-| naive | **1,401** | 0.0 | makes no call |
-
-**Diebold-Mariano: DM = +18.03, p = 7.9e-63** — "16× worse" becomes a
-hypothesis test with a HAC correction, because forecast errors on consecutive
-days are correlated. RMSE on a *level* is a statement about the level: across
-21 rolling origins the same forecaster scores **$5 in one fold and $2,076 in
-another**. R² on returns is the real question, and predicting "no change"
-scores exactly 0.
-
-`MinMaxScaler` was fitted on the whole series before splitting, so **36.2% of
-the scaled axis was territory training never reached** — the model was told how
-high the price would eventually go. And AR(5) turns +158% into **+8%** once you
-pay 30 bps to trade 291 times; nothing beats buy-and-hold.
-**Python · NumPy · pandas · SciPy · TensorFlow**
-
-### 4. ✅ [Fake News Detection](inference/fake-news-detection) · 28 tests
+### 2. ✅ [Fake News Detection](inference/fake-news-detection) · 28 tests
 A null result, established properly.
 
 Every title is `Breaking News {i}`; every body is one sentence with the index
@@ -371,7 +386,7 @@ in ways no formula captures. And the power analysis is what turns "we found
 nothing" into **"there is nothing bigger than 0.526 to find"**.
 **Python · scikit-learn · SciPy**
 
-### 5. ✅ [E-commerce Recommendations](inference/personalized-recommendations-for-e-commerce) · 29 tests
+### 3. ✅ [E-commerce Recommendations](inference/personalized-recommendations-for-e-commerce) · 29 tests
 A content-based recommender with **ranking metrics** and a leave-one-out
 protocol.
 
@@ -393,7 +408,7 @@ all 10,000 customers. It's included to be seen doing that — a result that good
 is a bug report.
 **Python · NumPy · pandas**
 
-### 6. ✅ [Cybersecurity Threat Analysis](inference/global-security-threats) · 23 tests
+### 4. ✅ [Cybersecurity Threat Analysis](inference/global-security-threats) · 23 tests
 Six unsupervised methods, and the question that has to come first: **does this
 dataset have any structure?**
 
@@ -418,7 +433,7 @@ validation: both rank distance from the centre of the same cloud, so they agree
 on noise too.
 **Python · scikit-learn · SciPy**
 
-### 7. ✅ [Weather Trends & Forecast](inference/weather-trends-and-forecast) · 20 tests
+### 5. ✅ [Weather Trends & Forecast](inference/weather-trends-and-forecast) · 20 tests
 The slope was never the problem. **The error bar was.**
 
 OLS assumes independent residuals; temperature doesn't oblige, because a warm
@@ -462,7 +477,8 @@ Every analysis links its source in the site's project panel. The datasets:
 
 ```
 llm-platform/       infrastructure around language models
-systems/            things that run: caches, crawlers, solvers, simulators
+systems/            things that run: a cache, a crawler, a solver, a game
+markets/            prices, backtests, and not fooling yourself with them
 inference/          whether an effect is real, and how you would know
 site/               the portfolio site (React + Vite)
 .github/workflows/  CI and GitHub Pages deployment

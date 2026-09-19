@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "site" / "src" / "data" / "demos"
 
 for project in [
-    "systems/earnings-drift-tracker",
-    "systems/factor-based-portfolio-simulator",
+    "markets/earnings-drift-tracker",
+    "markets/factor-based-portfolio-simulator",
     "systems/course-catalog",
     "systems/card-game-system",
     "systems/trie-search",
