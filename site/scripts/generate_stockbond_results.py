@@ -19,7 +19,7 @@ from scipy.optimize import minimize
 warnings.filterwarnings("ignore")
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "inference/stock-bond-portfolio-analysis/src"))
+sys.path.insert(0, str(ROOT / "markets/stock-bond-portfolio-analysis/src"))
 
 from allocation.backtest import (
     in_sample_result,

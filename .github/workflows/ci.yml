@@ -19,21 +19,24 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
         project:
-          - llm-platform/sec-filing-intelligence
           - llm-platform/piano-arrangement-lab
-          - systems/earnings-drift-tracker
-          - systems/factor-based-portfolio-simulator
+          - llm-platform/sec-filing-intelligence
+
           - systems/card-game-system
           - systems/course-catalog
           - systems/fastcache
           - systems/trie-search
+
+          - markets/bitcoin-and-asset-trading
+          - markets/earnings-drift-tracker
+          - markets/factor-based-portfolio-simulator
+          - markets/stock-bond-portfolio-analysis
+
           - inference/customer-churn-prediction
-          - inference/bitcoin-and-asset-trading
           - inference/fake-news-detection
           - inference/global-security-threats
           - inference/personalized-recommendations-for-e-commerce
           - inference/weather-trends-and-forecast
-          - inference/stock-bond-portfolio-analysis
     defaults:
       run:
         working-directory: ${{ matrix.project }}

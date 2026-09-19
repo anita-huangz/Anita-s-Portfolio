@@ -116,9 +116,9 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "earnings-drift-tracker",
-    "rank": 6,
+    "rank": 4,
     "title": "Earnings Drift Tracker",
-    "category": "systems",
+    "category": "markets",
     "summary": "Measures whether a stock keeps drifting in the direction of an earnings surprise, by pairing each announcement with the return over the days that followed.",
     "detail": "For each quarterly announcement it takes the gap between reported and estimated EPS, finds the last trading session on or before the announcement, and measures the cumulative return 1, 5, and 10 trading days later. Correlating surprise against drift is the question the project exists to ask. The answer is usually 'weakly, if at all' \u2014 which makes the data-handling choices the substance of it: announcements land on holidays and weekends, recent quarters have no 10-day window yet, and a zero consensus estimate makes the surprise percentage undefined rather than zero.",
     "tech": [
@@ -128,7 +128,7 @@ export const PROJECTS: Project[] = [
       "REST APIs",
       "pytest"
     ],
-    "path": "systems/earnings-drift-tracker",
+    "path": "markets/earnings-drift-tracker",
     "tests": 47,
     "highlights": [
       "Announcements landing on a non-trading day fall back to the prior session's close; requiring an exact index match silently dropped a large, non-random slice of events",
@@ -157,7 +157,7 @@ export const PROJECTS: Project[] = [
     "slug": "factor-based-portfolio-simulator",
     "rank": 1,
     "title": "Factor Portfolio Simulator",
-    "category": "systems",
+    "category": "markets",
     "summary": "Backtests a cross-sectional factor strategy the honest way \u2014 scoring each stock only on information that existed on the rebalance date.",
     "detail": "Given daily closes for a universe of stocks, it ranks them at each rebalance on momentum and low-volatility signals computed strictly from prior data, buys the top N equally weighted, and tracks the resulting portfolio value day by day. It then regresses the daily excess returns on the Fama-French three factors to separate genuine alpha from market, size, and value exposure. The correctness question the whole project turns on is temporal: a factor computed even one day into the future turns a flat strategy into a spectacular one.",
     "tech": [
@@ -168,7 +168,7 @@ export const PROJECTS: Project[] = [
       "yfinance",
       "pytest"
     ],
-    "path": "systems/factor-based-portfolio-simulator",
+    "path": "markets/factor-based-portfolio-simulator",
     "tests": 70,
     "highlights": [
       "Fixed a look-ahead bias that overstated total return by 92 percentage points -- factors were computed once from the whole sample and reused at every rebalance",
@@ -200,7 +200,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "fastcache",
-    "rank": 4,
+    "rank": 3,
     "title": "fastcache \u2014 an O(1) LRU cache",
     "category": "systems",
     "summary": "A drop-in memoization decorator with O(1) lookup, insertion, and eviction, benchmarked against the standard library and against the list-based version it replaced.",
@@ -232,7 +232,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "trie-search",
-    "rank": 2,
+    "rank": 1,
     "title": "Trie Search",
     "category": "systems",
     "summary": "Crawls a website, indexes every word it finds into a prefix tree, and answers prefix and single-character-wildcard queries against it.",
@@ -266,7 +266,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "card-game-system",
-    "rank": 5,
+    "rank": 4,
     "title": "Card Game",
     "category": "systems",
     "summary": "A single-player poker-style draw game: you are dealt seven cards, discard up to five, and the resulting hand is scored \u2014 score nothing and the run ends.",
@@ -298,7 +298,7 @@ export const PROJECTS: Project[] = [
   },
   {
     "slug": "course-catalog",
-    "rank": 3,
+    "rank": 2,
     "title": "Course Catalog & Scheduling",
     "category": "systems",
     "summary": "Reads the live University of Chicago MPCS catalog for any quarter, then builds the best conflict-free timetable from it \u2014 rather than only checking one you already wrote down.",
@@ -341,7 +341,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "bitcoin-and-asset-trading",
     "title": "Bitcoin Price Forecasting",
-    "category": "inference",
+    "category": "markets",
     "summary": "An LSTM against a one-line baseline, evaluated properly. No forecast here carries usable information about price changes, and the ones that look like they might are destroyed by transaction costs.",
     "detail": "The notebook reported RMSE on the price level from one 80/20 split. RMSE on a level is dominated by the level \u2014 across 21 rolling origins the same forecaster scores $5 in one fold and $2,076 in another \u2014 so R-squared on returns asks the real question, and the LSTM scores -206 where predicting no change scores zero. \"16x worse than naive\" becomes a Diebold-Mariano test with a Newey-West correction: DM = +18.03, p = 7.9e-63. It also quantifies the scaler leak, since MinMaxScaler was fitted on the whole series before splitting, so the training data was normalised using an all-time high that had not happened yet.",
     "tech": [
@@ -352,8 +352,8 @@ export const PROJECTS: Project[] = [
       "TensorFlow",
       "pytest"
     ],
-    "path": "inference/bitcoin-and-asset-trading",
-    "rank": 3,
+    "path": "markets/bitcoin-and-asset-trading",
+    "rank": 2,
     "io": {
       "input": "Daily bars, plus the protocol: rolling-origin window size, transaction cost in basis points, and which section to run.",
       "output": "RMSE, return R-squared and directional accuracy with Wilson intervals for each forecast; Diebold-Mariano tests between them; per-fold spread across 21 origins; and net return at 0, 10 and 30 bps against buy-and-hold.",
@@ -397,7 +397,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "inference/fake-news-detection",
-    "rank": 4,
+    "rank": 2,
     "io": {
       "input": "The dataset, plus the number of label permutations to run.",
       "output": "Template detection per text column, cross-validated AUC for two model families, the permutation null with its p-value and floor, the minimum detectable effect at 80% power, a learning curve, and per-feature tests with a Benjamini-Hochberg correction.",
@@ -482,7 +482,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "inference/global-security-threats",
-    "rank": 6,
+    "rank": 4,
     "io": {
       "input": "The incident CSV, plus k and the number of null draws.",
       "output": "Kolmogorov-Smirnov and chi-square tests per column, pairwise associations, silhouette against a shuffled-column null, bootstrap cluster stability, the gap statistic across k, and detector agreement against its chance baseline.",
@@ -522,7 +522,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "inference/personalized-recommendations-for-e-commerce",
-    "rank": 5,
+    "rank": 3,
     "io": {
       "input": "The two tables, plus the cut-off k for the ranking metrics.",
       "output": "recall@k, precision@k, MAP, MRR and NDCG for six recommenders including random, popularity and a deliberate oracle, with the count of customers excluded.",
@@ -552,7 +552,7 @@ export const PROJECTS: Project[] = [
   {
     "slug": "stock-bond-portfolio-analysis",
     "title": "Stock-Bond Portfolio Optimisation",
-    "category": "inference",
+    "category": "markets",
     "summary": "Mean-variance allocation across five ETFs, evaluated out of sample and against the benchmark that keeps winning: 1/N.",
     "detail": "The notebook optimised on a training period and reported the resulting portfolio's statistics \u2014 which describe a portfolio chosen with knowledge of the returns it is then scored on. A rolling backtest where the estimation window only ever precedes the holding period, with transaction costs, reproduces DeMiguel, Garlappi and Uppal (2009): equal weighting earns +6.50% a year against maximum Sharpe's +1.80%, and maximum Sharpe comes last on the Sharpe ratio it optimises \u2014 0.32 against 1/N's 0.83 \u2014 because expected returns cannot be estimated well enough to optimise against. In sample it reports 5.61, a 17x collapse. The mechanism is visible directly: it rewrites 15% of the book every quarter chasing a sample mean, against 1/N's 1.8%.",
     "tech": [
@@ -563,8 +563,8 @@ export const PROJECTS: Project[] = [
       "scikit-learn",
       "pytest"
     ],
-    "path": "inference/stock-bond-portfolio-analysis",
-    "rank": 2,
+    "path": "markets/stock-bond-portfolio-analysis",
+    "rank": 3,
     "io": {
       "input": "Adjusted daily closes for five ETFs, plus the protocol: estimation window, rebalance cadence, transaction cost in basis points -- all arguments, because all of them change the answer.",
       "output": "Annualised return, volatility, Sharpe, max drawdown, turnover and cost drag for each allocation rule, out of sample and in sample side by side, plus weight instability per rebalance.",
@@ -616,7 +616,7 @@ export const PROJECTS: Project[] = [
       "pytest"
     ],
     "path": "inference/weather-trends-and-forecast",
-    "rank": 7,
+    "rank": 5,
     "io": {
       "input": "Annual mean temperature by city, plus which city to examine and how many bootstrap draws.",
       "output": "Sen slope with a distribution-free interval for every city, four trend estimates side by side with their standard errors and intervals, and autocorrelation diagnostics giving the effective sample size.",

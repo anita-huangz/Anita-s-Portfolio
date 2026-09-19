@@ -1,4 +1,4 @@
-export type Category = "llm-platform" | "systems" | "inference";
+export type Category = "llm-platform" | "systems" | "markets" | "inference";
 
 export interface Project {
   slug: string;
@@ -42,5 +42,6 @@ export interface Project {
 export const CATEGORY_LABELS: Record<Category, string> = {
   "llm-platform": "LLM Platform",
   "systems": "Systems",
+  "markets": "Quantitative Finance",
   "inference": "Statistical Inference",
 };

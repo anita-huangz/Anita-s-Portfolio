@@ -11,6 +11,7 @@ const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
 const CATEGORY_COLOR: Record<Category, string> = {
   "llm-platform": "var(--ai)",
   "systems": "var(--se)",
+  "markets": "var(--mk)",
   "inference": "var(--ds)",
 };
 

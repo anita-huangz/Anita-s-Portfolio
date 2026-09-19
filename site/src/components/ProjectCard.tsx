@@ -5,6 +5,7 @@ import type { Category, Project } from "../data/types";
 export const CATEGORY_COLOR: Record<Category, string> = {
   "llm-platform": "var(--ai)",
   "systems": "var(--se)",
+  "markets": "var(--mk)",
   "inference": "var(--ds)",
 };
 
