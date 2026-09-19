@@ -8,7 +8,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 climate-trend                            # the whole analysis
 climate-trend --city Tokyo               # a different city
 climate-trend --section autocorrelation  # or one part
-pytest -q                                # 20 tests
+pytest -q                                # 24 tests
 ```
 
 ---
@@ -106,7 +106,7 @@ src/climate_trend/
             autocorrelation diagnostics                                (pure)
   cli.py    the report
   data/     14 KB of annual means, reduced once from ERA5 daily
-tests/      20 tests; OLS and Newey-West checked against statsmodels
+tests/      24 tests; OLS and Newey-West checked against statsmodels
 notebooks/  the original scripts, kept as the record
 ```
 

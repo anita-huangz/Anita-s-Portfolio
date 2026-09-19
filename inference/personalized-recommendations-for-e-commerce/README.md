@@ -11,7 +11,7 @@ recommend more of what they already buy — **14× worse than random**.
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 rec-eval                     # the whole evaluation
 rec-eval --section data      # or one part
-pytest -q                    # 28 tests
+pytest -q                    # 33 tests
 ```
 
 ---
@@ -119,7 +119,7 @@ src/rec_eval/
   recommenders.py  random, popularity, content rules, the oracle    (pure)
   evaluate.py      leave-one-out, paired across recommenders        (pure)
   cli.py           the report
-tests/             28 tests; metrics checked against hand-computed values
+tests/             33 tests; metrics checked against hand-computed values
 notebooks/         the original, kept as the record (marked superseded)
 ```
 

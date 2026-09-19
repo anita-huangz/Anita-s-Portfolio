@@ -10,7 +10,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 btc-forecast                       # the whole evaluation
 btc-forecast --section trading     # or one part
 btc-forecast --section lstm        # needs tensorflow
-pytest -q                          # 39 tests
+pytest -q                          # 64 tests
 ```
 
 4,825 daily bars, 2012-01-01 to 2025-03-17, reduced once from the 127 MB
@@ -140,7 +140,7 @@ src/btc_forecast/
   leakage.py      quantifies the MinMaxScaler leak             (pure)
   lstm.py         loads the saved model; tensorflow optional
   cli.py          the report
-tests/            39 tests, none needing tensorflow
+tests/            64 tests, none needing tensorflow
 notebooks/        the original, kept as the record (marked superseded)
 ```
 

@@ -32,7 +32,7 @@ earnings-drift AAPL --plot
 ```
 
 ```bash
-pytest -q        # 47 tests, no network
+pytest -q        # 79 tests, no network
 ruff check .
 ```
 

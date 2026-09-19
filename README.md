@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,172 tests** — 1,536 in Python, and 636 in the browser, most of them
+**2,506 tests** — 1,828 in Python, and 678 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -19,7 +19,46 @@ half.
 
 ## LLM Platform
 
-### ✅ [SEC Filing Intelligence](llm-platform/sec-filing-intelligence) · 176 tests
+### ✅ [Piano Arrangement Lab](llm-platform/piano-arrangement-lab) · 516 tests
+
+Give it a chord chart; get back something a person can actually play, at the
+difficulty you asked for, with its working shown.
+
+**In** — a chord chart as text plus a difficulty, voicing style and tempo — or a
+sentence like *"an easy jazzy version, slow"*, parsed without a model.
+**Out** — a voicing per hand per chord, the cost and hand span of each, every
+voice-leading rule broken, every simplification made to fit the level, and a
+two-track MIDI file.
+
+A chord symbol names pitch *classes* and never octaves, so `Cmaj7` is several
+hundred ways two hands could play it — and the right one depends entirely on the
+chord before it. That is a shortest path. Each chord contributes a layer of
+candidate voicings with a static cost (hand span, muddy low intervals, missing
+chord tones, register), and each adjacent pair carries a transition cost
+(part-writing rules broken, hands moved, common tones held). Viterbi finds the
+cheapest route exactly in `O(n·k²)` where trying every combination is `O(kⁿ)`.
+
+- **Exactness is measured, not claimed** — against brute force on three-chord
+  progressions the two agree exactly; against the greedy baseline that ships
+  alongside it, greedy is **5.3%** worse at beginner, 9.6% at intermediate and
+  **28.9%** at advanced over eight real progressions.
+- **Difficulty is data, not an adjective** — hand span, notes per hand, register,
+  whether inversions and extensions are allowed. Which is what makes it
+  checkable: a test asserts no arrangement ever exceeds its own limits, across
+  every progression, level and style.
+- **The MIDI writer is 80 lines**, not a dependency, and the tests parse its
+  output back rather than trusting the byte count.
+- **The engine is ported to TypeScript** so the browser demo solves live, and the
+  port is cross-checked against the Python across 120 combinations of
+  progression, level and style — every voicing, every cost, every violation.
+
+No API key needed for any of it. The optional model layer points at free tiers.
+
+**Python · TypeScript · React · Web Audio · MIDI · pytest · vitest**
+
+---
+
+### ✅ [SEC Filing Intelligence](llm-platform/sec-filing-intelligence) · 268 tests
 
 Ask a question about a public company and get an answer with every claim cited
 to a specific SEC filing — then independently verified against the evidence that
@@ -72,7 +111,7 @@ algorithmic depth, and how much the correctness depends on domain reasoning,
 not on line count: the scheduler below has twice the tests of the cache and is
 not twice the problem.
 
-### ✅ [Trie Search](systems/trie-search) · 157 tests
+### ✅ [Trie Search](systems/trie-search) · 165 tests
 
 Crawls a website, indexes every word into a trie, searches by prefix or
 single-character wildcard — and **ranks** the results with BM25.
@@ -94,7 +133,7 @@ raised and `dict(trie)` didn't work. The class claimed a contract it failed.
 
 **Python · httpx · lxml · data structures**
 
-### ✅ [Course Catalog & Scheduling](systems/course-catalog) · 145 tests
+### ✅ [Course Catalog & Scheduling](systems/course-catalog) · 161 tests
 
 Reads the **live** MPCS catalog at
 [mpcs-courses.cs.uchicago.edu](https://mpcs-courses.cs.uchicago.edu/) for any
@@ -143,7 +182,7 @@ conflict. Prefix search was actually *substring* search, so `"530"` matched
 
 **Python · csv · interval logic**
 
-### ✅ [fastcache](systems/fastcache) · 89 tests
+### ✅ [fastcache](systems/fastcache) · 98 tests
 
 An LRU cache decorator benchmarked against `functools`, plus a general `cached`
 decorator with TTL expiry and a choice of eviction policy.
@@ -179,7 +218,7 @@ shows what that costs rather than hiding it.
 
 **Python · threading · benchmarking**
 
-### ✅ [Card Game](systems/card-game-system) · 114 tests
+### ✅ [Card Game](systems/card-game-system) · 137 tests
 
 A single-player poker-style draw game — now with straights, and with an advisor
 that tells you what to throw away.
@@ -217,7 +256,7 @@ weights chosen with knowledge of the returns they are scored on, a scaler
 fitted on the test set — each turns a flat result into a spectacular one, and
 none of them raises an error.
 
-### 1. ✅ [Factor Portfolio Simulator](markets/factor-based-portfolio-simulator) · 70 tests
+### 1. ✅ [Factor Portfolio Simulator](markets/factor-based-portfolio-simulator) · 87 tests
 
 Point-in-time backtest of cross-sectional equity factor strategies, with
 Fama-French 3-factor attribution — reported **against a benchmark**, because a
@@ -245,7 +284,7 @@ by 234 points while carrying 1.38× its market exposure, and says so.
 
 **Python · pandas · NumPy · statsmodels · yfinance**
 
-### 2. ✅ [Bitcoin Price Forecasting](markets/bitcoin-and-asset-trading) · 40 tests
+### 2. ✅ [Bitcoin Price Forecasting](markets/bitcoin-and-asset-trading) · 64 tests
 The conclusion was right; none of the evidence for it was.
 
 | forecast | RMSE | R²(returns) | directional |
@@ -267,7 +306,7 @@ high the price would eventually go. And AR(5) turns +158% into **+8%** once you
 pay 30 bps to trade 291 times; nothing beats buy-and-hold.
 **Python · NumPy · pandas · SciPy · TensorFlow**
 
-### 3. ✅ [Stock-Bond Portfolio Optimisation](markets/stock-bond-portfolio-analysis) · 25 tests
+### 3. ✅ [Stock-Bond Portfolio Optimisation](markets/stock-bond-portfolio-analysis) · 29 tests
 Mean-variance allocation across five ETFs, evaluated **out of sample** and
 against the benchmark that keeps winning.
 
@@ -288,7 +327,7 @@ Gone: `adjust_factor_weights_based_on_regression`, which multiplied a loading
 by 1.5 above 0.5 and 1.2 above 0.2 — six unjustified constants.
 **Python · NumPy · pandas · SciPy · scikit-learn (tests only)**
 
-### 4. ✅ [Earnings Drift Tracker](markets/earnings-drift-tracker) · 47 tests
+### 4. ✅ [Earnings Drift Tracker](markets/earnings-drift-tracker) · 79 tests
 
 Measures post-earnings-announcement drift against the size of the analyst
 surprise — **as abnormal return**, not raw return, because a stock that rose 2%
@@ -322,7 +361,7 @@ Establishing that rigorously — permutation tests, power analyses, comparison
 against a null — is most of the work in those projects. Showing that something
 *isn't* there is harder than finding something that is.
 
-### 1. ✅ [Customer Churn Prediction](inference/customer-churn-prediction) · 76 tests
+### 1. ✅ [Customer Churn Prediction](inference/customer-churn-prediction) · 105 tests
 Telco churn treated as what it actually is: **right-censored survival data
 driving a spending decision**, not a binary score. 73.5% of these customers
 hadn't left when the data was cut, so their lifetime is *at least* their
@@ -362,7 +401,7 @@ Ranking by value needs to know how long each customer *would* have stayed —
 the area under their own survival curve, which a classifier cannot produce.
 **Python · NumPy · pandas · scikit-learn · statsmodels (tests only)**
 
-### 2. ✅ [Fake News Detection](inference/fake-news-detection) · 28 tests
+### 2. ✅ [Fake News Detection](inference/fake-news-detection) · 32 tests
 A null result, established properly.
 
 Every title is `Breaking News {i}`; every body is one sentence with the index
@@ -386,7 +425,7 @@ in ways no formula captures. And the power analysis is what turns "we found
 nothing" into **"there is nothing bigger than 0.526 to find"**.
 **Python · scikit-learn · SciPy**
 
-### 3. ✅ [E-commerce Recommendations](inference/personalized-recommendations-for-e-commerce) · 29 tests
+### 3. ✅ [E-commerce Recommendations](inference/personalized-recommendations-for-e-commerce) · 33 tests
 A content-based recommender with **ranking metrics** and a leave-one-out
 protocol.
 
@@ -408,7 +447,7 @@ all 10,000 customers. It's included to be seen doing that — a result that good
 is a bug report.
 **Python · NumPy · pandas**
 
-### 4. ✅ [Cybersecurity Threat Analysis](inference/global-security-threats) · 23 tests
+### 4. ✅ [Cybersecurity Threat Analysis](inference/global-security-threats) · 30 tests
 Six unsupervised methods, and the question that has to come first: **does this
 dataset have any structure?**
 
@@ -433,7 +472,7 @@ validation: both rank distance from the centre of the same cloud, so they agree
 on noise too.
 **Python · scikit-learn · SciPy**
 
-### 5. ✅ [Weather Trends & Forecast](inference/weather-trends-and-forecast) · 20 tests
+### 5. ✅ [Weather Trends & Forecast](inference/weather-trends-and-forecast) · 24 tests
 The slope was never the problem. **The error bar was.**
 
 OLS assumes independent residuals; temperature doesn't oblige, because a warm
@@ -518,5 +557,12 @@ cd site && npm install && npm run dev
   needs a key or a connection.
 - **Failures are typed and reported, not swallowed.** A bare
   `except: continue` makes a broken run look like an empty one.
+- **Exit codes mean something.** `2` is the caller's mistake — a bad flag, a
+  missing key, an unparseable input. `1` is the program's — something it tried
+  and could not finish.
+- **Coverage has a floor CI enforces.** Every project sets `fail_under` on
+  branch coverage in its `pyproject.toml`, so a drop fails the build. The floors
+  sit a couple of points under what each suite measures today: a ratchet against
+  silent rot rather than a number to game.
 - **READMEs state the limits.** Every project has a "notes" or "limits" section
   covering what it doesn't do and where the numbers shouldn't be trusted.

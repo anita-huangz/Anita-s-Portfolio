@@ -169,7 +169,7 @@ and a dynamic program over a few thousand states.
 
 ```bash
 pip install -e ".[dev]"      # add [llm] for the optional model layer
-pytest -q                    # 497 tests
+pytest -q                    # 516 tests
 
 arrange "C Am F G7"
 arrange "Dm7 G7 Cmaj7" --level advanced --style jazzy

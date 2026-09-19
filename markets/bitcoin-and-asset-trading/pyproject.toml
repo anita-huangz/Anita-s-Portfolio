@@ -10,7 +10,10 @@ requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "pandas>=2.0", "scipy>=1.11"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.7", "statsmodels>=0.14"]
+# zstandard is only needed to regenerate the daily bars from the raw minute
+# file, so it is a dev dependency rather than a runtime one -- but the
+# reduction is tested, on a synthetic minute file rather than the 127 MB one.
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.7", "statsmodels>=0.14", "zstandard>=0.22"]
 
 [project.scripts]
 btc-forecast = "btc_forecast.cli:main"
@@ -24,6 +27,27 @@ btc_forecast = ["data/*.csv"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+# Branch coverage, with a floor CI enforces. The floor sits a couple of points
+# under what the suite measures today: it is a ratchet against silent rot, not
+# a target to game. Raise it when the suite earns it.
+#
+# Measured with TensorFlow absent, which is how CI runs. With it installed the
+# same suite reads several points higher, and a floor set from that number is
+# one the build cannot meet.
+[tool.coverage.run]
+source = ["btc_forecast"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 89
+show_missing = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
 
 [tool.ruff]
 line-length = 100

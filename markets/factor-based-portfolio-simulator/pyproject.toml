@@ -13,7 +13,7 @@ dependencies = ["pandas>=2.0", "numpy>=1.24"]
 data = ["yfinance>=0.2", "yahooquery>=2.3", "pandas-datareader>=0.10"]
 attribution = ["statsmodels>=0.14", "pandas-datareader>=0.10"]
 plot = ["matplotlib>=3.7"]
-dev = ["pytest>=8", "ruff>=0.7", "statsmodels>=0.14", "matplotlib>=3.7"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.7", "statsmodels>=0.14", "matplotlib>=3.7"]
 
 [project.scripts]
 factor-sim = "factor_sim.cli:main"
@@ -24,6 +24,23 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+# Branch coverage, with a floor CI enforces. The floor sits a couple of points
+# under what the suite measures today: it is a ratchet against silent rot, not
+# a target to game. Raise it when the suite earns it.
+[tool.coverage.run]
+source = ["factor_sim"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 88
+show_missing = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
 
 [tool.ruff]
 line-length = 100

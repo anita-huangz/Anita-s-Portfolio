@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "pandas>=2.0", "scipy>=1.11"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.7", "statsmodels>=0.14"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.7", "statsmodels>=0.14"]
 
 [project.scripts]
 climate-trend = "climate_trend.cli:main"
@@ -24,6 +24,23 @@ climate_trend = ["data/*.csv"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+# Branch coverage, with a floor CI enforces. The floor sits a couple of points
+# under what the suite measures today: it is a ratchet against silent rot, not
+# a target to game. Raise it when the suite earns it.
+[tool.coverage.run]
+source = ["climate_trend"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 92
+show_missing = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
 
 [tool.ruff]
 line-length = 100
