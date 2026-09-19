@@ -357,7 +357,7 @@ export const PROJECTS: Project[] = [
     "io": {
       "input": "Daily bars, plus the protocol: rolling-origin window size, transaction cost in basis points, and which section to run.",
       "output": "RMSE, return R-squared and directional accuracy with Wilson intervals for each forecast; Diebold-Mariano tests between them; per-fold spread across 21 origins; and net return at 0, 10 and 30 bps against buy-and-hold.",
-      "scale": "4,825 daily bars reduced once from a 127 MB minute file and committed as 230 KB. 55 tests, none needing TensorFlow."
+      "scale": "4,825 daily bars reduced once from a 127 MB minute file and committed as 230 KB. 64 tests, none needing TensorFlow."
     },
     "sources": [
       {

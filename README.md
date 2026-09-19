@@ -9,7 +9,7 @@ here lives in one repository, and every project marked ✅ runs its full test
 suite offline in [CI](.github/workflows/ci.yml) — no network, no API keys —
 across Python 3.11, 3.12, and 3.13.
 
-**2,497 tests** — 1,819 in Python, and 678 in the browser, most of them
+**2,506 tests** — 1,828 in Python, and 678 in the browser, most of them
 cross-checking the site's TypeScript ports against fixtures the Python
 generated. I've noted what each project gets wrong
 as well as what it does, because the bugs are usually the more interesting
@@ -284,7 +284,7 @@ by 234 points while carrying 1.38× its market exposure, and says so.
 
 **Python · pandas · NumPy · statsmodels · yfinance**
 
-### 2. ✅ [Bitcoin Price Forecasting](markets/bitcoin-and-asset-trading) · 55 tests
+### 2. ✅ [Bitcoin Price Forecasting](markets/bitcoin-and-asset-trading) · 64 tests
 The conclusion was right; none of the evidence for it was.
 
 | forecast | RMSE | R²(returns) | directional |
